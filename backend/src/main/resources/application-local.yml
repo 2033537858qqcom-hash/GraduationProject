@@ -1,0 +1,9 @@
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/campus;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: ""
+app:
+  demo:
+    enabled: true
+    password: Demo@2026

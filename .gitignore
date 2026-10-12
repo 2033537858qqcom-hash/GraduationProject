@@ -1,0 +1,13 @@
+frontend/node_modules/
+frontend/dist/
+backend/target/
+backend/data/
+.env
+.env.*
+!.env.example
+*.log
+.idea/
+.vscode/
+artifacts/
+output/agent-evals/
+output/agent-live-evals/

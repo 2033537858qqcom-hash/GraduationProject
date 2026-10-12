@@ -1,0 +1,261 @@
+{
+  "schemaVersion": 1,
+  "definitionId": "campus-agent-regression-v1",
+  "date": "2026-10-11",
+  "evaluationType": "deterministic-regression",
+  "requiredCount": 40,
+  "passed": 40,
+  "attempts": 1,
+  "externalModelCalls": false,
+  "realModelQuality": "NOT_EVALUATED",
+  "catalogSha256": "46195C6D4B8C0B49ECDAD87498B9BCABE950ABBAC370177B74FC94AC57261F3A",
+  "sourceFingerprint": "CD1A489B538B180C12E54A048CCE5B10C262DA0978C7D697895D35882D0C8096",
+  "runId": "20261011-153444-f6ef50e7",
+  "completeReport": "output/agent-evals/20261011-153444-f6ef50e7/report.json",
+  "groups": [
+    {
+      "name": "本人查询",
+      "total": 4,
+      "passed": 4,
+      "notPassed": 0
+    },
+    {
+      "name": "会话恢复",
+      "total": 8,
+      "passed": 8,
+      "notPassed": 0
+    },
+    {
+      "name": "权限边界",
+      "total": 6,
+      "passed": 6,
+      "notPassed": 0
+    },
+    {
+      "name": "人工确认",
+      "total": 5,
+      "passed": 5,
+      "notPassed": 0
+    },
+    {
+      "name": "异常处理",
+      "total": 6,
+      "passed": 6,
+      "notPassed": 0
+    },
+    {
+      "name": "有效指南",
+      "total": 3,
+      "passed": 3,
+      "notPassed": 0
+    },
+    {
+      "name": "字段整理",
+      "total": 8,
+      "passed": 8,
+      "notPassed": 0
+    }
+  ],
+  "cases": [
+    {
+      "id": "KNOW-01",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#localRulesHaveAccessibleVersionedSources"
+    },
+    {
+      "id": "KNOW-02",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#unknownRulesDoNotInventSourcesOrSchoolRequirements"
+    },
+    {
+      "id": "KNOW-03",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#withdrawnGuideCannotBeCitedOrReadAgain"
+    },
+    {
+      "id": "QUERY-01",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#studentQueriesContainOnlyOwnedApplicationsAndMinimalFields"
+    },
+    {
+      "id": "QUERY-02",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#validContextIsReReadAndReturnsAControlledDetailLink"
+    },
+    {
+      "id": "QUERY-03",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#currentTermIsChosenInsteadOfTheFirstFutureTerm"
+    },
+    {
+      "id": "QUERY-04",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#modelSelectsMultipleToolsButCannotSupplyBusinessConclusions"
+    },
+    {
+      "id": "FIELD-01",
+      "status": "PASSED",
+      "test": "AgentLeaveIntegrationTest#missingDatesAndTimesAreAskedForWithoutCreatingAnApplication"
+    },
+    {
+      "id": "FIELD-02",
+      "status": "PASSED",
+      "test": "AgentLeaveIntegrationTest#supplementsMergeLocallyAndOnlyCurrentTextReachesTheModel"
+    },
+    {
+      "id": "FIELD-03",
+      "status": "PASSED",
+      "test": "AgentLeaveIntegrationTest#datesWithoutTimesStayIncompleteAfterModelExtraction"
+    },
+    {
+      "id": "FIELD-04",
+      "status": "PASSED",
+      "test": "AgentLeaveIntegrationTest#invalidModelFieldsCannotSupplyIdentityContactsStatusOrCommands"
+    },
+    {
+      "id": "FIELD-05",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#emptyPurposeAsksForInputAndReadsOnlyCurrentRegisteredIdentityWithoutWriting"
+    },
+    {
+      "id": "FIELD-06",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#supplementsAreMergedLocallyAndOnlyCurrentTextGoesToTheModel"
+    },
+    {
+      "id": "FIELD-07",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#explicitPurposeExtractionCanUpdateAPreviewButCannotConfirmIdentity"
+    },
+    {
+      "id": "FIELD-08",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#modelCannotSetIdentityConfirmationDeliveryStatusOrCommands"
+    },
+    {
+      "id": "PERM-01",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#anonymousRequestsAndMissingCsrfAreRejected"
+    },
+    {
+      "id": "PERM-02",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#foreignPageContextCannotReachThePlanner"
+    },
+    {
+      "id": "PERM-03",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#attemptsToRequestOtherPeopleOrPerformWritesAreRefused"
+    },
+    {
+      "id": "PERM-04",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#arbitraryUnknownOrRoleInappropriateToolsAreRejectedBeforeExecution"
+    },
+    {
+      "id": "PERM-05",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#extraActorUrlAndInvalidParametersCannotBypassToolBoundaries"
+    },
+    {
+      "id": "PERM-06",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#teachersCannotReadStudentGradesThroughLocalMode"
+    },
+    {
+      "id": "CONFIRM-01",
+      "status": "PASSED",
+      "test": "AgentLeaveIntegrationTest#onlyExplicitOrdinarySaveCreatesOneOwnedDraftAndNoNotice"
+    },
+    {
+      "id": "CONFIRM-02",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#onlyPersonalConfirmationCreatesOneOwnedDraftAndNoNotifications"
+    },
+    {
+      "id": "CONFIRM-03",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#identityChangeAfterPreviewIsRejectedByTheOrdinarySave"
+    },
+    {
+      "id": "CONFIRM-04",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#absenceOfAnAffairsReviewerAllowsDraftButPreventsSubmission"
+    },
+    {
+      "id": "CONFIRM-05",
+      "status": "PASSED",
+      "test": "AgentCertificateIntegrationTest#originalSubmissionReviewAndOwnedResultRemainAvailableAfterAssistantPreparation"
+    },
+    {
+      "id": "RECOVER-01",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#sessionsRequireLoginCsrfAndOwnedAccessEvenForAdmin"
+    },
+    {
+      "id": "RECOVER-02",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#sessionCreationIsIdempotentAndListingsAreBounded"
+    },
+    {
+      "id": "RECOVER-03",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#historicalQuestionsPersistWithoutPrivateAnswersAndDuplicateRequestsDoNotRunAgain"
+    },
+    {
+      "id": "RECOVER-04",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#realModelContractReceivesOnlyTheCurrentQuestionAndIsNotReplayedOnRecovery"
+    },
+    {
+      "id": "RECOVER-05",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#proofTaskRestoresOnlyLocalFieldsWithFreshIdentityAndNoConfirmationOrBusinessWrite"
+    },
+    {
+      "id": "RECOVER-06",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#proofSaveRequiresPersonalConfirmationAndRecoveryCannotCreateAnotherDraft"
+    },
+    {
+      "id": "RECOVER-07",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#linkedTasksReReadTheOriginalBusinessVersionAndStatus"
+    },
+    {
+      "id": "RECOVER-08",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#businessCreationAndTaskAssociationRollbackTogether"
+    },
+    {
+      "id": "ERROR-01",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#missingConsentAndUnconfiguredModelAreExplicitFailures"
+    },
+    {
+      "id": "ERROR-02",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#modelFailureDoesNotSilentlyBecomeADeepseekSuccess"
+    },
+    {
+      "id": "ERROR-03",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#overlappingTermsAskForSelectionRatherThanGuessing"
+    },
+    {
+      "id": "ERROR-04",
+      "status": "PASSED",
+      "test": "AgentIntegrationTest#simultaneousRequestsForOneAccountHaveOneActivePlanner"
+    },
+    {
+      "id": "ERROR-05",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#staleTaskVersionsCannotOverwriteNewerReviewedFields"
+    },
+    {
+      "id": "ERROR-06",
+      "status": "PASSED",
+      "test": "AgentSessionIntegrationTest#failedAndInterruptedQueriesRemainVisibleAndNeverAutomaticallyRepeat"
+    }
+  ]
+}

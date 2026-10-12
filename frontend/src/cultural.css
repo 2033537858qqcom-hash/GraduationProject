@@ -1,0 +1,73 @@
+/* One illustration family across public pages and campus services. */
+.public-header, .portal-header { isolation: isolate; }
+.portal-header, .school-brand-row, .portal-top, .portal-nav { position: relative; }
+.school-brand-row, .portal-top, .portal-nav { z-index: 1; }
+.school-navigation { z-index: 2; }
+.brand-frame { --frame-size: 26px; --frame-top: 12px; --frame-bottom: 12px; --frame-edge: 12px; --frame-opacity: .22; }
+.brand-frame .frame-rail { display: none; }
+.brand-cloud, .portal-brand-cloud { width: 180px; left: 52%; top: 7px; --culture-opacity: .14; }
+
+/* Chapters alternate the position of the same motifs around the reading area. */
+.photo-frame { --culture-color: #e4ecf7; --frame-opacity: .48; }
+.hero-copy { position: relative; z-index: 1; }
+.theme-chapter > .chapter-cloud { width: 140px; left: auto; right: 2%; top: 55px; bottom: auto; --culture-opacity: .11; }
+.chapter-birds { width: 110px; left: 36%; top: 72px; --culture-opacity: .25; }
+.chapter-life .chapter-cloud, .chapter-life .chapter-birds { --culture-color: #e4ecf7; --culture-opacity: .25; }
+
+/* Article and 3D exploration pages share a book-like outer margin. */
+.public-main.reading-scene { position: relative; isolation: isolate; overflow: clip; }
+.reading-scene > .public-article, .reading-scene > .explore-page { position: relative; z-index: 1; padding-bottom: 36px; }
+.reading-frame { --frame-top: 32px; --frame-bottom: 22px; --frame-edge: clamp(10px,2vw,28px); }
+.reading-cloud { width: 210px; right: 4%; top: -25px; --culture-opacity: .17; }
+.public-article h1 { overflow-wrap: anywhere; text-wrap: balance; }
+
+/* Public pages end with a compact information row on the same surface. */
+.public-footer-wrap { position: relative; isolation: isolate; overflow: clip; background: var(--site-surface); color: var(--muted); }
+.public-footer { position: relative; z-index: 1; min-height: 56px; padding-block: 16px 18px; color: inherit; align-items: center; border-top: 1px solid var(--line); }
+.public-footer > small { margin: 0; color: inherit; font-size: 11px; letter-spacing: .4px; line-height: 1.8; }
+.public-footer .footer-links { display: flex; flex-wrap: wrap; gap: 26px; font-size: 12px; }
+.public-footer a { gap: 5px; text-underline-offset: 5px; }
+.public-footer a:hover { color: var(--brand); text-decoration: underline; }
+.public-footer a:focus-visible { outline: 2px solid var(--brand); outline-offset: 5px; border-radius: 2px; }
+
+/* Functional screens use smaller edge details and leave cards and inputs clear. */
+.portal-content-wrap { position: relative; isolation: isolate; overflow: clip; }
+.portal-main { position: relative; z-index: 1; }
+.portal-frame { --frame-size: 28px; --frame-top: 18px; --frame-bottom: 18px; --frame-edge: clamp(8px,1.4vw,24px); --frame-opacity: .2; }
+.portal-edge-cloud { width: 280px; right: -105px; bottom: 12px; --culture-opacity: .12; }
+.portal-footer { position: relative; z-index: 1; }
+.login-intro { isolation: isolate; overflow: clip; }
+.login-intro > :not(.cultural-frame) { z-index: 1; }
+.login-photo-frame { --culture-color: #e4ecf7; --frame-top: 120px; --frame-bottom: 52px; --frame-size: 40px; --frame-opacity: .36; }
+.login-form-area { position: relative; isolation: isolate; overflow: clip; padding-bottom: 108px; }
+.login-form { position: relative; z-index: 1; }
+.login-form-frame { --frame-top: 30px; --frame-bottom: 24px; --frame-size: 42px; --frame-edge: 20px; --frame-opacity: .24; }
+.login-cloud { width: 240px; right: -35px; bottom: 18px; --culture-opacity: .15; }
+.status-scene { position: relative; isolation: isolate; overflow: clip; min-height: 100svh; background: var(--paper); }
+.status-page { position: relative; z-index: 1; }
+.status-landscape { width: min(78%,1100px); right: -40px; bottom: -20px; --culture-opacity: .18; }
+
+@media (max-width: 1100px) {
+  .public-header > .cultural-ornament.brand-cloud, .portal-header > .cultural-ornament.portal-brand-cloud { display: none; }
+  .chapter-birds { left: 32%; }
+}
+@media (max-width: 760px) {
+  .brand-frame { --frame-size: 18px; --frame-edge: 3px; --frame-top: 4px; --frame-bottom: 8px; --frame-opacity: .18; }
+  .theme-chapter > .chapter-cloud { width: 100px; left: auto; right: -10px; top: -10px; bottom: auto; --culture-opacity: .11; }
+  .chapter-birds { width: 72px; left: auto; right: 6%; top: 14px; --culture-opacity: .2; }
+  .chapter-life .chapter-cloud { --culture-opacity: .23; }
+  .chapter-education > .chapter-body, .chapter-admissions > .chapter-body { padding-bottom: 38px; }
+  .reading-scene > .public-article, .reading-scene > .explore-page { padding-bottom: 28px; }
+  .reading-frame { --frame-size: 24px; --frame-top: 12px; --frame-edge: 4px; --frame-bottom: 14px; }
+  .reading-cloud { width: 138px; right: -8px; top: -12px; --culture-opacity: .12; }
+  .public-footer { min-height: 0; padding-block: 14px 18px; gap: 9px; align-items: flex-start; }
+  .public-footer > small { font-size: 10px; }
+  .public-footer .footer-links { font-size: 11px; gap: 22px; }
+  .portal-frame { --frame-size: 20px; --frame-edge: 2px; --frame-top: 7px; --frame-bottom: 10px; --frame-opacity: .15; }
+  .portal-edge-cloud { width: 160px; right: -70px; bottom: -7px; --culture-opacity: .11; }
+  .login-photo-frame { --frame-size: 16px; --frame-edge: 2px; --frame-top: 102px; --frame-bottom: 40px; }
+  .login-form-frame { --frame-size: 24px; --frame-edge: 4px; --frame-top: 12px; --frame-bottom: 14px; }
+  .login-form-area { padding-bottom: 84px; }
+  .login-cloud { width: 160px; right: -30px; bottom: -15px; --culture-opacity: .12; }
+  .status-landscape { width: 660px; max-width: none; right: -180px; bottom: -20px; --culture-opacity: .14; }
+}

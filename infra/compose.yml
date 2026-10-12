@@ -1,0 +1,19 @@
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: campus
+      MYSQL_USER: campus_app
+      MYSQL_PASSWORD: ${CAMPUS_DB_PASSWORD:?Set CAMPUS_DB_PASSWORD in infra/.env}
+      MYSQL_ROOT_PASSWORD: ${CAMPUS_DB_ROOT_PASSWORD:?Set CAMPUS_DB_ROOT_PASSWORD in infra/.env}
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - campus-mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+volumes:
+  campus-mysql:

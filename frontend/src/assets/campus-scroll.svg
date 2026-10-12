@@ -1,0 +1,146 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="330" viewBox="0 0 1600 330" fill="none">
+  <title>校园拾景：淡墨建筑长卷</title>
+  <desc>取意学校公开航拍中的拱廊、教学楼与校门，配以花枝和云水。装饰性构图，不是校园立面或空间测绘。</desc>
+  <defs>
+    <linearGradient id="wash" x1="800" y1="90" x2="800" y2="326" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#6C8991" stop-opacity=".02"/>
+      <stop offset=".68" stop-color="#6C8991" stop-opacity=".13"/>
+      <stop offset="1" stop-color="#6C8991" stop-opacity=".02"/>
+    </linearGradient>
+    <linearGradient id="brick" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#A97860" stop-opacity=".17"/>
+      <stop offset="1" stop-color="#A97860" stop-opacity=".04"/>
+    </linearGradient>
+    <g id="arch" stroke="#627C89" stroke-width="1.2">
+      <path d="M0 28V10a10 10 0 0 1 20 0v18Z" fill="#A8B8B5" fill-opacity=".2"/>
+      <path d="M10 1v27M1 12h18M1 21h18" stroke-opacity=".43"/>
+    </g>
+    <pattern id="windows" x="0" y="0" width="23" height="24" patternUnits="userSpaceOnUse">
+      <path d="M7 5h9v13H7Z" fill="#91A6AB" fill-opacity=".25" stroke="#6D8490" stroke-width=".85" stroke-opacity=".6"/>
+      <path d="M11.5 5v13M7 11.5h9" stroke="#6D8490" stroke-width=".7" stroke-opacity=".45"/>
+    </pattern>
+    <g id="cypress" fill="#6B8381" fill-opacity=".18" stroke="#6B8381" stroke-opacity=".5" stroke-linejoin="round">
+      <path d="M0 58C-14 54-14 44-9 39C-18 34-10 23-7 21C-12 17-5 5 0 0C5 5 12 17 7 21C10 23 18 34 9 39C14 44 14 54 0 58Z"/>
+      <path d="M0 20v54M0 36l-5-8M0 43l6-11M0 51l-6-7" stroke-width="1.1"/>
+    </g>
+    <g id="blossom" fill="#B97B6A" fill-opacity=".2" stroke="#AD7867" stroke-opacity=".55" stroke-width=".85">
+      <path d="M0-2C-7-10-13-1-6 3C-11 11 0 13 2 6C10 11 14 1 7-1C10-10 1-12 0-2Z"/>
+      <circle cx="1" cy="1" r="1.7" fill="#A5705E" fill-opacity=".65" stroke="none"/>
+    </g>
+  </defs>
+
+  <!-- Washes and cloud-water strokes carry the Chinese painting vocabulary. -->
+  <path d="M0 278C126 246 199 260 286 246C434 221 521 246 659 228C781 211 831 250 937 230C1059 207 1176 239 1297 232C1414 225 1494 258 1600 250V326H0Z" fill="url(#wash)"/>
+  <g stroke="#8A9B97" stroke-opacity=".32" stroke-width="1.1" stroke-linecap="round">
+    <path d="M256 90h81c19 0 31-8 31-19c0-9-7-15-15-15c-10 0-15 7-13 13c2 5 10 6 12 1M312 100h51c25 0 39-12 39-27"/>
+    <path d="M1177 74h78c27 0 43-10 43-25c0-12-9-20-20-20c-12 0-21 8-21 17c0 8 6 13 13 13c6 0 10-4 10-9M1237 87h62c28 0 43-10 47-23"/>
+    <path d="M0 294C136 278 244 303 366 291M366 305c102-11 163 6 254-3M944 302c160-12 226 1 334-6M1295 308c123-12 208-3 305-14"/>
+    <path d="M96 317h118M347 319h166M1112 321h201M1424 318h75" stroke-opacity=".52"/>
+  </g>
+
+  <!-- Left campus wing: hip roofs, stepped cornices, and an arched gallery. -->
+  <g stroke="#566F7E" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M155 260h381v15H155Z" fill="#9FB1B0" fill-opacity=".16" stroke-opacity=".45"/>
+    <path d="M170 171h350v90H170Z" fill="#F0EDE3"/>
+    <path d="M175 182h340v72H175Z" fill="url(#brick)" stroke="none"/>
+    <path d="m160 170 33-23h292l44 23Z" fill="#80969D" fill-opacity=".2"/>
+    <path d="M160 171h369v7H160Z" fill="#E5E7DF"/>
+    <path d="M192 149h295M181 159h323" stroke-opacity=".5"/>
+    <path d="M183 216h325M181 247h330M169 256h351" stroke-opacity=".6"/>
+    <path d="M179 188h334v25H179Z" fill="url(#windows)" stroke="none"/>
+    <use href="#arch" x="186" y="218"/><use href="#arch" x="218" y="218"/>
+    <use href="#arch" x="250" y="218"/><use href="#arch" x="282" y="218"/>
+    <use href="#arch" x="378" y="218"/><use href="#arch" x="410" y="218"/>
+    <use href="#arch" x="442" y="218"/><use href="#arch" x="474" y="218"/>
+    <path d="M317 179h54v84h-54Z" fill="#ECECE2"/>
+    <path d="m309 179 12-10h44l13 10Z" fill="#7D959C" fill-opacity=".24"/>
+    <path d="M323 169v-27h42v27M318 142h52v-5h-52Z" fill="#ECECE2"/>
+    <path d="m320 137 8-9h29l10 9M326 128h35M344 128v-6"/>
+    <path d="M330 153h27M336 143v25M352 143v25" stroke-opacity=".53"/>
+    <path d="M327 214h34v49h-34Z" fill="#91A5AA" fill-opacity=".2"/>
+    <path d="M328 207v-7a16 16 0 0 1 32 0v7M344 184v79M327 228h34M327 245h34" stroke-opacity=".6"/>
+    <path d="M307 268h74M300 274h89" stroke-opacity=".45"/>
+  </g>
+
+  <!-- Main teaching-building silhouette, inspired by the official aerial photograph. -->
+  <g stroke="#506B7C" stroke-width="1.35" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M555 240h483v25H555Z" fill="#A1B3B0" fill-opacity=".15" stroke-opacity=".4"/>
+    <path d="M585 124h420v119H585Z" fill="#F1EEE5"/>
+    <path d="M591 153h408v82H591Z" fill="url(#brick)" stroke="none"/>
+    <path d="m590 118 46-33h311l51 33Z" fill="#6F8994" fill-opacity=".25"/>
+    <path d="M580 120h427v8H580Z" fill="#E0E6DF"/>
+    <path d="M637 88h307M623 99h335M606 111h370" stroke-opacity=".5"/>
+    <path d="M598 129h394v23H598Z" fill="#ECEBE0"/>
+    <use href="#arch" x="604" y="130"/><use href="#arch" x="636" y="130"/>
+    <use href="#arch" x="668" y="130"/><use href="#arch" x="700" y="130"/>
+    <use href="#arch" x="860" y="130"/><use href="#arch" x="892" y="130"/>
+    <use href="#arch" x="924" y="130"/><use href="#arch" x="956" y="130"/>
+    <path d="M599 162h118v72H599ZM871 162h116v72H871Z" fill="url(#windows)" stroke="none"/>
+    <path d="M729 152h131v89H729Z" fill="#6F919F" fill-opacity=".16"/>
+    <path d="M737 157v78M756 157v78M775 157v78M794 157v78M813 157v78M832 157v78M851 157v78M730 180h129M730 208h129" stroke-opacity=".44" stroke-width=".9"/>
+    <path d="M718 158v83M869 158v83M592 209h126M872 209h126M585 238h420" stroke-opacity=".65"/>
+    <path d="M564 166h50v77h-50ZM976 166h50v77h-50Z" fill="#EEEBE2"/>
+    <path d="m558 166 15-16h33l14 16ZM970 166l14-16h35l13 16Z" fill="#7C939A" fill-opacity=".23"/>
+    <path d="M571 180h37v57h-37ZM983 180h36v57h-36Z" fill="url(#windows)" stroke="none"/>
+    <path d="m750 227 44-24 44 24Z" fill="#79929A" fill-opacity=".25"/>
+    <path d="M750 228h88M757 229v17M768 229v17M820 229v17M832 229v17M785 230h19v16"/>
+    <path d="M743 249h104M735 255h120M724 261h142" stroke-opacity=".58"/>
+  </g>
+
+  <!-- Right wing echoes the red-brick facades and smaller rooftop pavilions. -->
+  <g stroke="#607987" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M1090 261h329v15h-329Z" fill="#A7B6B0" fill-opacity=".15" stroke-opacity=".45"/>
+    <path d="M1104 177h304v85h-304Z" fill="#F0EDE2"/>
+    <path d="M1110 192h292v65h-292Z" fill="url(#brick)" stroke="none"/>
+    <path d="m1097 175 26-20h262l30 20Z" fill="#7D939C" fill-opacity=".23"/>
+    <path d="M1097 176h318v7h-318Z" fill="#E3E6DC"/>
+    <path d="M1124 157h263M1117 165h278M1105 217h302M1105 256h302" stroke-opacity=".55"/>
+    <path d="M1116 188h278v26h-278Z" fill="url(#windows)" stroke="none"/>
+    <use href="#arch" x="1117" y="222"/><use href="#arch" x="1150" y="222"/>
+    <use href="#arch" x="1183" y="222"/><use href="#arch" x="1282" y="222"/>
+    <use href="#arch" x="1315" y="222"/><use href="#arch" x="1348" y="222"/>
+    <path d="M1227 186h47v78h-47Z" fill="#EEEBE0"/>
+    <path d="m1220 185 10-11h40l11 11Z" fill="#81979B" fill-opacity=".23"/>
+    <path d="M1232 175v-31h36v31M1227 144h46v-5h-46Z" fill="#ECEADE"/>
+    <path d="m1229 139 9-9h25l8 9M1250 131v-5M1239 148v25M1260 148v25"/>
+    <path d="M1239 218h24v43h-24ZM1239 207v-5a12 12 0 0 1 24 0v5M1251 190v71" stroke-opacity=".6"/>
+  </g>
+
+  <!-- The foreground gate borrows the arch and paired piers visible in the photo. -->
+  <g stroke="#536B77" stroke-width="1.4" stroke-linejoin="round" stroke-linecap="round">
+    <path d="M664 304h264v8H664Z" fill="#90A5A7" fill-opacity=".15" stroke-opacity=".45"/>
+    <path d="M692 262h210v42H692Z" fill="#EEE9DB"/>
+    <path d="M732 265h126v40H732Z" fill="#E2E4DC"/>
+    <path d="M755 304v-10a41 41 0 0 1 82 0v10" fill="#819EA8" fill-opacity=".17"/>
+    <path d="M739 264v-8h19c3-20 15-29 38-29s35 9 38 29h19v8Z" fill="#E8E6D9"/>
+    <path d="M746 253h14c5-13 18-20 36-20s31 7 36 20h15M770 241h52M766 260h60" stroke-opacity=".55"/>
+    <path d="M687 249h20v55h-20ZM886 249h20v55h-20Z" fill="#F0ECE1"/>
+    <path d="M681 249h32v-6h-32ZM880 249h32v-6h-32Z" fill="#84999F" fill-opacity=".22"/>
+    <path d="M672 228h23v76h-23ZM898 228h23v76h-23Z" fill="#EEEADD"/>
+    <path d="M667 228h33v-6h-33ZM893 228h33v-6h-33Z" fill="#E0E2D7"/>
+    <path d="m670 222 6-8h15l6 8M896 222l6-8h15l6 8M678 241v53M688 241v53M905 241v53M915 241v53" stroke-opacity=".65"/>
+    <path d="M713 280h18v24h-18ZM859 280h18v24h-18ZM721 268v35M867 268v35M796 254v50" stroke-opacity=".52"/>
+    <path d="M747 292h97M747 299h97M697 307h200" stroke-opacity=".45"/>
+  </g>
+
+  <g>
+    <use href="#cypress" transform="translate(147 200) scale(.9)"/>
+    <use href="#cypress" transform="translate(532 209) scale(.85)"/>
+    <use href="#cypress" transform="translate(1070 211) scale(.85)"/>
+    <use href="#cypress" transform="translate(1439 207) scale(.85)"/>
+    <path d="M568 285c27-8 45-7 65-3M949 286c25-10 39-8 61-1M1030 277c14-9 31-7 44 0M92 274c17-9 30-5 47 0" stroke="#82938B" stroke-width="1.4" stroke-opacity=".5"/>
+  </g>
+
+  <!-- Blossoming branches at the margins, echoing the school's spring photographs. -->
+  <g stroke="#687D79" stroke-width="1.4" stroke-opacity=".65" stroke-linecap="round">
+    <path d="M0 248C33 223 58 191 83 154C108 114 133 97 185 85M0 269C42 240 66 220 96 203C118 191 142 170 164 147"/>
+    <path d="M68 177c-6-31-6-50 0-72M105 124c21-7 41-7 67-4M130 107c0-23 8-40 22-56M52 203c-17-3-28-12-36-29M106 197c11 4 29 4 48-4M153 162c-4-17-3-32 3-43"/>
+    <path d="M1600 264c-39-19-57-49-80-89c-20-35-43-51-85-64M1600 287c-44-20-71-28-102-34c-19-4-37-12-56-28M1526 188c2-25 0-46-9-69M1488 139c-14 0-29-5-42-15M1489 250c-10-22-11-39-8-56" stroke-opacity=".6"/>
+  </g>
+  <use href="#blossom" x="68" y="104"/><use href="#blossom" x="109" y="121"/>
+  <use href="#blossom" x="173" y="118"/><use href="#blossom" x="150" y="53"/>
+  <use href="#blossom" x="184" y="85"/><use href="#blossom" x="17" y="174"/>
+  <use href="#blossom" x="156" y="194"/><use href="#blossom" x="157" y="120"/>
+  <use href="#blossom" x="1438" y="111"/><use href="#blossom" x="1517" y="118"/>
+  <use href="#blossom" x="1481" y="192"/><use href="#blossom" x="1443" y="225"/>
+</svg>

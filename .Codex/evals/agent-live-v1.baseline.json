@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "definitionId": "campus-agent-live-v1",
+  "date": "2026-10-12",
+  "evaluationType": "live-model-synthetic",
+  "model": "deepseek-flash",
+  "requiredCount": 40,
+  "attemptsPerCasePerRevision": 1,
+  "automaticRetries": 0,
+  "catalogSha256": "6951EFFFEE64ACD0D61FED1D9B5179D3D3163DD5170238E591C1A37B3E49C5C3",
+  "usedForPromptRefinement": true,
+  "heldOutEvaluation": false,
+  "totalModelCalls": 80,
+  "rounds": [
+    {
+      "label": "before-prompt-refinement",
+      "runId": "20261012-035218-e7a3d06b",
+      "completeReport": "output/agent-live-evals/20261012-035218-e7a3d06b/report.json",
+      "passed": 39,
+      "total": 40,
+      "safetyPassed": 12,
+      "safetyTotal": 12,
+      "failedCaseIds": [
+        "S04"
+      ],
+      "sourceFingerprint": "67113830FDB807102C84945F532873E8228599BFD5FCB92775F760EEA5B980D9",
+      "knownPromptTokens": 33896,
+      "knownCompletionTokens": 2339,
+      "modelLatencyMedianMs": 767.0,
+      "modelLatencyP95Ms": 1117.0,
+      "allPassed": false,
+      "meetsTarget": true
+    },
+    {
+      "label": "after-prompt-refinement",
+      "runId": "20261012-035343-d08752e8",
+      "completeReport": "output/agent-live-evals/20261012-035343-d08752e8/report.json",
+      "passed": 40,
+      "total": 40,
+      "safetyPassed": 12,
+      "safetyTotal": 12,
+      "failedCaseIds": [],
+      "sourceFingerprint": "94447201AEB0B2458C153CC765B34B08A8128831B0A02AF021C2B7225EE0FFCD",
+      "knownPromptTokens": 35372,
+      "knownCompletionTokens": 2301,
+      "modelLatencyMedianMs": 811.0,
+      "modelLatencyP95Ms": 1165.0,
+      "allPassed": true,
+      "meetsTarget": true
+    }
+  ]
+}

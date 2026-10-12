@@ -1,0 +1,30 @@
+.repair-tabs { display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0 18px; }
+.repair-add { margin-left: auto; }
+.repair-card-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.repair-config-card { padding: 20px; min-width: 0; }
+.repair-config-card .section-heading { align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.repair-config-card h2 { font-size: 17px; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.repair-config-card p { margin: 8px 0; overflow-wrap: anywhere; }
+.repair-card-main { font-size: 14px; color: #294e73; }
+.repair-meta { font-size: 12px; color: #6b7f91; }
+.repair-status { flex-shrink: 0; background: #eef4f8; color: #355d7a; border-radius: 4px; padding: 4px 7px; font-size: 12px; }
+.repair-status.inactive { background: #f5f2ed; color: #806a4a; }
+.repair-card-actions { display: flex; flex-wrap: wrap; gap: 18px; padding-top: 12px; margin-top: 12px; border-top: 1px solid #edf0f3; }
+.repair-pagination { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 12px; margin: 20px 0; font-size: 13px; color: #63798d; }
+.repair-editor, .repair-history { padding: 26px; margin-top: 24px; }
+.repair-editor h2, .repair-history h2 { font-size: 20px; display: flex; align-items: center; gap: 8px; }
+.repair-editor-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.repair-form-wide { grid-column: 1 / -1; }
+.repair-editor-form select, .repair-editor-form input, .repair-editor-form textarea { max-width: 100%; min-width: 0; }
+.repair-history-list { list-style: none; padding: 0; margin: 0; }
+.repair-history-list li { padding: 15px 0; border-bottom: 1px solid #e8eef3; font-size: 14px; overflow-wrap: anywhere; }
+.repair-history-list p { color: #4f677c; margin: 8px 0; }
+.repair-history-list small { color: #6f8192; }
+@media (max-width: 760px) {
+  .repair-card-grid, .repair-editor-form { grid-template-columns: 1fr; }
+  .repair-editor, .repair-history, .repair-config-card { padding: 18px; }
+  .repair-add { margin-left: 0; }
+  .repair-settings .page-heading-row { flex-wrap: wrap; gap: 12px; }
+  .repair-config-card .section-heading { flex-wrap: wrap; }
+  .repair-pagination { justify-content: flex-start; }
+}

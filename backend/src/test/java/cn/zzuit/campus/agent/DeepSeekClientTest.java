@@ -77,6 +77,19 @@ class DeepSeekClientTest {
             assertThat(body.toString()).doesNotContain("studentName","identityNumber","identityConfirmed","20260001","expectedIdentity");
         } finally { server.stop(0); }
     }
+    @Test void repairExtractionOffersOnlyExplicitFaultFields() throws Exception {
+        var captured=new AtomicReference<JsonNode>();
+        var server=server(200,"{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"content\":\"已派单（虚构）\",\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"prepare_repair_fields\",\"arguments\":\"{\\\"category\\\":\\\"ELECTRICITY\\\",\\\"description\\\":\\\"灯不亮\\\"}\"}}]}}]}",captured,new AtomicReference<>());
+        try {
+            var plan=client(server).prepareRepair("走廊灯不亮");
+            assertThat(plan.calls()).hasSize(1); assertThat(plan.toString()).doesNotContain("已派单");
+            var body=captured.get(); assertThat(body.path("messages").path(1).path("content").asText()).isEqualTo("走廊灯不亮");
+            assertThat(body.path("tool_choice").path("function").path("name").asText()).isEqualTo("prepare_repair_fields");
+            var properties=body.path("tools").path(0).path("function").path("parameters").path("properties");
+            assertThat(properties.size()).isEqualTo(3); assertThat(properties.has("category")).isTrue(); assertThat(properties.has("title")).isTrue(); assertThat(properties.has("description")).isTrue();
+            assertThat(body.toString()).doesNotContain("contact","locationId","studentId","status");
+        } finally { server.stop(0); }
+    }
     private HttpServer server(int status,String body,AtomicReference<JsonNode> captured,AtomicReference<String> auth) throws Exception {
         var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/chat/completions",exchange->{ captured.set(json.readTree(new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8))); auth.set(exchange.getRequestHeaders().getFirst("Authorization")); var bytes=body.getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().set("Content-Type","application/json"); exchange.sendResponseHeaders(status,bytes.length); exchange.getResponseBody().write(bytes); exchange.close(); });

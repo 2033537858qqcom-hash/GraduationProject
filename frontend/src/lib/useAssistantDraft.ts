@@ -5,13 +5,14 @@ import { api, ApiError, errorMessage } from './api'
 import type { AssistantBusiness, AssistantTaskView } from './assistantSessions'
 import type { AssistantLeavePreview } from './assistantLeave'
 import type { AssistantCertificatePreview } from './assistantCertificate'
+import type { AssistantRepairPreview } from './assistantRepair'
 import { certificateIdentityFingerprint } from './assistantCertificate'
 import { currentUser } from '../stores/auth'
 
-type Preview = AssistantLeavePreview | AssistantCertificatePreview
+type Preview = AssistantLeavePreview | AssistantCertificatePreview | AssistantRepairPreview
 interface Props { active: boolean; mode: 'LOCAL' | 'DEEPSEEK'; modelReady: boolean; sessionId: number | null; resumeTaskId: number | null }
 export function useAssistantDraft<F extends object, P extends Preview>(options: {
-  props: Props; kind: 'LEAVE' | 'CERTIFICATE'; empty: () => F; fingerprint: (fields: F) => string
+  props: Props; kind: 'LEAVE' | 'CERTIFICATE' | 'REPAIR'; empty: () => F; fingerprint: (fields: F) => string
   emitSaving: (value: boolean) => void; emitWorking: (value: boolean) => void; emitUpdated: (value: AssistantTaskView) => void
 }) {
   const { props, kind } = options, route = useRoute()
@@ -30,7 +31,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
   const canSave = computed(() => !!record.value && !saved.value && preview.value?.ready && checked.value && confirmed.value && !busy.value && !saving.value)
   function root() { if (!props.sessionId) throw new Error('请先恢复或新建对话'); return `/assistant/sessions/${props.sessionId}/tasks` }
   function apply(result: AssistantTaskView) {
-    record.value = result; preview.value = (kind === 'LEAVE' ? result.leavePreview : result.certificatePreview) as P | null
+    record.value = result; preview.value = (kind === 'LEAVE' ? result.leavePreview : kind === 'CERTIFICATE' ? result.certificatePreview : result.repairPreview) as P | null
     Object.assign(fields, preview.value?.fields ?? options.empty()); saved.value = result.business; confirmed.value = false; consent.value = false
     if (preview.value?.ready) showComposer.value = false
     options.emitUpdated(result)
@@ -82,7 +83,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
     try {
       const fresh = await api<AssistantTaskView>(`${root()}/${record.value.id}`)
       if (fresh.business) { apply(fresh); uncertain.value = false; return }
-      const checkedNow = (kind === 'LEAVE' ? fresh.leavePreview : fresh.certificatePreview) as P
+      const checkedNow = (kind === 'LEAVE' ? fresh.leavePreview : kind === 'CERTIFICATE' ? fresh.certificatePreview : fresh.repairPreview) as P
       if (fresh.version !== reviewedVersion || options.fingerprint(checkedNow.fields as F) !== fingerprint.value) {
         confirmed.value = false; error.value = '任务已在其他窗口更新，请点击“恢复最新进度”后重新核对。'; return
       }

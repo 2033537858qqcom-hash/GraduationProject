@@ -18,5 +18,6 @@ public class AgentSessionController {
     @GetMapping("/{id}/tasks/{task}") TaskView task(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task) { return sessions.task(user,id,task); }
     @PostMapping("/{id}/tasks/{task}/leave") TaskView leave(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task,@Valid @RequestBody TaskLeave input) { return sessions.prepareLeave(user,id,task,input); }
     @PostMapping("/{id}/tasks/{task}/certificate") TaskView certificate(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task,@Valid @RequestBody TaskCertificate input) { return sessions.prepareCertificate(user,id,task,input); }
+    @PostMapping("/{id}/tasks/{task}/repair") TaskView repair(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task,@Valid @RequestBody TaskRepair input) { return sessions.prepareRepair(user,id,task,input); }
     @PostMapping("/{id}/tasks/{task}/save") TaskView save(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task,@Valid @RequestBody ConfirmTask input) { return sessions.save(user,id,task,input); }
 }

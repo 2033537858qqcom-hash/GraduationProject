@@ -11,6 +11,7 @@ test('latest task is chosen by kind and ID without mutating server ordering', ()
 test('accounts with no authorized matching task do not get an invented ID', () => {
   assert.equal(latestAssistantTask([], 'LEAVE'), null)
   assert.equal(latestAssistantTask([{ id: 3, kind: 'LEAVE' }], 'CERTIFICATE'), null)
+  assert.equal(latestAssistantTask([{ id: 9, kind: 'REPAIR' }, { id: 3, kind: 'LEAVE' }], 'REPAIR'), 9)
 })
 test('recovered and live turns merge without duplicating the same request', () => {
   assert.deepEqual(mergeAssistantTurns([{ id: 1, status: 'RUNNING' }, { id: 3, status: 'SUCCESS' }], [{ id: 1, status: 'SUCCESS' }, { id: 2, status: 'FAILED' }]),

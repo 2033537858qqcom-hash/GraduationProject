@@ -17,5 +17,6 @@ public class AgentController {
     @PostMapping("/query") Answer query(@AuthenticationPrincipal CampusPrincipal user,@Valid @RequestBody Query input) { return service.query(user,input); }
     @PostMapping("/leave/prepare") LeavePreview prepareLeave(@AuthenticationPrincipal CampusPrincipal user,@Valid @RequestBody PrepareLeave input) { return service.prepareLeave(user,input); }
     @PostMapping("/certificate/prepare") CertificatePreview prepareCertificate(@AuthenticationPrincipal CampusPrincipal user,@Valid @RequestBody PrepareCertificate input) { return service.prepareCertificate(user,input); }
+    @PostMapping("/repair/prepare") RepairPreview prepareRepair(@AuthenticationPrincipal CampusPrincipal user,@Valid @RequestBody PrepareRepair input) { return service.prepareRepair(user,input); }
     @GetMapping("/guides/{slug}") Guide guide(@AuthenticationPrincipal CampusPrincipal user,@PathVariable String slug) { identities.requirePermission(user,"agent:query"); return guides.detail(slug); }
 }

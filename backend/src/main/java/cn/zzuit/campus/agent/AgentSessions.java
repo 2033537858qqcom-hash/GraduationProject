@@ -9,6 +9,8 @@ import cn.zzuit.campus.identity.CampusPrincipal;
 import cn.zzuit.campus.identity.IdentityService;
 import cn.zzuit.campus.leave.LeaveModels;
 import cn.zzuit.campus.leave.LeaveService;
+import cn.zzuit.campus.repair.RepairModels;
+import cn.zzuit.campus.repair.RepairService;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalDateTime;
@@ -30,18 +32,22 @@ public class AgentSessions {
     private final AgentService agent;
     private final AgentLeaveDrafts leaveDrafts;
     private final AgentCertificateDrafts certificateDrafts;
+    private final AgentRepairDrafts repairDrafts;
     private final LeaveService leaves;
     private final CertificateService certificates;
+    private final RepairService repairs;
     private final TransactionTemplate transaction;
     private final JsonMapper json=JsonMapper.builder().build();
     private final Set<Long> operations=ConcurrentHashMap.newKeySet();
     private final Map<Long,Long> activeTurns=new ConcurrentHashMap<>();
     private record Task(long id,long sessionId,String businessKey,String kind,String fields,String stage,Long businessId,int version,LocalDateTime updatedAt) {}
-    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,LeaveService leaves,CertificateService certificates,PlatformTransactionManager manager) {
-        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.leaves=leaves; this.certificates=certificates; transaction=new TransactionTemplate(manager);
+    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,PlatformTransactionManager manager) {
+        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; transaction=new TransactionTemplate(manager);
     }
     private void require(CampusPrincipal user) { identities.requirePermission(user,"agent:query"); }
-    private void kind(CampusPrincipal user,String kind) { if(kind.equals("LEAVE")) leaveDrafts.require(user); else if(kind.equals("CERTIFICATE")) certificateDrafts.require(user); else throw missing(); }
+    private void kind(CampusPrincipal user,String kind) { switch(kind) { case "LEAVE" -> leaveDrafts.require(user); case "CERTIFICATE" -> certificateDrafts.require(user); case "REPAIR" -> repairDrafts.require(user); default -> throw missing(); } }
+    private String permission(String kind) { return switch(kind) { case "LEAVE" -> "leave:apply"; case "CERTIFICATE" -> "certificate:apply"; case "REPAIR" -> "repair:apply"; default -> ""; }; }
+    private String taskTitle(String kind) { return switch(kind) { case "LEAVE" -> "准备请假"; case "CERTIFICATE" -> "准备在校证明"; case "REPAIR" -> "准备报修"; default -> "准备事项"; }; }
     private void lock() { jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update(); }
     private <T> T write(Supplier<T> action) { return transaction.execute(status->{ lock(); return action.get(); }); }
     private void touch(long id,String title) { jdbc.sql("UPDATE agent_session SET updated_at=CURRENT_TIMESTAMP,title=CASE WHEN title='新对话' THEN :title ELSE title END WHERE id=:id").param("title",title.length()>60?title.substring(0,60):title).param("id",id).update(); }
@@ -67,7 +73,7 @@ public class AgentSessions {
         var permissions=identities.permissions(user.id());
         var tasks=jdbc.sql("SELECT id,kind,stage,version,updated_at FROM agent_task WHERE session_id=:id ORDER BY id DESC").param("id",id)
             .query((r,n)->new TaskSummary(r.getLong("id"),r.getString("kind"),r.getString("stage"),r.getInt("version"),r.getTimestamp("updated_at").toLocalDateTime())).list().stream()
-            .filter(t->permissions.contains(t.kind().equals("LEAVE")?"leave:apply":"certificate:apply")).limit(50).toList();
+            .filter(t->permissions.contains(permission(t.kind()))).limit(50).toList();
         require(user); return new SessionDetail(owner,List.copyOf(turns),tasks,older);
     }
     public QueryResult query(CampusPrincipal user,long id,SessionQuery input) {
@@ -103,10 +109,10 @@ public class AgentSessions {
             var prior=jdbc.sql("SELECT * FROM agent_task WHERE session_id=:id AND request_key=:key").param("id",sessionId).param("key",input.requestKey()).query(this::taskRow).optional();
             if(prior.isPresent()) { if(!prior.get().kind().equals(input.kind())) throw conflict("任务类型与原请求不同"); return view(user,prior.get()); }
             long count=jdbc.sql("SELECT COUNT(*) FROM agent_task WHERE session_id=:id").param("id",sessionId).query(Long.class).single(); if(count>=50) throw conflict("本次对话已有 50 项准备任务，请新建对话");
-            String fields=input.kind().equals("LEAVE")?encode(new LeaveFields("","","","","","","")):encode(new CertificateFields(""));
+            String fields=switch(input.kind()) { case "LEAVE" -> encode(new LeaveFields("","","","","","","")); case "CERTIFICATE" -> encode(new CertificateFields("")); default -> encode(new RepairFields("","","",null,"","","")); };
             var key=new GeneratedKeyHolder(); jdbc.sql("INSERT INTO agent_task(session_id,request_key,business_key,kind,fields_json) VALUES(:id,:key,:business,:kind,:fields)")
                 .param("id",sessionId).param("key",input.requestKey()).param("business","agent-task-"+UUID.randomUUID()).param("kind",input.kind()).param("fields",fields).update(key,"id");
-            touch(sessionId,input.kind().equals("LEAVE")?"准备请假":"准备在校证明"); return task(user,sessionId,key.getKey().longValue());
+            touch(sessionId,taskTitle(input.kind())); return task(user,sessionId,key.getKey().longValue());
         });
     }
     public TaskView task(CampusPrincipal user,long sessionId,long taskId) { return view(user,ownedTask(user,sessionId,taskId)); }
@@ -126,8 +132,14 @@ public class AgentSessions {
         try { var preview=agent.prepareCertificate(user,input.input()); return update(user,sessionId,id,input.version(),"CERTIFICATE",encode(preview.fields())); }
         finally { operations.remove(user.id()); }
     }
+    public TaskView prepareRepair(CampusPrincipal user,long sessionId,long id,TaskRepair input) {
+        var task=ownedTask(user,sessionId,id); editable(task,input.version(),"REPAIR");
+        if(!operations.add(user.id())) throw running();
+        try { var preview=agent.prepareRepair(user,input.input()); return update(user,sessionId,id,input.version(),"REPAIR",encode(preview.fields())); }
+        finally { operations.remove(user.id()); }
+    }
     private TaskView update(CampusPrincipal user,long sessionId,long id,int version,String kind,String fields) {
-        return write(()->{ editable(ownedTask(user,sessionId,id),version,kind); jdbc.sql("UPDATE agent_task SET fields_json=:f,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("f",fields).param("id",id).update(); touch(sessionId,kind.equals("LEAVE")?"准备请假":"准备在校证明"); return task(user,sessionId,id); });
+        return write(()->{ editable(ownedTask(user,sessionId,id),version,kind); jdbc.sql("UPDATE agent_task SET fields_json=:f,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("f",fields).param("id",id).update(); touch(sessionId,taskTitle(kind)); return task(user,sessionId,id); });
     }
     public TaskView save(CampusPrincipal user,long sessionId,long id,ConfirmTask input) {
         return write(()->{
@@ -138,22 +150,27 @@ public class AgentSessions {
             if(task.kind().equals("LEAVE")) {
                 var preview=checked.leavePreview(); if(!preview.ready()) throw conflict("请假信息或规则已变化，请重新核对预览"); var f=preview.fields();
                 businessId=leaves.save(user,null,new LeaveModels.Draft(task.businessKey(),f.reasonType(),f.reason(),f.contact(),LocalDateTime.parse(f.startDate()+"T"+f.startTime()+":00"),LocalDateTime.parse(f.endDate()+"T"+f.endTime()+":00"),0)).id();
-            } else {
+            } else if(task.kind().equals("CERTIFICATE")) {
                 var preview=checked.certificatePreview(); if(!preview.ready()) throw conflict("证明信息或规则已变化，请重新核对预览");
                 if(input.expectedIdentity()==null || !input.expectedIdentity().equals(preview.identity())) throw conflict("登记资料已变化，请重新核对本人资料并确认");
                 businessId=certificates.save(user,null,new CertificateModels.Draft(task.businessKey(),preview.fields().purpose(),"DIGITAL",true,0,input.expectedIdentity())).id();
+            } else {
+                var preview=checked.repairPreview(); if(preview==null || !preview.ready()) throw conflict("报修信息或开放地点已变化，请重新核对预览"); var f=preview.fields();
+                businessId=repairs.save(user,null,new RepairModels.Draft(task.businessKey(),0,f.locationId(),f.category(),f.title(),f.description(),f.locationDetail(),f.contact(),f.contactWindow())).id();
             }
-            jdbc.sql("UPDATE agent_task SET stage='LINKED',business_id=:b,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("b",businessId).param("id",id).update(); touch(sessionId,task.kind().equals("LEAVE")?"准备请假":"准备在校证明"); return task(user,sessionId,id);
+            jdbc.sql("UPDATE agent_task SET stage='LINKED',business_id=:b,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("b",businessId).param("id",id).update(); touch(sessionId,taskTitle(task.kind())); return task(user,sessionId,id);
         });
     }
     private TaskView view(CampusPrincipal user,Task task) {
-        kind(user,task.kind()); LeavePreview leave=null; CertificatePreview certificate=null; Business business=null;
+        kind(user,task.kind()); LeavePreview leave=null; CertificatePreview certificate=null; RepairPreview repair=null; Business business=null;
         if(task.businessId()!=null) {
             if(task.kind().equals("LEAVE")) { var r=leaves.detail(user,"mine",task.businessId()); business=new Business(r.id(),"LEAVE",r.status(),r.version(),"/portal/leave?id="+r.id()+"&tab=details"); }
-            else { var r=certificates.detail(user,"mine",task.businessId()); business=new Business(r.id(),"CERTIFICATE",r.status(),r.version(),"/portal/certificates?id="+r.id()+"&tab=details"); }
+            else if(task.kind().equals("CERTIFICATE")) { var r=certificates.detail(user,"mine",task.businessId()); business=new Business(r.id(),"CERTIFICATE",r.status(),r.version(),"/portal/certificates?id="+r.id()+"&tab=details"); }
+            else { var r=repairs.detail(user,"mine",task.businessId()); business=new Business(r.id(),"REPAIR",r.status(),r.version(),"/repairs/mine?id="+r.id()+"&tab=details"); }
         } else if(task.kind().equals("LEAVE")) leave=leaveDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),LeaveFields.class));
-        else certificate=certificateDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),CertificateFields.class));
-        return new TaskView(task.id(),task.kind(),task.stage(),task.version(),leave,certificate,business,task.updatedAt());
+        else if(task.kind().equals("CERTIFICATE")) certificate=certificateDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),CertificateFields.class));
+        else repair=repairDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),RepairFields.class));
+        return new TaskView(task.id(),task.kind(),task.stage(),task.version(),leave,certificate,repair,business,task.updatedAt());
     }
     private void editable(Task task,int version,String kind) { if(!task.kind().equals(kind)) throw missing(); if(!task.stage().equals("PREVIEW")) throw conflict("任务已关联业务申请，请进入原申请办理或新建准备任务"); if(task.version()!=version) throw conflict("任务进度已在其他窗口更新，请重新恢复后继续"); }
     private Session sessionRow(ResultSet r,int n) throws SQLException { return new Session(r.getLong("id"),r.getString("title"),r.getTimestamp("created_at").toLocalDateTime(),r.getTimestamp("updated_at").toLocalDateTime()); }

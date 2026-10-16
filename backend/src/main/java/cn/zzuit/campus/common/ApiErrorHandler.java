@@ -64,6 +64,12 @@ public class ApiErrorHandler {
             .body(Map.of("code", "NOT_FOUND", "message", "请求的资源不存在"));
     }
 
+    @ExceptionHandler(org.springframework.web.HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<Map<String, String>> methodNotAllowed() {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
+            .body(Map.of("code", "METHOD_NOT_ALLOWED", "message", "不支持此操作"));
+    }
+
     @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
     ResponseEntity<Map<String, String>> oversizedFile() {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)

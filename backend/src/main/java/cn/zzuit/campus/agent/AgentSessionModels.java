@@ -17,12 +17,13 @@ public final class AgentSessionModels {
     public record SessionDetail(Session session,List<Turn> turns,List<TaskSummary> tasks,boolean hasOlder) {}
     public record SessionQuery(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey,@NotNull @Valid Query input) {}
     public record QueryResult(Turn turn,Answer answer,boolean repeated) {}
-    public record CreateTask(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey,@NotBlank @Pattern(regexp="LEAVE|CERTIFICATE|REPAIR") String kind) {}
+    public record CreateTask(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey,@NotBlank @Pattern(regexp="LEAVE|CERTIFICATE|REPAIR|HOUSING") String kind) {}
     public record TaskSummary(long id,String kind,String stage,int version,LocalDateTime updatedAt) {}
     public record Business(long id,String kind,String status,int version,String targetPath) {}
-    public record TaskView(long id,String kind,String stage,int version,LeavePreview leavePreview,CertificatePreview certificatePreview,RepairPreview repairPreview,Business business,LocalDateTime updatedAt) {}
+    public record TaskView(long id,String kind,String stage,int version,LeavePreview leavePreview,CertificatePreview certificatePreview,RepairPreview repairPreview,Business business,LocalDateTime updatedAt,HousingPreview housingPreview) {}
     public record TaskLeave(@Min(0) int version,@NotNull @Valid PrepareLeave input) {}
     public record TaskCertificate(@Min(0) int version,@NotNull @Valid PrepareCertificate input) {}
     public record TaskRepair(@Min(0) int version,@NotNull @Valid PrepareRepair input) {}
-    public record ConfirmTask(@Min(0) int version,@NotNull @AssertTrue Boolean confirmed,Identity expectedIdentity) {}
+    public record TaskHousing(@Min(0) int version,@NotNull @Valid PrepareHousing input) {}
+    public record ConfirmTask(@Min(0) int version,@NotNull @AssertTrue Boolean confirmed,Identity expectedIdentity,@Pattern(regexp="[a-f0-9]{64}") String expectedStayToken) {}
 }

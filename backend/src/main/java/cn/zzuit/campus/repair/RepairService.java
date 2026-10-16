@@ -29,7 +29,7 @@ public class RepairService {
     private final int reminderHours;
     private final JsonMapper json=JsonMapper.builder().build();
     private static final List<String> STATES=List.of("DRAFT","SUBMITTED","RETURNED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","COMPLETED","REJECTED","WITHDRAWN","CANCELLED");
-    private static final String SELECT="SELECT r.*,u.full_name technician_name,(SELECT c.created_at FROM repair_completion c WHERE c.request_id=r.id AND c.result_round=r.completion_round) result_at FROM repair_request r LEFT JOIN app_user u ON u.id=r.technician_id";
+    private static final String SELECT="SELECT r.*,CASE WHEN "+RepairSettingsService.RESIDENCY_SQL+" THEN TRUE ELSE FALSE END location_eligible,u.full_name technician_name,(SELECT c.created_at FROM repair_completion c WHERE c.request_id=r.id AND c.result_round=r.completion_round) result_at FROM repair_request r LEFT JOIN app_user u ON u.id=r.technician_id";
     private static final String SCOPE="""
         EXISTS(SELECT 1 FROM repair_staff_scope s WHERE s.user_id=:user AND s.enabled=TRUE
         AND s.capability=:capability AND s.campus_id=r.campus_id AND s.category=r.category
@@ -60,7 +60,7 @@ public class RepairService {
             .query((s,n)->new Evaluation(s.getInt("stars"),s.getString("comment"),time(s,"created_at"))).optional().orElse(null);
         return new Detail(r.id(),r.reporterName(),r.title(),r.campus(),r.campusName(),r.location(),r.locationName(),r.category(),r.priority(),r.status(),r.version(),
             r.description(),r.locationDetail(),r.contact(),r.contactWindow(),r.technician(),r.technicianName(),r.round(),r.comment(),actions(r,view,evaluation!=null),
-            images(r.id(),null,null,true),completions,evaluation,r.submitted(),r.confirmed(),r.created(),r.updated(),cancellation(r.id()),r.cancellation()!=null,overdue(r));
+            images(r.id(),null,null,true),completions,evaluation,r.submitted(),r.confirmed(),r.created(),r.updated(),cancellation(r.id()),r.cancellation()!=null,overdue(r),r.locationEligible(),r.locationEligible()?"":"原入住关系已结束或住宿权限已变化，旧工单停止维修办理，历史资料继续保留。后续故障请按当前住宿重新报修。");
     }
     private List<String> actions(Row r,String view,boolean evaluated) {
         var a=new ArrayList<String>();
@@ -78,6 +78,8 @@ public class RepairService {
             if(r.status().equals("ASSIGNED"))a.add("accept");
             if(r.status().equals("IN_PROGRESS"))a.addAll(List.of("progress","unable","complete","upload-progress","upload-result","remove-result"));
         }
+        if(!r.locationEligible())a.removeIf(action->!List.of("withdraw","request-cancellation","evaluation","return","reject").contains(action)
+            && !(action.equals("edit") && r.submitted()==null));
         return List.copyOf(a);
     }
     private String where(String view) {
@@ -105,7 +107,7 @@ public class RepairService {
         if(!fresh.permissions().stream().anyMatch(p->List.of("repair:apply","repair:dispatch","repair:work").contains(p)))throw new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN","没有报修业务权限");
         return new Summary(mineAwaiting,mineReturned,dispatch,assigned,inProgress,mineCancel,dispatchCancel);
     }
-    private long count(CampusPrincipal u,String view,String status) {return jdbc.sql("SELECT COUNT(*) FROM repair_request r"+where(view)+" AND r.status=:status AND r.current_cancellation_id IS NULL").params(params(u,view)).param("status",status).query(Long.class).single();}
+    private long count(CampusPrincipal u,String view,String status) {return jdbc.sql("SELECT COUNT(*) FROM repair_request r"+where(view)+" AND r.status=:status AND r.current_cancellation_id IS NULL"+(view.equals("dispatch")?"":" AND "+RepairSettingsService.RESIDENCY_SQL)).params(params(u,view)).param("status",status).query(Long.class).single();}
     private long pendingCancellationCount(CampusPrincipal u,String view) {return jdbc.sql("SELECT COUNT(*) FROM repair_request r"+where(view)+" AND r.current_cancellation_id IS NOT NULL").params(params(u,view)).query(Long.class).single();}
     @Transactional public Detail save(CampusPrincipal user,Long id,Draft raw) {
         lock();permission(user,"mine");var input=normalized(raw);String digest=digest(input);
@@ -115,16 +117,16 @@ public class RepairService {
         validateDraft(user,input);
         if(id==null) {
             if(input.version()!=0)stale();
-            var key=new GeneratedKeyHolder();var p=fields(input);p.put("user",user.id());p.put("name",actor(user.id()));p.put("key",input.requestKey());
-            jdbc.sql("INSERT INTO repair_request(reporter_id,reporter_name,request_key,campus_id,campus_name,location_id,location_name,category,title,description,location_detail,contact,contact_window) VALUES(:user,:name,:key,:campus,:campusName,:location,:locationName,:category,:title,:description,:locationDetail,:contact,:contactWindow)")
+            var key=new GeneratedKeyHolder();var p=fields(user,input);p.put("user",user.id());p.put("name",actor(user.id()));p.put("key",input.requestKey());
+            jdbc.sql("INSERT INTO repair_request(reporter_id,reporter_name,request_key,campus_id,campus_name,location_id,location_name,category,title,description,location_detail,contact,contact_window,housing_assignment_id) VALUES(:user,:name,:key,:campus,:campusName,:location,:locationName,:category,:title,:description,:locationDetail,:contact,:contactWindow,:stay)")
                 .params(p).update(key,"id");id=Objects.requireNonNull(key.getKey()).longValue();
         } else {
-            var r=authorized(user,"mine",id);version(r.version(),input.version());editable(r);
+            var r=authorized(user,"mine",id);version(r.version(),input.version());editable(r);if(r.submitted()!=null)requireResidency(r);
             if(r.submitted()!=null && (!Objects.equals(r.location(),input.locationId()) || !r.category().equals(input.category())))conflict("提交后地点和类别不能替换，请撤回或另行处理原工单");
-            var p=fields(input);p.put("id",id);
+            var p=fields(user,input);p.put("id",id);
             // Keep the submitted location snapshot when editing returned descriptive information.
             jdbc.sql("UPDATE repair_request SET campus_id=:campus,location_id=:location,category=:category,title=:title,description=:description,location_detail=:locationDetail,contact=:contact,contact_window=:contactWindow,"+
-                (r.submitted()==null?"campus_name=:campusName,location_name=:locationName,":"")+"version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").params(p).update();
+                (r.submitted()==null?"campus_name=:campusName,location_name=:locationName,housing_assignment_id=:stay,":"")+"version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").params(p).update();
         }
         capture(user,id,"SAVE",input.requestKey(),digest,"保存报修资料");return detail(user,"mine",id);
     }
@@ -134,8 +136,9 @@ public class RepairService {
         if(!d.contact().isBlank() && !d.contact().matches("(?:\\+?[0-9][0-9 -]{6,23}|[^\\s@]+@[^\\s@]+\\.[^\\s@]+)"))throw invalid("联系方式须为手机号码或邮箱");
         if(d.locationId()!=null)settings.applicationLocation(user,d.locationId());
     }
-    private HashMap<String,Object> fields(Draft d) {
-        var p=new HashMap<String,Object>();p.put("location",d.locationId());p.put("campus",null);p.put("campusName","");p.put("locationName","");
+    private HashMap<String,Object> fields(CampusPrincipal user,Draft d) {
+        var p=new HashMap<String,Object>();p.put("location",d.locationId());p.put("campus",null);p.put("campusName","");p.put("locationName","");p.put("stay",null);
+        if(d.locationId()!=null) {var source=settings.applicationLocation(user,d.locationId());if(source.dormRoomId()!=null)p.put("stay",settings.currentAssignment(user,source.dormRoomId()));}
         if(d.locationId()!=null){var l=jdbc.sql("SELECT l.campus_id,l.name,c.name campus_name FROM repair_location l JOIN campus c ON c.id=l.campus_id WHERE l.id=:id").param("id",d.locationId()).query((r,n)->List.of(r.getLong(1),r.getString(2),r.getString(3))).single();p.put("campus",l.get(0));p.put("locationName",l.get(1));p.put("campusName",l.get(2));}
         p.put("category",d.category());p.put("title",d.title());p.put("description",d.description());p.put("locationDetail",d.locationDetail());p.put("contact",d.contact());p.put("contactWindow",d.contactWindow());return p;
     }
@@ -194,7 +197,7 @@ public class RepairService {
         return detail(find(id),view);
     }
     public List<Technician> technicians(CampusPrincipal user,long id) {
-        var r=authorized(user,"dispatch",id);return qualified(r,"WORK").stream().map(u->new Technician(u.id(),u.name(),u.department())).toList();
+        var r=authorized(user,"dispatch",id);if(!r.locationEligible())return List.of();return qualified(r,"WORK").stream().map(u->new Technician(u.id(),u.name(),u.department())).toList();
     }
     private Cancellation cancellation(long id) {
         return jdbc.sql("""
@@ -234,14 +237,14 @@ public class RepairService {
         }
         jdbc.sql("UPDATE repair_request SET processing_comment=:comment,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("comment",input.comment()).param("id",id).update();
         capture(user,id,action,input.requestKey(),digest,input.comment());
-        String message=switch(action){case "CANCEL_REQUEST" -> "报修人申请取消，维修和验收暂时暂停，等待后勤决定。";case "CANCEL_WITHDRAW" -> "报修人已撤销取消申请，可继续原处理流程。";case "CANCEL_APPROVE" -> "后勤已同意取消，工单关闭，原任务及资料保留历史。";default -> "后勤未同意取消，请查看处理意见并继续原流程。";};
+        String message=switch(action){case "CANCEL_REQUEST" -> "报修人申请取消，维修和验收暂时暂停，等待后勤决定。";case "CANCEL_WITHDRAW" -> "报修人已撤销取消申请，请查看当前工单的可办操作。";case "CANCEL_APPROVE" -> "后勤已同意取消，工单关闭，原任务及资料保留历史。";default -> "后勤未同意取消，请查看处理意见及当前工单的可办操作。";};
         notices.write(r.reporter(),"报修取消进度更新","REPAIR",id,"MINE",message);
         for(var person:dispatchers(r))notices.write(person.id(),"报修取消事务更新","REPAIR",id,"DISPATCH",message);
         if(r.technician()!=null)notices.write(r.technician(),"维修任务取消进度更新","REPAIR",id,"WORK",message);
         return detail(user,view,id);
     }
     private boolean overdue(Row r) {
-        return r.status().equals("AWAITING_CONFIRMATION") && r.cancellation()==null && r.resultAt()!=null && !r.resultAt().isAfter(LocalDateTime.now(clock).minusHours(reminderHours));
+        return r.locationEligible() && r.status().equals("AWAITING_CONFIRMATION") && r.cancellation()==null && r.resultAt()!=null && !r.resultAt().isAfter(LocalDateTime.now(clock).minusHours(reminderHours));
     }
     public Statistics statistics(CampusPrincipal user,LocalDate from,LocalDate to) {
         permission(user,"dispatch");LocalDate today=LocalDate.now(clock);
@@ -295,7 +298,7 @@ public class RepairService {
         String name=Objects.toString(file.getOriginalFilename(),"报修图片").replaceAll("[\\\\/\\p{Cntrl}]","_");if(name.length()>160)name=name.substring(0,160);
         String fingerprint=digest(List.of(input.version(),input.purpose(),name,digestBytes(bytes)));
         if(repeat(user,id,"UPLOAD",input.requestKey(),fingerprint)!=null)return detail(user,view,id);
-        if(r.cancellation()!=null)conflict("取消申请待处理，暂不能更新图片");
+        requireResidency(r);if(r.cancellation()!=null)conflict("取消申请待处理，暂不能更新图片");
         version(r.version(),input.version());int round=input.purpose().equals("RESULT")?r.round()+1:0;
         if(input.purpose().equals("FAULT")){if(!view.equals("mine"))throw invalid("故障图片由报修人维护");editable(r);}
         else if(!view.equals("work") || !r.status().equals("IN_PROGRESS"))conflict("维修图片只能由当前处理中人员上传");
@@ -307,7 +310,7 @@ public class RepairService {
     }
     @Transactional public Detail remove(CampusPrincipal user,String view,long id,long image,Action input) {
         lock();var r=authorized(user,view,id);String fingerprint=digest(List.of(image,input));if(repeat(user,id,"REMOVE_IMAGE",input.requestKey(),fingerprint)!=null)return detail(user,view,id);
-        if(r.cancellation()!=null)conflict("取消申请待处理，暂不能移除图片");
+        requireResidency(r);if(r.cancellation()!=null)conflict("取消申请待处理，暂不能移除图片");
         version(r.version(),input.version());var attachment=jdbc.sql("SELECT purpose,result_round,uploader_id,current FROM repair_attachment WHERE id=:image AND request_id=:id").param("image",image).param("id",id)
             .query((s,n)->new Removal(s.getString(1),s.getInt(2),s.getLong(3),s.getBoolean(4))).optional().orElseThrow(this::missing);
         if(!attachment.current())conflict("图片已从当前资料移除，历史版本仍保留");
@@ -346,6 +349,7 @@ public class RepairService {
     private String digestBytes(byte[] value) {try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));}catch(java.security.NoSuchAlgorithmException ex){throw new IllegalStateException(ex);}}
     private String actor(long id) {return jdbc.sql("SELECT full_name FROM app_user WHERE id=:id").param("id",id).query(String.class).single();}
     private String text(String value) {return value==null?"":value.trim();}
+    private void requireResidency(Row r) {if(!r.locationEligible())conflict("原入住关系已结束或住宿权限已变化，请撤回或申请取消旧工单");}
     private void editable(Row r) {if(!List.of("DRAFT","RETURNED").contains(r.status()))conflict("只有草稿或待补充资料可以编辑");}
     private void pagination(int page,int size) {if(page<1 || page>1000000 || size<1 || size>100)throw invalid("分页参数无效");}
     private void version(int actual,int expected) {if(actual!=expected)stale();}
@@ -355,8 +359,8 @@ public class RepairService {
     private ApiException missing() {return new ApiException(HttpStatus.NOT_FOUND,"REPAIR_NOT_FOUND","报修记录或图片不存在，或当前没有访问权限");}
     private LocalDateTime time(ResultSet r,String name) throws SQLException {Timestamp t=r.getTimestamp(name);return t==null?null:t.toLocalDateTime();}
     private Item item(Row r) {return new Item(r.id(),r.reporterName(),r.title(),r.campus(),r.campusName(),r.location(),r.locationName(),r.category(),r.priority(),r.status(),r.technicianName(),r.version(),r.updated(),r.cancellation()!=null,overdue(r));}
-    private Row row(ResultSet r,int n) throws SQLException {return new Row(r.getLong("id"),r.getLong("reporter_id"),r.getString("reporter_name"),r.getObject("campus_id",Long.class),r.getString("campus_name"),r.getObject("location_id",Long.class),r.getString("location_name"),r.getString("category"),r.getString("title"),r.getString("description"),r.getString("location_detail"),r.getString("contact"),r.getString("contact_window"),r.getString("priority"),r.getString("status"),r.getObject("technician_id",Long.class),r.getString("technician_name"),r.getInt("completion_round"),r.getString("processing_comment"),r.getInt("version"),time(r,"submitted_at"),time(r,"confirmed_at"),time(r,"created_at"),time(r,"updated_at"),r.getObject("current_cancellation_id",Long.class),time(r,"result_at"));}
-    private record Row(long id,long reporter,String reporterName,Long campus,String campusName,Long location,String locationName,String category,String title,String description,String locationDetail,String contact,String contactWindow,String priority,String status,Long technician,String technicianName,int round,String comment,int version,LocalDateTime submitted,LocalDateTime confirmed,LocalDateTime created,LocalDateTime updated,Long cancellation,LocalDateTime resultAt) {}
+    private Row row(ResultSet r,int n) throws SQLException {return new Row(r.getLong("id"),r.getLong("reporter_id"),r.getString("reporter_name"),r.getObject("campus_id",Long.class),r.getString("campus_name"),r.getObject("location_id",Long.class),r.getString("location_name"),r.getString("category"),r.getString("title"),r.getString("description"),r.getString("location_detail"),r.getString("contact"),r.getString("contact_window"),r.getString("priority"),r.getString("status"),r.getObject("technician_id",Long.class),r.getString("technician_name"),r.getInt("completion_round"),r.getString("processing_comment"),r.getInt("version"),time(r,"submitted_at"),time(r,"confirmed_at"),time(r,"created_at"),time(r,"updated_at"),r.getObject("current_cancellation_id",Long.class),time(r,"result_at"),r.getBoolean("location_eligible"));}
+    private record Row(long id,long reporter,String reporterName,Long campus,String campusName,Long location,String locationName,String category,String title,String description,String locationDetail,String contact,String contactWindow,String priority,String status,Long technician,String technicianName,int round,String comment,int version,LocalDateTime submitted,LocalDateTime confirmed,LocalDateTime created,LocalDateTime updated,Long cancellation,LocalDateTime resultAt,boolean locationEligible) {}
     private record StatsGroup(String status,String category,long total,long pending,long samples,long seconds) {}
     private record Prior(long id,String action,String digest) {}
     private record Person(long id,String name,String department) {}

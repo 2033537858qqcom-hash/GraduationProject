@@ -1,0 +1,46 @@
+CREATE TABLE housing_import_batch (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT,
+ token VARCHAR(64) NOT NULL UNIQUE,
+ actor_id BIGINT NOT NULL,
+ actor_security_version BIGINT NOT NULL,
+ building_id BIGINT NOT NULL,
+ campus_name VARCHAR(80) NOT NULL,
+ building_name VARCHAR(100) NOT NULL,
+ source_name VARCHAR(160) NOT NULL,
+ input_digest VARCHAR(64) NOT NULL,
+ row_count INTEGER NOT NULL,
+ ignored_rows INTEGER NOT NULL,
+ status VARCHAR(16) NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ expires_at TIMESTAMP NOT NULL,
+ completed_at TIMESTAMP,
+ FOREIGN KEY(actor_id) REFERENCES app_user(id),
+ FOREIGN KEY(building_id) REFERENCES dorm_building(id),
+ CHECK(row_count>0 AND row_count<=200),
+ CHECK(ignored_rows>=0),
+ CHECK(status IN ('PREVIEW','COMPLETED')),
+ CHECK((status='PREVIEW' AND completed_at IS NULL) OR (status='COMPLETED' AND completed_at IS NOT NULL))
+);
+CREATE TABLE housing_import_row (
+ batch_id BIGINT NOT NULL,
+ line_number INTEGER NOT NULL,
+ student_id BIGINT NOT NULL,
+ student_username VARCHAR(64) NOT NULL,
+ student_name VARCHAR(100) NOT NULL,
+ room_code VARCHAR(64) NOT NULL,
+ bed_code VARCHAR(32) NOT NULL,
+ bed_id BIGINT NOT NULL,
+ place_label VARCHAR(500) NOT NULL,
+ entry_reason VARCHAR(200) NOT NULL,
+ resource_fingerprint VARCHAR(64) NOT NULL,
+ assignment_id BIGINT UNIQUE,
+ PRIMARY KEY(batch_id,line_number),
+ UNIQUE(batch_id,student_id),
+ UNIQUE(batch_id,bed_id),
+ FOREIGN KEY(batch_id) REFERENCES housing_import_batch(id),
+ FOREIGN KEY(student_id) REFERENCES app_user(id),
+ FOREIGN KEY(bed_id) REFERENCES dorm_bed(id),
+ FOREIGN KEY(assignment_id) REFERENCES housing_assignment(id)
+);
+CREATE INDEX idx_housing_import_owner ON housing_import_batch(actor_id,building_id,status,id);
+CREATE INDEX idx_housing_import_expiry ON housing_import_batch(status,expires_at);

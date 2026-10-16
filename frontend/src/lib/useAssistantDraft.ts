@@ -7,12 +7,13 @@ import type { AssistantLeavePreview } from './assistantLeave'
 import type { AssistantCertificatePreview } from './assistantCertificate'
 import type { AssistantRepairPreview } from './assistantRepair'
 import { certificateIdentityFingerprint } from './assistantCertificate'
+import { sameHousingStay, type AssistantHousingPreview } from './assistantHousing'
 import { currentUser } from '../stores/auth'
 
-type Preview = AssistantLeavePreview | AssistantCertificatePreview | AssistantRepairPreview
+type Preview = AssistantLeavePreview | AssistantCertificatePreview | AssistantRepairPreview | AssistantHousingPreview
 interface Props { active: boolean; mode: 'LOCAL' | 'DEEPSEEK'; modelReady: boolean; sessionId: number | null; resumeTaskId: number | null }
 export function useAssistantDraft<F extends object, P extends Preview>(options: {
-  props: Props; kind: 'LEAVE' | 'CERTIFICATE' | 'REPAIR'; empty: () => F; fingerprint: (fields: F) => string
+  props: Props; kind: 'LEAVE' | 'CERTIFICATE' | 'REPAIR' | 'HOUSING'; empty: () => F; fingerprint: (fields: F) => string
   emitSaving: (value: boolean) => void; emitWorking: (value: boolean) => void; emitUpdated: (value: AssistantTaskView) => void
 }) {
   const { props, kind } = options, route = useRoute()
@@ -31,7 +32,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
   const canSave = computed(() => !!record.value && !saved.value && preview.value?.ready && checked.value && confirmed.value && !busy.value && !saving.value)
   function root() { if (!props.sessionId) throw new Error('请先恢复或新建对话'); return `/assistant/sessions/${props.sessionId}/tasks` }
   function apply(result: AssistantTaskView) {
-    record.value = result; preview.value = (kind === 'LEAVE' ? result.leavePreview : kind === 'CERTIFICATE' ? result.certificatePreview : result.repairPreview) as P | null
+    record.value = result; preview.value = (kind === 'LEAVE' ? result.leavePreview : kind === 'CERTIFICATE' ? result.certificatePreview : kind === 'HOUSING' ? result.housingPreview : result.repairPreview) as P | null
     Object.assign(fields, preview.value?.fields ?? options.empty()); saved.value = result.business; confirmed.value = false; consent.value = false
     if (preview.value?.ready) showComposer.value = false
     options.emitUpdated(result)
@@ -83,7 +84,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
     try {
       const fresh = await api<AssistantTaskView>(`${root()}/${record.value.id}`)
       if (fresh.business) { apply(fresh); uncertain.value = false; return }
-      const checkedNow = (kind === 'LEAVE' ? fresh.leavePreview : kind === 'CERTIFICATE' ? fresh.certificatePreview : fresh.repairPreview) as P
+      const checkedNow = (kind === 'LEAVE' ? fresh.leavePreview : kind === 'CERTIFICATE' ? fresh.certificatePreview : kind === 'HOUSING' ? fresh.housingPreview : fresh.repairPreview) as P
       if (fresh.version !== reviewedVersion || options.fingerprint(checkedNow.fields as F) !== fingerprint.value) {
         confirmed.value = false; error.value = '任务已在其他窗口更新，请点击“恢复最新进度”后重新核对。'; return
       }
@@ -93,8 +94,11 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
       if (kind === 'CERTIFICATE' && certificateIdentityFingerprint((checkedNow as AssistantCertificatePreview).identity) !== certificateIdentityFingerprint(identity ?? null)) {
         confirmed.value = false; error.value = '登记资料已更新，请重新核对本人资料并确认。'; return
       }
+      if (kind === 'HOUSING' && !sameHousingStay(reviewed as AssistantHousingPreview, checkedNow as AssistantHousingPreview)) {
+        confirmed.value = false; error.value = '当前住宿或办理指南已变化，请重新核对后确认。'; return
+      }
       saveRequested = true
-      apply(await api<AssistantTaskView>(`${root()}/${record.value.id}/save`, { method: 'POST', body: JSON.stringify({ version: reviewedVersion, confirmed: true, expectedIdentity: identity }) }))
+      apply(await api<AssistantTaskView>(`${root()}/${record.value.id}/save`, { method: 'POST', body: JSON.stringify({ version: reviewedVersion, confirmed: true, expectedIdentity: identity, expectedStayToken: kind === 'HOUSING' ? (reviewed as AssistantHousingPreview).stayToken : undefined }) }))
       uncertain.value = false
       await nextTick(); scrollArea.value?.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (cause) {

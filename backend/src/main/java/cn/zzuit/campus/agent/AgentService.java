@@ -21,10 +21,11 @@ public class AgentService {
     private final AgentLeaveDrafts leaveDrafts;
     private final AgentCertificateDrafts certificateDrafts;
     private final AgentRepairDrafts repairDrafts;
+    private final AgentHousingDrafts housingDrafts;
     private final Set<Long> busy=ConcurrentHashMap.newKeySet();
     private final Map<Long,Bucket> rates=new ConcurrentHashMap<>();
     private record Bucket(long minute,int count) {}
-    public AgentService(IdentityService identities,AgentTools tools,DeepSeekClient model,JdbcClient jdbc,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts) { this.identities=identities; this.tools=tools; this.model=model; this.jdbc=jdbc; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; }
+    public AgentService(IdentityService identities,AgentTools tools,DeepSeekClient model,JdbcClient jdbc,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,AgentHousingDrafts housingDrafts) { this.identities=identities; this.tools=tools; this.model=model; this.jdbc=jdbc; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.housingDrafts=housingDrafts; }
     public Capabilities capabilities(CampusPrincipal user) {
         return new Capabilities(model.ready(),model.model(),tools.capabilities(user),model.ready()?"DeepSeek 可用：仅发送本次问题与页面业务类型，实际查询结果留在本地。":"DeepSeek 尚未连接，当前可使用本地关键词查询。");
     }
@@ -37,7 +38,7 @@ public class AgentService {
         try {
             rate(user.id());
             String question=input.message().trim();
-            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|发布|停用|开证明|派单|改派|验收|接单)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修)").matcher(question).find()) {
+            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|发布|停用|开证明|派单|改派|验收|接单)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿)").matcher(question).find()) {
                 outcome="REFUSED"; return new Answer(run,input.mode(),false,"第一期仅查询本人或当前岗位获授权的信息。不能查询无关人员资料，也不能代替提交或审批，请通过原业务页面办理。",List.of(),now(),null,null);
             }
             Plan plan=input.mode()==Mode.DEEPSEEK?model.plan(question,tools.schemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
@@ -135,6 +136,29 @@ public class AgentService {
             finally { busy.remove(user.id()); }
         }
     }
+    public HousingPreview prepareHousing(CampusPrincipal user,PrepareHousing input) {
+        housingDrafts.require(user);
+        var fields=housingDrafts.normalize(input.fields());
+        if(input.mode()==Mode.DEEPSEEK && !input.externalConsent()) throw new ApiException(HttpStatus.BAD_REQUEST,"MODEL_CONSENT_REQUIRED","请确认将本次补充文字发送至 DeepSeek，或使用本地填写");
+        if(input.mode()==Mode.DEEPSEEK && !model.ready()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,"MODEL_NOT_CONFIGURED","DeepSeek 尚未连接，可使用本地填写");
+        if(!busy.add(user.id())) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"QUERY_RUNNING","上一项操作仍在进行，请等待结果");
+        String run=UUID.randomUUID().toString(),outcome="FAILED"; Integer prompt=null,completion=null; long start=System.nanoTime();
+        try {
+            rate(user.id());
+            if(input.mode()==Mode.DEEPSEEK) {
+                var plan=model.prepareHousing(input.message().trim()); prompt=plan.promptTokens(); completion=plan.completionTokens();
+                fields=housingDrafts.merge(fields,plan);
+            }
+            var preview=housingDrafts.preview(user,run,input.mode(),fields);
+            outcome=preview.ready()?"SUCCESS":"NEEDS_INPUT";
+            return preview;
+        } finally {
+            try { jdbc.sql("INSERT INTO agent_run(id,user_id,mode,outcome,tool_names,prompt_tokens,completion_tokens,duration_ms) VALUES(:id,:u,:m,:o,'prepare_housing_fields',:p,:c,:d)")
+                .param("id",run).param("u",user.id()).param("m",input.mode().name()).param("o",outcome)
+                .param("p",prompt).param("c",completion).param("d",(System.nanoTime()-start)/1000000).update(); }
+            finally { busy.remove(user.id()); }
+        }
+    }
     private void rate(long user) {
         long minute=Instant.now().getEpochSecond()/60;
         rates.entrySet().removeIf(e->e.getValue().minute()<minute-2);
@@ -144,9 +168,12 @@ public class AgentService {
     private Plan local(CampusPrincipal user,String q,Context context) {
         var names=tools.capabilities(user).stream().map(Capability::name).toList();
         var result=new ArrayList<Call>();
-        if(context!=null && context.type().startsWith("REPAIR_") && names.contains("repair_status") && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("repair_status",Map.of()));
+        if(context!=null && context.type().equals("HOUSING_MINE") && q.matches(".*(这条|当前|这个|状态|进度).*")) result.add(tools.call("housing_transfer_status",Map.of()));
+        else if(context!=null && context.type().startsWith("REPAIR_") && names.contains("repair_status") && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("repair_status",Map.of()));
         else if(context!=null && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("application_status",Map.of()));
         if(q.matches(".*(怎么|如何|规则|最长|材料|领取|办理流程).*")) result.add(tools.call("search_guides",Map.of("query",q.length()>200?q.substring(0,200):q)));
+        if(q.matches(".*(我的住宿|我的宿舍|住在哪|住哪里|当前住宿|当前房间|本人住宿).*")) result.add(tools.call("my_housing",Map.of()));
+        if(q.matches(".*(我的调宿|调宿进度|调宿记录|调宿申请.*状态).*")) result.add(tools.call("my_housing_transfers",Map.of()));
         if(q.matches(".*(课表|课程安排|本周|这周|下周|上课|授课).*")) {
             LocalDate date=LocalDate.now(ZoneId.of("Asia/Shanghai")); if(q.contains("下周")) date=date.plusWeeks(1);
             result.add(tools.call("my_timetable",Map.of("week",date.toString())));

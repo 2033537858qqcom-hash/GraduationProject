@@ -90,6 +90,19 @@ class DeepSeekClientTest {
             assertThat(body.toString()).doesNotContain("contact","locationId","studentId","status");
         } finally { server.stop(0); }
     }
+    @Test void housingExtractionOnlySendsThisMessageAndOffersTextFields() throws Exception {
+        var captured=new AtomicReference<JsonNode>();
+        var response=Map.of("choices",List.of(Map.of("finish_reason","tool_calls","message",Map.of("content","已安排床位（虚构）","tool_calls",List.of(Map.of("type","function","function",Map.of("name","prepare_housing_fields","arguments","{\"reason\":\"希望低楼层\"}")))))));
+        var server=server(200,json.writeValueAsString(response),captured,new AtomicReference<>());
+        try {
+            var plan=client(server).prepareHousing("希望低楼层");assertThat(plan.calls()).hasSize(1);assertThat(plan.toString()).doesNotContain("已安排床位");
+            var body=captured.get();assertThat(body.path("messages").size()).isEqualTo(2);assertThat(body.path("messages").path(1).path("content").asText()).isEqualTo("希望低楼层");
+            assertThat(body.path("tool_choice").path("function").path("name").asText()).isEqualTo("prepare_housing_fields");
+            var properties=body.path("tools").path(0).path("function").path("parameters").path("properties");
+            assertThat(properties.size()).isEqualTo(3);for(String name:List.of("reason","preferredArea","materialNote"))assertThat(properties.has(name)).isTrue();
+            assertThat(body.toString()).doesNotContain("currentPlace","stayToken","studentId","targetBedId","20260001");
+        } finally {server.stop(0);}
+    }
     private HttpServer server(int status,String body,AtomicReference<JsonNode> captured,AtomicReference<String> auth) throws Exception {
         var server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/chat/completions",exchange->{ captured.set(json.readTree(new String(exchange.getRequestBody().readAllBytes(),StandardCharsets.UTF_8))); auth.set(exchange.getRequestHeaders().getFirst("Authorization")); var bytes=body.getBytes(StandardCharsets.UTF_8); exchange.getResponseHeaders().set("Content-Type","application/json"); exchange.sendResponseHeaders(status,bytes.length); exchange.getResponseBody().write(bytes); exchange.close(); });

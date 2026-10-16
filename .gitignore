@@ -2,6 +2,9 @@ frontend/node_modules/
 frontend/dist/
 backend/target/
 backend/data/
+data/
+*.mv.db
+*.trace.db
 .env
 .env.*
 !.env.example
@@ -9,5 +12,4 @@ backend/data/
 .idea/
 .vscode/
 artifacts/
-output/agent-evals/
-output/agent-live-evals/
+output/

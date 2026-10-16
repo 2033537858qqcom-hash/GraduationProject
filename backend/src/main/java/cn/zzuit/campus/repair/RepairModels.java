@@ -24,7 +24,7 @@ public final class RepairModels {
     public record Detail(long id,String reporterName,String title,Long campusId,String campusName,Long locationId,String locationName,
         String category,String priority,String status,int version,String description,String locationDetail,String contact,String contactWindow,
         Long technicianId,String technicianName,int completionRound,String processingComment,List<String> allowedActions,
-        List<Image> images,List<Completion> completions,Evaluation evaluation,LocalDateTime submittedAt,LocalDateTime confirmedAt,LocalDateTime createdAt,LocalDateTime updatedAt,Cancellation cancellation,boolean cancellationPending,boolean confirmationOverdue) {}
+        List<Image> images,List<Completion> completions,Evaluation evaluation,LocalDateTime submittedAt,LocalDateTime confirmedAt,LocalDateTime createdAt,LocalDateTime updatedAt,Cancellation cancellation,boolean cancellationPending,boolean confirmationOverdue,boolean locationEligible,String locationEligibilityMessage) {}
     public record History(long id,String actorName,String action,String comment,String status,int version,String snapshot,LocalDateTime createdAt) {}
     public record Technician(long id,String name,String departmentName) {}
     public record Summary(long mineAwaitingConfirmation,long mineReturned,long dispatchPending,long workAssigned,long workInProgress,long mineCancellationPending,long dispatchCancellationPending) {}

@@ -61,6 +61,8 @@ public class PortalController {
                 : identities.permissions(user.id()).contains("certificate:review") ? "可进入学院证明申请处理，核对所属学院资料并生成演示证明。"
                 : identities.permissions(user.id()).contains("teaching:manage") ? "可进入我的教学，查看授课安排并维护本人教学班资料与通知。"
                 : identities.permissions(user.id()).contains("academic:manage") ? "可进入教务信息维护，管理本学院教学关系并发布学习信息。"
+                : identities.permissions(user.id()).contains("housing:assign") ? "可进入住宿办理，在负责楼栋登记初始入住和退宿。"
+                : identities.permissions(user.id()).contains("housing:configure") ? "可维护宿舍楼栋、房间、床位和楼栋负责人。"
                 : "当前已建立身份与岗位入口，业务处理任务将在对应模块接入。");
     }
 

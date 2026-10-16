@@ -11,6 +11,8 @@ public class RepairSettingsController {
     private final RepairSettingsService service;
     public RepairSettingsController(RepairSettingsService service) {this.service=service;}
     @GetMapping("/api/repairs/catalog") PublicCatalog publicCatalog(@AuthenticationPrincipal CampusPrincipal u) {return service.publicCatalog(u);}
+    @GetMapping("/api/repairs/my-dorm") DormEligibility myDorm(@AuthenticationPrincipal CampusPrincipal u) {return service.myDorm(u);}
+    @GetMapping("/api/repairs/locations/{id}") PublicLocation publicLocation(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id) {return service.publicLocation(u,id);}
     @GetMapping("/api/repairs/locations") Page<PublicLocation> publicLocations(@AuthenticationPrincipal CampusPrincipal u,@RequestParam(required=false) Long campusId,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int pageSize) {return service.publicLocations(u,campusId,page,pageSize);}
     @GetMapping("/api/repairs/responsibilities") Responsibilities responsibilities(@AuthenticationPrincipal CampusPrincipal u) {return service.responsibilities(u);}
     @GetMapping("/api/admin/repair-settings/catalog") Catalog catalog(@AuthenticationPrincipal CampusPrincipal u) {return service.catalog(u);}

@@ -30,8 +30,7 @@ public class RepairReminderService {
                 WHERE ur.user_id=u.id AND rp.permission_code='repair:apply')
             AND NOT EXISTS(SELECT 1 FROM repair_reminder m WHERE m.request_id=r.id AND m.result_round=r.completion_round
                 AND m.recipient_id=r.reporter_id AND m.reminder_date=:date)
-            ORDER BY c.created_at,r.id LIMIT 100
-            """).param("cutoff",Timestamp.valueOf(now.minusHours(hours))).param("date",date)
+            """+" AND "+RepairSettingsService.RESIDENCY_SQL+" ORDER BY c.created_at,r.id LIMIT 100").param("cutoff",Timestamp.valueOf(now.minusHours(hours))).param("date",date)
             .query((r,n)->new Due(r.getLong(1),r.getLong(2),r.getInt(3))).list();
         for(var r:due) {
             jdbc.sql("INSERT INTO repair_reminder(request_id,result_round,recipient_id,reminder_date,sent_at) VALUES(:id,:round,:recipient,:date,:now)")

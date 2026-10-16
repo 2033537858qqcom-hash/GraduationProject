@@ -9,6 +9,7 @@ import { currentUser } from '../stores/auth'
 import AssistantLeaveDraft from './AssistantLeaveDraft.vue'
 import AssistantCertificateDraft from './AssistantCertificateDraft.vue'
 import AssistantRepairDraft from './AssistantRepairDraft.vue'
+import AssistantHousingDraft from './AssistantHousingDraft.vue'
 import { latestAssistantTask, mergeAssistantTurns, restoredTurnLabel } from '../lib/assistantSessions'
 import type { AssistantSession, AssistantSessionDetail, AssistantTurn, AssistantTaskSummary, AssistantTaskView, AssistantQueryResult } from '../lib/assistantSessions'
 import type { AssistantContext } from '../lib/assistant'
@@ -17,15 +18,16 @@ const route = useRoute()
 const open = ref(false), hint = ref(true), loading = ref(false), busy = ref(false), error = ref(''), question = ref('')
 const contextEnabled = ref(true), consent = ref(false), mode = ref<'LOCAL' | 'DEEPSEEK'>('LOCAL')
 const capabilities = ref<AssistantCapabilities | null>(null)
-const task = ref<'QUERY' | 'LEAVE' | 'CERTIFICATE' | 'REPAIR' | 'HISTORY'>('QUERY'), savingDraft = ref(false), preparingDraft = ref(false)
+const task = ref<'QUERY' | 'LEAVE' | 'CERTIFICATE' | 'REPAIR' | 'HOUSING' | 'HISTORY'>('QUERY'), savingDraft = ref(false), preparingDraft = ref(false)
 const session = ref<AssistantSessionDetail | null>(null), sessionLoading = ref(false)
 const sessionList = ref<{ items: AssistantSession[]; total: number; page: number; pageSize: number }>({ items: [], total: 0, page: 1, pageSize: 10 })
 const turns = ref<AssistantTurn[]>([]), requeryContext = ref<AssistantContext | null>(null)
 const selectedTask = ref<AssistantTaskSummary | null>(null)
 const queryKey = ref(crypto.randomUUID())
-const leaveDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null), certificateDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null), repairDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null)
+const leaveDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null), certificateDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null), repairDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null), housingDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null)
 const canPrepareLeave = computed(() => currentUser.value?.permissions.includes('leave:apply'))
 const canPrepareCertificate = computed(() => currentUser.value?.permissions.includes('certificate:apply'))
+const canPrepareHousing = computed(() => currentUser.value?.permissions.includes('housing:read'))
 const canPrepareRepair = computed(() => currentUser.value?.permissions.includes('repair:apply'))
 const messages = ref<{ question: string; answer: AssistantAnswer }[]>([])
 const input = ref<HTMLTextAreaElement | null>(null), launcher = ref<HTMLButtonElement | null>(null), history = ref<HTMLElement | null>(null)
@@ -35,6 +37,7 @@ const suggestions = computed(() => assistantSuggestions(route.path, capabilities
 const contextLabel = computed(() => assistantContextLabel(context.value))
 const hintSubject = computed(() => {
   const p = currentUser.value?.permissions ?? []
+  if (route.path.startsWith('/housing') && p.includes('housing:read')) return '住宿和调宿进度'
   if (route.path.includes('/repairs')) return '报修进度'
   if (route.path.includes('certificates')) return '证明进度'
   if (route.path.endsWith('/leave')) return '请假进度'
@@ -85,8 +88,8 @@ async function restoreLatest() {
   } catch (cause) { if (current === sessionGeneration) error.value = errorMessage(cause) }
   finally { if (current === sessionGeneration) sessionLoading.value = false }
 }
-async function allowSessionChange() { return (!leaveDraft.value || await leaveDraft.value.allowLeave()) && (!certificateDraft.value || await certificateDraft.value.allowLeave()) && (!repairDraft.value || await repairDraft.value.allowLeave()) }
-function taskLabel(kind: string) { return kind === 'LEAVE' ? '请假准备' : kind === 'CERTIFICATE' ? '在校证明准备' : kind === 'REPAIR' ? '报修准备' : '准备任务' }
+async function allowSessionChange() { return (!leaveDraft.value || await leaveDraft.value.allowLeave()) && (!certificateDraft.value || await certificateDraft.value.allowLeave()) && (!repairDraft.value || await repairDraft.value.allowLeave()) && (!housingDraft.value || await housingDraft.value.allowLeave()) }
+function taskLabel(kind: string) { return kind === 'LEAVE' ? '请假准备' : kind === 'CERTIFICATE' ? '在校证明准备' : kind === 'REPAIR' ? '报修准备' : kind === 'HOUSING' ? '调宿准备' : '准备任务' }
 async function selectSession(id: number) {
   if (busy.value || preparingDraft.value || savingDraft.value || sessionLoading.value || !await allowSessionChange()) return
   const current = ++sessionGeneration; sessionLoading.value = true; error.value = ''
@@ -174,12 +177,13 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
     <section v-show="open" class="assistant-panel" role="dialog" aria-label="AI 对话" @keydown.esc.stop="close">
       <header class="assistant-head"><div><strong>AI 对话</strong><small>{{ task === 'HISTORY' ? '恢复本人对话与已核对的进度' : task !== 'QUERY' ? '整理资料，确认后保存本人草稿' : '查询当前账号可见的信息' }}</small></div><button class="assistant-icon" aria-label="收起 AI 对话" :disabled="savingDraft" @click="close"><ChevronDown :size="19" /></button></header>
       <div class="assistant-session-bar"><span>{{ session?.session.title ?? '正在恢复本人对话' }}</span><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="listSessions()">历史对话</button><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="newSession">新对话</button></div>
-      <nav v-if="canPrepareLeave || canPrepareCertificate || canPrepareRepair" class="assistant-tasks" aria-label="AI 服务方式"><button :aria-pressed="task === 'QUERY'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'QUERY'">查询信息</button><button v-if="canPrepareLeave" :aria-pressed="task === 'LEAVE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'LEAVE'">准备请假</button><button v-if="canPrepareCertificate" :aria-pressed="task === 'CERTIFICATE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'CERTIFICATE'">准备证明</button><button v-if="canPrepareRepair" :aria-pressed="task === 'REPAIR'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'REPAIR'">准备报修</button></nav>
+      <nav v-if="canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing" class="assistant-tasks" aria-label="AI 服务方式"><button :aria-pressed="task === 'QUERY'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'QUERY'">查询信息</button><button v-if="canPrepareLeave" :aria-pressed="task === 'LEAVE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'LEAVE'">准备请假</button><button v-if="canPrepareCertificate" :aria-pressed="task === 'CERTIFICATE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'CERTIFICATE'">准备证明</button><button v-if="canPrepareRepair" :aria-pressed="task === 'REPAIR'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'REPAIR'">准备报修</button><button v-if="canPrepareHousing" :aria-pressed="task === 'HOUSING'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'HOUSING'">准备调宿</button></nav>
       <div v-if="task !== 'HISTORY'" class="assistant-mode"><label>回答方式<select v-model="mode" :disabled="busy || loading || preparingDraft || savingDraft" aria-label="回答方式"><option value="LOCAL">{{ task !== 'QUERY' ? '本地填写' : '本地查询' }}</option><option value="DEEPSEEK" :disabled="!capabilities?.deepseekReady">DeepSeek{{ capabilities?.deepseekReady ? '' : ' · 未连接' }}</option></select></label><span>{{ busy || preparingDraft ? '正在处理' : mode === 'LOCAL' ? task !== 'QUERY' ? '表单核对' : '关键词识别' : '自然语言识别' }}</span></div>
       <p v-if="loading" class="assistant-status" role="status">正在读取可用查询…</p>
       <p v-if="sessionLoading" class="assistant-status" role="status">正在恢复对话记录…</p>
       <AssistantLeaveDraft v-if="canPrepareLeave" v-show="task === 'LEAVE'" ref="leaveDraft" :active="open && task === 'LEAVE' && !sessionLoading" :mode="mode" :model-ready="!!capabilities?.deepseekReady" :session-id="session?.session.id ?? null" :resume-task-id="resumeTaskId('LEAVE')" @updated="taskUpdated" @saving="savingDraft = $event" @working="preparingDraft = $event" />
       <AssistantCertificateDraft v-if="canPrepareCertificate" v-show="task === 'CERTIFICATE'" ref="certificateDraft" :active="open && task === 'CERTIFICATE' && !sessionLoading" :mode="mode" :model-ready="!!capabilities?.deepseekReady" :session-id="session?.session.id ?? null" :resume-task-id="resumeTaskId('CERTIFICATE')" @updated="taskUpdated" @saving="savingDraft = $event" @working="preparingDraft = $event" />
+      <AssistantHousingDraft v-if="canPrepareHousing" v-show="task === 'HOUSING'" ref="housingDraft" :active="open && task === 'HOUSING' && !sessionLoading" :mode="mode" :model-ready="!!capabilities?.deepseekReady" :session-id="session?.session.id ?? null" :resume-task-id="resumeTaskId('HOUSING')" @updated="taskUpdated" @saving="savingDraft = $event" @working="preparingDraft = $event" />
       <AssistantRepairDraft v-if="canPrepareRepair" v-show="task === 'REPAIR'" ref="repairDraft" :active="open && task === 'REPAIR' && !sessionLoading" :mode="mode" :model-ready="!!capabilities?.deepseekReady" :session-id="session?.session.id ?? null" :resume-task-id="resumeTaskId('REPAIR')" @updated="taskUpdated" @saving="savingDraft = $event" @working="preparingDraft = $event" />
       <div v-if="task === 'HISTORY'" class="assistant-history assistant-session-list">
         <h2>本人历史对话</h2><p>选择一条继续。恢复时重新核对权限和任务状态。</p>
@@ -190,7 +194,7 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
         <button v-for="item in session?.tasks ?? []" :key="`task-${item.id}`" :disabled="sessionLoading" @click="resumeTask(item)"><strong>{{ taskLabel(item.kind) }} #{{ item.id }}</strong><span>{{ item.stage === 'LINKED' ? '已关联申请 · 恢复后核对最新状态' : item.version ? '已暂存预览 · 恢复后重新核对' : '待补齐信息' }}</span></button>
       </div>
       <div v-show="task === 'QUERY'" ref="history" class="assistant-history" aria-live="polite" aria-relevant="additions">
-        <div v-if="!messages.length && !turns.length" class="assistant-intro"><span class="assistant-intro-mark">AI</span><h2>从一个问题开始</h2><p>可以查办理指南、学习安排和办事进度。{{ canPrepareLeave || canPrepareCertificate || canPrepareRepair ? '也可以准备申请，核对后保存本人草稿。' : '办理请在原业务页面确认。' }}</p><small>规则与个人记录均为毕业设计演示。</small></div>
+        <div v-if="!messages.length && !turns.length" class="assistant-intro"><span class="assistant-intro-mark">AI</span><h2>从一个问题开始</h2><p>可以查办理指南、学习安排和办事进度。{{ canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing ? '也可以准备申请，核对后保存本人草稿。' : '办理请在原业务页面确认。' }}</p><small>规则与个人记录均为毕业设计演示。</small></div>
         <button v-if="session?.hasOlder" class="assistant-older" :disabled="sessionLoading" @click="olderTurns">更早的提问</button>
         <article v-for="turn in turns.filter(item => !messages.some(entry => entry.answer.runId === item.runId))" :key="turn.id" class="assistant-restored"><p>{{ turn.question }}</p><small>{{ restoredTurnLabel(turn.status) }} · {{ turn.createdAt.replace('T',' ').slice(0,16) }}</small><button :disabled="busy || sessionLoading" @click="requery(turn)">重新查询</button></article>
         <article v-for="entry in messages" :key="entry.answer.runId" class="assistant-turn">

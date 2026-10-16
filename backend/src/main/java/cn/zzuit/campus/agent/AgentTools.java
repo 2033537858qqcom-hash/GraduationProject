@@ -6,6 +6,9 @@ import cn.zzuit.campus.common.ApiException;
 import cn.zzuit.campus.identity.CampusPrincipal;
 import cn.zzuit.campus.identity.IdentityService;
 import cn.zzuit.campus.leave.LeaveService;
+import cn.zzuit.campus.housing.HousingService;
+import cn.zzuit.campus.housing.HousingTransferService;
+import cn.zzuit.campus.housing.HousingTransferModels.Transfer;
 import cn.zzuit.campus.notice.NoticeService;
 import cn.zzuit.campus.repair.RepairModels.Item;
 import cn.zzuit.campus.repair.RepairService;
@@ -29,15 +32,17 @@ public class AgentTools {
     private final CertificateService certificates;
     private final NoticeService notices;
     private final RepairService repairs;
+    private final HousingService housing;
+    private final HousingTransferService transfers;
     private final JsonMapper json=JsonMapper.builder().build();
     private static final List<String> REPAIR_STATUSES=List.of("ALL","DRAFT","SUBMITTED","RETURNED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","COMPLETED","REJECTED","WITHDRAWN","CANCELLED");
-    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs) {
-        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;
+    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers) {
+        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;
     }
     private static final Map<String,String> TITLES=Map.ofEntries(Map.entry("search_guides","查找办理指南"),Map.entry("my_timetable","查看本人课表"),Map.entry("my_grades","查看本人已发布成绩"),
         Map.entry("my_exams","查看本人已发布考试"),Map.entry("my_affairs","查看本人办事进度"),Map.entry("my_notice_summary","查看本人未读消息"),Map.entry("my_review_pending","查看岗位待办"),
         Map.entry("application_status","查看当前申请"),Map.entry("my_repairs","查看本人报修进度"),Map.entry("repair_dispatch_queue","查看派单范围报修"),
-        Map.entry("repair_work_queue","查看当前维修任务"),Map.entry("repair_status","查看当前报修"));
+        Map.entry("repair_work_queue","查看当前维修任务"),Map.entry("repair_status","查看当前报修"),Map.entry("my_housing","查看本人住宿"),Map.entry("my_housing_transfers","查看本人调宿进度"),Map.entry("housing_transfer_status","查看当前调宿"));
     public List<Capability> capabilities(CampusPrincipal user) {
         identities.requirePermission(user,"agent:query");
         var p=identities.permissions(user.id()); var names=new ArrayList<>(List.of("search_guides","my_notice_summary"));
@@ -50,6 +55,7 @@ public class AgentTools {
         if(p.contains("repair:dispatch")) names.add("repair_dispatch_queue");
         if(p.contains("repair:work")) names.add("repair_work_queue");
         if(p.stream().anyMatch(x->List.of("repair:apply","repair:dispatch","repair:work").contains(x))) names.add("repair_status");
+        if(p.contains("housing:read"))names.addAll(List.of("my_housing","my_housing_transfers","housing_transfer_status"));
         return names.stream().map(n->new Capability(n,TITLES.get(n))).toList();
     }
     public List<Map<String,Object>> schemas(CampusPrincipal user) {
@@ -62,6 +68,7 @@ public class AgentTools {
                 case "my_affairs" -> { properties.put("kind",Map.of("type","string","enum",List.of("ALL","LEAVE","CERTIFICATE"))); properties.put("status",Map.of("type","string","enum",List.of("ALL","DRAFT","SUBMITTED","RETURNED","APPROVED","COMPLETED","REJECTED","WITHDRAWN"))); }
                 case "application_status" -> { properties.put("kind",Map.of("type","string","enum",List.of("LEAVE","CERTIFICATE"))); properties.put("id",Map.of("type","integer","minimum",1,"description","只取用户明确给出的申请编号；省略时使用本地页面上下文")); properties.put("view",Map.of("type","string","enum",List.of("MINE","REVIEW"),"description","省略时采用页面上下文或本人视图")); }
                 case "my_repairs","repair_dispatch_queue","repair_work_queue" -> properties.put("status",Map.of("type","string","enum",REPAIR_STATUSES,"description","省略时查看该范围的全部可见状态"));
+                case "housing_transfer_status" -> properties.put("id",Map.of("type","integer","minimum",1,"description","本人调宿申请编号；省略时使用当前调宿页面上下文"));
                 case "repair_status" -> { properties.put("id",Map.of("type","integer","minimum",1,"description","只取用户明确给出的工单编号；省略时使用本地页面上下文")); properties.put("view",Map.of("type","string","enum",List.of("MINE","DISPATCH","WORK"),"description","省略时采用页面上下文")); }
                 default -> { }
             }
@@ -72,7 +79,8 @@ public class AgentTools {
     }
     public void validateContext(CampusPrincipal user,Context context) {
         if(context==null) return;
-        if(context.type().startsWith("REPAIR_")) repairApplication(user,repairView(context.type()),context.id());
+        if(context.type().equals("HOUSING_MINE"))housingTransfer(user,context.id());
+        else if(context.type().startsWith("REPAIR_")) repairApplication(user,repairView(context.type()),context.id());
         else application(user,context.type().startsWith("LEAVE")?"LEAVE":"CERTIFICATE",context.id(),context.type().endsWith("REVIEW")?"REVIEW":"MINE");
     }
     public ToolResult execute(CampusPrincipal user,Call call,Context context) {
@@ -82,7 +90,7 @@ public class AgentTools {
         Set<String> fields=switch(call.name()) {
             case "search_guides" -> Set.of("query"); case "my_timetable" -> Set.of("week","termId"); case "my_grades","my_exams" -> Set.of("termId");
             case "my_affairs" -> Set.of("kind","status"); case "application_status" -> Set.of("kind","id","view");
-            case "my_repairs","repair_dispatch_queue","repair_work_queue" -> Set.of("status"); case "repair_status" -> Set.of("id","view"); default -> Set.of();
+            case "my_repairs","repair_dispatch_queue","repair_work_queue" -> Set.of("status"); case "repair_status" -> Set.of("id","view"); case "housing_transfer_status" -> Set.of("id"); default -> Set.of();
         };
         if(a==null || !a.isObject() || a.properties().stream().anyMatch(e->!fields.contains(e.getKey()))) throw invalid();
         return switch(call.name()) {
@@ -99,6 +107,13 @@ public class AgentTools {
                 if(kind==null || id==null) yield result(call.name(),"NEEDS_INPUT","请先选择申请，或明确请假／证明种类和申请编号。",0,List.of(),List.of(),null);
                 yield application(user,kind,id,view);
             }
+            case "my_housing" -> housing(user);
+            case "my_housing_transfers" -> housingTransfers(user);
+            case "housing_transfer_status" -> {
+                Long id=number(a,"id");if(id==null && context!=null && context.type().equals("HOUSING_MINE"))id=context.id();
+                if(id==null)yield result(call.name(),"NEEDS_INPUT","请选择本人的调宿申请后查询。",0,List.of(),List.of(),"/housing/transfer");
+                yield housingTransfer(user,id);
+            }
             case "my_repairs" -> repairList(user,"my_repairs","mine",choice(a,"status","ALL",Set.copyOf(REPAIR_STATUSES)));
             case "repair_dispatch_queue" -> repairList(user,"repair_dispatch_queue","dispatch",choice(a,"status","ALL",Set.copyOf(REPAIR_STATUSES)));
             case "repair_work_queue" -> repairList(user,"repair_work_queue","work",choice(a,"status","ALL",Set.copyOf(REPAIR_STATUSES)));
@@ -111,6 +126,23 @@ public class AgentTools {
             }
             default -> throw invalid();
         };
+    }
+    private ToolResult housing(CampusPrincipal user) {
+        var stay=housing.currentForAssistant(user);
+        return result("my_housing",stay==null?"NO_DATA":"OK",stay==null?"暂无本人当前入住记录，请联系宿管核对。":"以下为本人当前房间，床位和负责人请进入我的住宿核对。",stay==null?0:1,
+            stay==null?List.of():List.of(new Fact("housing:current","本人当前住宿",stay.campusName()+" · "+stay.buildingName()+" · "+stay.roomName(),"/housing/mine")),List.of(),"/housing/mine");
+    }
+    private ToolResult housingTransfers(CampusPrincipal user) {
+        var rows=transfers.recentMine(user);
+        return result("my_housing_transfers",rows.isEmpty()?"NO_DATA":"OK","展示本人最近至多 8 条调宿记录；原因、材料和完整处理意见请进入原申请。",rows.size(),rows.stream().map(this::housingFact).toList(),List.of(),"/housing/transfer");
+    }
+    private ToolResult housingTransfer(CampusPrincipal user,long id) {
+        var row=transfers.mineDetail(user,id);var fact=housingFact(row);
+        return result("housing_transfer_status","OK","已按当前账号重新核对本人申请。完整资料请在原申请查看。",1,List.of(fact),List.of(),fact.targetPath());
+    }
+    private Fact housingFact(Transfer r) {
+        String status=switch(r.status()){case "SUBMITTED"->"待初审";case "COMPLETED"->"已完成";case "AWAITING_ASSIGNMENT"->"待安排";case "AWAITING_CHECKIN"->"待入住";case "CANCELLED"->"已取消";case "EXPIRED"->"已过期";default->statusName(r.status());};
+        return new Fact("HOUSING:"+r.id(),"本人调宿申请 #"+r.id(),status+" · V"+r.version()+(r.cancelRequested()?" · 取消待宿管确认":"")+(r.reserveUntil()!=null && r.status().equals("AWAITING_CHECKIN")?" · 入住期限 "+r.reserveUntil().toString().replace('T',' '):""),"/housing/transfer?id="+r.id()+"&tab=details");
     }
     private ToolResult knowledge(String query) {
         var sources=guides.search(query);

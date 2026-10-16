@@ -1,5 +1,13 @@
 $ErrorActionPreference = 'Stop'
 $projectDirectory = Join-Path $PSScriptRoot '..\backend'
+
+# 自动优先使用 JDK 21（如 Temurin 21）
+$temurin21 = Join-Path $env:USERPROFILE '.jdks\temurin-21.0.11'
+if (Test-Path -LiteralPath $temurin21) {
+    $env:JAVA_HOME = $temurin21
+    $env:PATH = "$temurin21\bin;$env:PATH"
+}
+
 if (-not (Get-Command mvn -ErrorAction SilentlyContinue)) { throw '未找到 Maven，请先检查 PATH。' }
 $agentCredentialPath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'ZzuitCampus\deepseek-api-key.dpapi'
 $agentLoadedKey = $false

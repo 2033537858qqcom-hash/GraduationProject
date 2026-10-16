@@ -48,8 +48,8 @@ class AgentIntegrationTest {
         assertThat(ok(student.get("/api"+source.path("targetPath").asText())).path("body").asText()).contains("30 天");
     }
     @Test void unknownRulesDoNotInventSourcesOrSchoolRequirements() throws Exception {
-        online(new Plan(List.of(call("search_guides",Map.of("query","宿舍退宿未知指南"))),10,5));
-        var answer=ok(query(login("20260001"),onlineInput("宿舍退宿有什么材料")));
+        online(new Plan(List.of(call("search_guides",Map.of("query","跨境联合培养补贴未知指南"))),10,5));
+        var answer=ok(query(login("20260001"),onlineInput("跨境联合培养补贴有什么材料")));
         assertThat(answer.path("results").path(0).path("sources").size()).isZero(); assertThat(answer.toString()).contains("没有找到有效指南");
         assertThat(answer.toString()).doesNotContain("已提交","审核通过");
     }

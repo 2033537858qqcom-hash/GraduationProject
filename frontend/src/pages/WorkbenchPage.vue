@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { BookOpen, Building2, CalendarDays, ChartColumn, ClipboardCheck, FileCheck2, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
+import { BedDouble, BookOpen, Building2, CalendarDays, ChartColumn, ClipboardCheck, FileCheck2, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { currentUser } from '../stores/auth'
 import ServiceEntry from '../components/ServiceEntry.vue'
@@ -15,10 +15,12 @@ const counselor = computed(() => currentUser.value?.permissions.includes('leave:
 const affairs = computed(() => currentUser.value?.permissions.includes('certificate:review'))
 const repairConfiguration = computed(() => currentUser.value?.permissions.includes('repair:configure'))
 const repairResponsibilities = computed(() => currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work'))
+const housingConfiguration = computed(() => currentUser.value?.permissions.includes('housing:configure'))
+const housingDesk = computed(() => currentUser.value?.permissions.includes('housing:assign'))
 const pending = ref(0), certificatePending = ref(0)
 const repairSummary = ref<RepairSummary | null>(null)
-const title = computed(() => foundation.value ? '管理员工作台' : counselor.value ? '辅导员工作台' : affairs.value ? '学生事务工作台' : teaching.value ? '教师工作台' : academic.value ? '教务工作台' : repairResponsibilities.value ? '后勤服务工作台' : '岗位工作台')
-const introduction = computed(() => foundation.value ? '维护校园人员、组织目录和岗位分配，查看管理操作记录。' : counselor.value ? '处理负责行政班的请假待办，核对学生资料并记录处理意见。' : affairs.value ? '核对所属学院的证明申请，记录处理意见并生成演示结果。' : teaching.value ? '管理本人教学班的课程资料与通知，查看每周授课安排。' : academic.value ? '维护学院教学信息，核对并发布学生成绩与考试安排。' : repairResponsibilities.value ? '核对本人当前负责的校区、故障类别和具体地点，查看已授权的后勤服务。' : '从下方入口查看个人信息和你有权限使用的岗位服务。')
+const title = computed(() => foundation.value ? '管理员工作台' : counselor.value ? '辅导员工作台' : affairs.value ? '学生事务工作台' : teaching.value ? '教师工作台' : academic.value ? '教务工作台' : repairResponsibilities.value ? '后勤服务工作台' : housingDesk.value ? '宿管工作台' : '岗位工作台')
+const introduction = computed(() => foundation.value ? '维护校园人员、组织目录和岗位分配，查看管理操作记录。' : counselor.value ? '处理负责行政班的请假待办，核对学生资料并记录处理意见。' : affairs.value ? '核对所属学院的证明申请，记录处理意见并生成演示结果。' : teaching.value ? '管理本人教学班的课程资料与通知，查看每周授课安排。' : academic.value ? '维护学院教学信息，核对并发布学生成绩与考试安排。' : repairResponsibilities.value ? '核对本人当前负责的校区、故障类别和具体地点，查看已授权的后勤服务。' : housingDesk.value ? '在负责楼栋登记初始入住和退宿，核对当前床位。' : '从下方入口查看个人信息和你有权限使用的岗位服务。')
 onMounted(async () => {
   try { const result = await api<{ message: string; leavePending: number; certificatePending: number }>('/workbench/overview'); message.value = result.message; pending.value = result.leavePending; certificatePending.value = result.certificatePending }
   catch (cause) { error.value = errorMessage(cause) }
@@ -49,9 +51,12 @@ onMounted(async () => {
         <ServiceEntry v-if="foundation" to="/admin/resources" title="教室资源目录" description="维护楼栋、容量和启停状态，核对课程考试占用" :icon="Building2" />
         <ServiceEntry v-if="foundation" to="/admin/counselors" title="辅导员负责班级" description="配置行政班负责人员，移交请假待办与材料权限" :icon="UsersRound" />
         <ServiceEntry v-if="repairConfiguration" to="/admin/repair-settings" title="报修地点与人员范围" description="配置开放地点、后勤派单与维修人员的负责范围" :icon="Wrench" />
+        <ServiceEntry v-if="housingConfiguration" to="/admin/housing" title="宿舍资源" description="维护宿舍楼、房间、床位，并指定楼栋负责人" :icon="BedDouble" />
+        <ServiceEntry v-if="housingDesk" to="/housing/assignments" title="住宿办理" description="在负责楼栋登记初始入住和退宿" :icon="BedDouble" />
         <ServiceEntry v-if="repairResponsibilities" to="/logistics/repair-responsibilities" title="我的后勤负责范围" description="核对本人当前负责的校区、故障类别与具体地点" :icon="Wrench" />
         <ServiceEntry v-if="counselor" to="/student-affairs/leave" title="班级请假申请处理" description="查看负责班级的待办，核对资料并通过、拒绝或退回" :icon="ClipboardCheck" />
         <ServiceEntry v-if="affairs" to="/student-affairs/certificates" title="学院证明申请处理" description="核对学生登记信息与用途，退回补交或生成演示证明" :icon="FileCheck2" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" title="学院调宿初审" description="审核本学院调宿申请，通过后交给宿管安排床位" :icon="BedDouble" />
         <ServiceEntry v-if="teaching" to="/teaching" title="教学班与课程资料" description="查看学生名单，发布课程资料与班级通知" :icon="BookOpen" />
         <ServiceEntry v-if="teaching" to="/teaching/timetable" title="每周授课安排" description="查看本人授课时间、教学班和上课地点" :icon="CalendarDays" />
         <ServiceEntry v-if="academic" to="/academic" title="学院教务信息维护" description="维护教学关系，导入成绩并发布考试安排" :icon="NotebookPen" />

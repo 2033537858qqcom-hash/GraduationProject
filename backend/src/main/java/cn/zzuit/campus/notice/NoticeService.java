@@ -18,8 +18,9 @@ public class NoticeService {
     private final LeaveService leaves;
     private final CertificateService certificates;
     private final cn.zzuit.campus.repair.RepairService repairs;
-    public NoticeService(JdbcClient jdbc,IdentityService identities,LeaveService leaves,CertificateService certificates,cn.zzuit.campus.repair.RepairService repairs) {
-        this.jdbc=jdbc; this.identities=identities; this.leaves=leaves; this.certificates=certificates;this.repairs=repairs;
+    private final cn.zzuit.campus.housing.HousingTransferService housing;
+    public NoticeService(JdbcClient jdbc,IdentityService identities,LeaveService leaves,CertificateService certificates,cn.zzuit.campus.repair.RepairService repairs,cn.zzuit.campus.housing.HousingTransferService housing) {
+        this.jdbc=jdbc; this.identities=identities; this.leaves=leaves; this.certificates=certificates;this.repairs=repairs;this.housing=housing;
     }
     private void current(CampusPrincipal user) {
         var fresh=identities.current(user.id()).orElseThrow(()->new ApiException(HttpStatus.UNAUTHORIZED,"AUTH_REQUIRED","请重新登录"));
@@ -41,6 +42,10 @@ public class NoticeService {
         if(type==null || id==null || view==null) return null;
         String mode=view.equals("MINE")?"mine":"review";
         try {
+            if(type.equals("HOUSING") && List.of("MINE","REVIEW","ASSIGN").contains(view)) {
+                housing.requireNoticeAccess(user,id,view);
+                return (view.equals("MINE")?"/housing/transfer":view.equals("REVIEW")?"/student-affairs/housing":"/housing/assignments")+"?id="+id+"&tab=details";
+            }
             if(type.equals("REPAIR") && List.of("MINE","DISPATCH","WORK").contains(view)) {
                 repairs.detail(user,view.toLowerCase(java.util.Locale.ROOT),id);
                 return (view.equals("MINE")?"/repairs/mine":view.equals("DISPATCH")?"/logistics/repairs/dispatch":"/logistics/repairs/tasks")+"?id="+id+"&tab=details";

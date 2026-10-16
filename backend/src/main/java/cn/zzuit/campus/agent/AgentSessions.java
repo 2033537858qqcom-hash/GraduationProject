@@ -9,6 +9,8 @@ import cn.zzuit.campus.identity.CampusPrincipal;
 import cn.zzuit.campus.identity.IdentityService;
 import cn.zzuit.campus.leave.LeaveModels;
 import cn.zzuit.campus.leave.LeaveService;
+import cn.zzuit.campus.housing.HousingTransferService;
+import cn.zzuit.campus.housing.HousingTransferModels;
 import cn.zzuit.campus.repair.RepairModels;
 import cn.zzuit.campus.repair.RepairService;
 import java.sql.ResultSet;
@@ -33,6 +35,8 @@ public class AgentSessions {
     private final AgentLeaveDrafts leaveDrafts;
     private final AgentCertificateDrafts certificateDrafts;
     private final AgentRepairDrafts repairDrafts;
+    private final AgentHousingDrafts housingDrafts;
+    private final HousingTransferService housingTransfers;
     private final LeaveService leaves;
     private final CertificateService certificates;
     private final RepairService repairs;
@@ -41,13 +45,13 @@ public class AgentSessions {
     private final Set<Long> operations=ConcurrentHashMap.newKeySet();
     private final Map<Long,Long> activeTurns=new ConcurrentHashMap<>();
     private record Task(long id,long sessionId,String businessKey,String kind,String fields,String stage,Long businessId,int version,LocalDateTime updatedAt) {}
-    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,PlatformTransactionManager manager) {
-        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; transaction=new TransactionTemplate(manager);
+    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,AgentHousingDrafts housingDrafts,HousingTransferService housingTransfers,PlatformTransactionManager manager) {
+        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; this.housingDrafts=housingDrafts; this.housingTransfers=housingTransfers; transaction=new TransactionTemplate(manager);
     }
     private void require(CampusPrincipal user) { identities.requirePermission(user,"agent:query"); }
-    private void kind(CampusPrincipal user,String kind) { switch(kind) { case "LEAVE" -> leaveDrafts.require(user); case "CERTIFICATE" -> certificateDrafts.require(user); case "REPAIR" -> repairDrafts.require(user); default -> throw missing(); } }
-    private String permission(String kind) { return switch(kind) { case "LEAVE" -> "leave:apply"; case "CERTIFICATE" -> "certificate:apply"; case "REPAIR" -> "repair:apply"; default -> ""; }; }
-    private String taskTitle(String kind) { return switch(kind) { case "LEAVE" -> "准备请假"; case "CERTIFICATE" -> "准备在校证明"; case "REPAIR" -> "准备报修"; default -> "准备事项"; }; }
+    private void kind(CampusPrincipal user,String kind) { switch(kind) { case "LEAVE" -> leaveDrafts.require(user); case "CERTIFICATE" -> certificateDrafts.require(user); case "REPAIR" -> repairDrafts.require(user); case "HOUSING" -> housingDrafts.require(user); default -> throw missing(); } }
+    private String permission(String kind) { return switch(kind) { case "LEAVE" -> "leave:apply"; case "CERTIFICATE" -> "certificate:apply"; case "REPAIR" -> "repair:apply"; case "HOUSING" -> "housing:read"; default -> ""; }; }
+    private String taskTitle(String kind) { return switch(kind) { case "LEAVE" -> "准备请假"; case "CERTIFICATE" -> "准备在校证明"; case "REPAIR" -> "准备报修"; case "HOUSING" -> "准备调宿"; default -> "准备事项"; }; }
     private void lock() { jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update(); }
     private <T> T write(Supplier<T> action) { return transaction.execute(status->{ lock(); return action.get(); }); }
     private void touch(long id,String title) { jdbc.sql("UPDATE agent_session SET updated_at=CURRENT_TIMESTAMP,title=CASE WHEN title='新对话' THEN :title ELSE title END WHERE id=:id").param("title",title.length()>60?title.substring(0,60):title).param("id",id).update(); }
@@ -109,7 +113,7 @@ public class AgentSessions {
             var prior=jdbc.sql("SELECT * FROM agent_task WHERE session_id=:id AND request_key=:key").param("id",sessionId).param("key",input.requestKey()).query(this::taskRow).optional();
             if(prior.isPresent()) { if(!prior.get().kind().equals(input.kind())) throw conflict("任务类型与原请求不同"); return view(user,prior.get()); }
             long count=jdbc.sql("SELECT COUNT(*) FROM agent_task WHERE session_id=:id").param("id",sessionId).query(Long.class).single(); if(count>=50) throw conflict("本次对话已有 50 项准备任务，请新建对话");
-            String fields=switch(input.kind()) { case "LEAVE" -> encode(new LeaveFields("","","","","","","")); case "CERTIFICATE" -> encode(new CertificateFields("")); default -> encode(new RepairFields("","","",null,"","","")); };
+            String fields=switch(input.kind()) { case "LEAVE" -> encode(new LeaveFields("","","","","","","")); case "CERTIFICATE" -> encode(new CertificateFields("")); case "HOUSING" -> encode(new HousingFields("","","")); default -> encode(new RepairFields("","","",null,"","","")); };
             var key=new GeneratedKeyHolder(); jdbc.sql("INSERT INTO agent_task(session_id,request_key,business_key,kind,fields_json) VALUES(:id,:key,:business,:kind,:fields)")
                 .param("id",sessionId).param("key",input.requestKey()).param("business","agent-task-"+UUID.randomUUID()).param("kind",input.kind()).param("fields",fields).update(key,"id");
             touch(sessionId,taskTitle(input.kind())); return task(user,sessionId,key.getKey().longValue());
@@ -138,6 +142,12 @@ public class AgentSessions {
         try { var preview=agent.prepareRepair(user,input.input()); return update(user,sessionId,id,input.version(),"REPAIR",encode(preview.fields())); }
         finally { operations.remove(user.id()); }
     }
+    public TaskView prepareHousing(CampusPrincipal user,long sessionId,long id,TaskHousing input) {
+        var task=ownedTask(user,sessionId,id); editable(task,input.version(),"HOUSING");
+        if(!operations.add(user.id()))throw running();
+        try {var preview=agent.prepareHousing(user,input.input());return update(user,sessionId,id,input.version(),"HOUSING",encode(preview.fields()));}
+        finally {operations.remove(user.id());}
+    }
     private TaskView update(CampusPrincipal user,long sessionId,long id,int version,String kind,String fields) {
         return write(()->{ editable(ownedTask(user,sessionId,id),version,kind); jdbc.sql("UPDATE agent_task SET fields_json=:f,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("f",fields).param("id",id).update(); touch(sessionId,taskTitle(kind)); return task(user,sessionId,id); });
     }
@@ -154,6 +164,11 @@ public class AgentSessions {
                 var preview=checked.certificatePreview(); if(!preview.ready()) throw conflict("证明信息或规则已变化，请重新核对预览");
                 if(input.expectedIdentity()==null || !input.expectedIdentity().equals(preview.identity())) throw conflict("登记资料已变化，请重新核对本人资料并确认");
                 businessId=certificates.save(user,null,new CertificateModels.Draft(task.businessKey(),preview.fields().purpose(),"DIGITAL",true,0,input.expectedIdentity())).id();
+            } else if(task.kind().equals("HOUSING")) {
+                var preview=checked.housingPreview();
+                if(preview==null || !preview.ready())throw conflict("当前住宿、申请或规则已变化，请重新核对调宿预览");
+                if(input.expectedStayToken()==null || !input.expectedStayToken().equals(preview.stayToken()))throw conflict("当前住宿或办理指南已变化，请重新核对后确认");
+                var f=preview.fields();businessId=housingTransfers.save(user,null,new HousingTransferModels.DraftInput(task.businessKey(),0,f.reason(),f.preferredArea(),f.materialNote())).id();
             } else {
                 var preview=checked.repairPreview(); if(preview==null || !preview.ready()) throw conflict("报修信息或开放地点已变化，请重新核对预览"); var f=preview.fields();
                 businessId=repairs.save(user,null,new RepairModels.Draft(task.businessKey(),0,f.locationId(),f.category(),f.title(),f.description(),f.locationDetail(),f.contact(),f.contactWindow())).id();
@@ -162,15 +177,17 @@ public class AgentSessions {
         });
     }
     private TaskView view(CampusPrincipal user,Task task) {
-        kind(user,task.kind()); LeavePreview leave=null; CertificatePreview certificate=null; RepairPreview repair=null; Business business=null;
+        kind(user,task.kind()); LeavePreview leave=null; CertificatePreview certificate=null; RepairPreview repair=null; HousingPreview housing=null; Business business=null;
         if(task.businessId()!=null) {
             if(task.kind().equals("LEAVE")) { var r=leaves.detail(user,"mine",task.businessId()); business=new Business(r.id(),"LEAVE",r.status(),r.version(),"/portal/leave?id="+r.id()+"&tab=details"); }
             else if(task.kind().equals("CERTIFICATE")) { var r=certificates.detail(user,"mine",task.businessId()); business=new Business(r.id(),"CERTIFICATE",r.status(),r.version(),"/portal/certificates?id="+r.id()+"&tab=details"); }
+            else if(task.kind().equals("HOUSING")) {var r=housingTransfers.mineDetail(user,task.businessId());business=new Business(r.id(),"HOUSING",r.status(),r.version(),"/housing/transfer?id="+r.id()+"&tab=details");}
             else { var r=repairs.detail(user,"mine",task.businessId()); business=new Business(r.id(),"REPAIR",r.status(),r.version(),"/repairs/mine?id="+r.id()+"&tab=details"); }
         } else if(task.kind().equals("LEAVE")) leave=leaveDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),LeaveFields.class));
         else if(task.kind().equals("CERTIFICATE")) certificate=certificateDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),CertificateFields.class));
+        else if(task.kind().equals("HOUSING")) housing=housingDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),HousingFields.class));
         else repair=repairDrafts.preview(user,"restored-"+task.id(),Mode.LOCAL,decode(task.fields(),RepairFields.class));
-        return new TaskView(task.id(),task.kind(),task.stage(),task.version(),leave,certificate,repair,business,task.updatedAt());
+        return new TaskView(task.id(),task.kind(),task.stage(),task.version(),leave,certificate,repair,business,task.updatedAt(),housing);
     }
     private void editable(Task task,int version,String kind) { if(!task.kind().equals(kind)) throw missing(); if(!task.stage().equals("PREVIEW")) throw conflict("任务已关联业务申请，请进入原申请办理或新建准备任务"); if(task.version()!=version) throw conflict("任务进度已在其他窗口更新，请重新恢复后继续"); }
     private Session sessionRow(ResultSet r,int n) throws SQLException { return new Session(r.getLong("id"),r.getString("title"),r.getTimestamp("created_at").toLocalDateTime(),r.getTimestamp("updated_at").toLocalDateTime()); }

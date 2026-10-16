@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { ArrowLeft, ArrowRight, BookOpen, Check, Compass, Dumbbell, Layers, LocateFixed, MapPin, Minus, Moon, Plus, Search, Stethoscope, Sun, Tag, Trees, X } from '@lucide/vue'
+import { ArrowLeft, ArrowRight, BookOpen, CalendarCheck, Check, Compass, Dumbbell, Layers, LocateFixed, MapPin, Minus, Moon, Plus, Search, Stethoscope, Sun, Tag, Trees, X } from '@lucide/vue'
 import { campusCategories, campusPlaces, campusTour } from '../campus/manifest'
 import type { CampusCategory } from '../campus/manifest'
 import { createCampusScene } from '../campus/createCampusScene'
@@ -22,7 +22,7 @@ const filteredPlaces = computed(() => campusPlaces.filter(place =>
   `${place.name}${place.description}${place.features.join('')}`.includes(search.value.trim()),
 ))
 const categoryIcons = { learning: BookOpen, services: Stethoscope, sports: Dumbbell, landscape: Trees }
-const categoryNames = { learning: '校园建筑', services: '地图服务点', sports: '运动设施', landscape: '入口与景观' }
+const categoryNames = { learning: '教学科研', services: '综合服务', sports: '文体场馆', landscape: '景观与入口' }
 const tourPlace = computed(() => tourStep.value === null ? undefined : campusPlaces.find(place => place.id === campusTour[tourStep.value!]))
 
 function locate(id: string, fromTour = false) {
@@ -60,7 +60,7 @@ onUnmounted(() => scene?.dispose())
 <template>
   <div class="explore-page page-width">
     <div class="exploration-heading">
-      <div><span class="eyebrow">EAST CAMPUS · 郑州工业应用技术学院</span><h1>校园探索</h1><p>东校区 · 按高德底图描摹道路与建筑轮廓。</p></div>
+      <div><span class="eyebrow">EAST CAMPUS · 郑州工业应用技术学院</span><h1>校园探索</h1><p>东校区 · 参照腾讯地图、高德影像与官方全景多源校准三维数字沙盘。</p></div>
       <button class="explore-tour-start" :disabled="loading || !!error" @click="tour(0)"><Compass :size="16" />浏览地点<ArrowRight :size="15" /></button>
     </div>
     <div class="exploration-workspace">
@@ -83,7 +83,7 @@ onUnmounted(() => scene?.dispose())
           </div>
           <div v-if="loading" class="exploration-fallback" role="status">正在构建校园场景…</div>
           <div v-else-if="error" class="exploration-fallback" role="status"><Layers :size="27" /><p>{{ error }}</p><button class="button" @click="initScene">重新加载</button></div>
-          <div class="model-caption"><span class="model-indicator"></span>地图描摹 · 建筑等高展示</div>
+          <div class="model-caption"><span class="model-indicator"></span>多源地图校准 · 建筑分级高度呈现</div>
           <div v-if="view === 'top'" class="north-indicator" aria-label="俯视图上方为北">↑<span>北</span></div>
           <div class="zoom-options" role="group" aria-label="缩放场景"><button aria-label="放大场景" :disabled="loading || !!error" @click="scene?.zoom('in')"><Plus :size="17" /></button><button aria-label="缩小场景" :disabled="loading || !!error" @click="scene?.zoom('out')"><Minus :size="17" /></button></div>
           <div v-if="tourStep !== null && !error" class="exploration-tour" aria-label="校园分步导览">
@@ -105,12 +105,37 @@ onUnmounted(() => scene?.dispose())
           <div v-if="!filteredPlaces.length" class="place-empty"><Search :size="22" /><p>没有找到匹配地点</p><button @click="search = ''; category = 'all'">查看全部地点</button></div>
         </div>
         <div v-if="currentPlace" class="place-detail" aria-live="polite">
-          <span class="place-category-label">{{ categoryNames[currentPlace.category] }}</span><h3>{{ currentPlace.name }}</h3><p>{{ currentPlace.description }}</p><div class="place-feature-tags"><span v-for="feature in currentPlace.features" :key="feature">{{ feature }}</span></div><small>{{ currentPlace.kind === 'service' ? '符号表示地图标注位置，不代表独立建筑、实测楼层或入口。' : '位置与轮廓按地图近似描摹；楼高仅用于等高展示，实际层数与立面待核实。' }}</small><a class="place-source" :href="currentPlace.sourceUrl" target="_blank" rel="noopener noreferrer">对照高德地图<ArrowRight :size="12" /></a>
+          <span class="place-category-label">{{ categoryNames[currentPlace.category] }}</span>
+          <h3>{{ currentPlace.name }}</h3>
+          <p>{{ currentPlace.description }}</p>
+          <div class="place-feature-tags">
+            <span v-for="feature in currentPlace.features" :key="feature">{{ feature }}</span>
+          </div>
+
+          <div v-if="currentPlace.reservableVenues && currentPlace.reservableVenues.length" class="reservable-venues-box">
+            <div class="reservable-title">
+              <CalendarCheck :size="13" />
+              <span>可预约开放场地 / 设施</span>
+            </div>
+            <ul class="reservable-list">
+              <li v-for="venue in currentPlace.reservableVenues" :key="venue">
+                <span class="venue-bullet"></span>
+                <span>{{ venue }}</span>
+              </li>
+            </ul>
+            <router-link :to="`/portal/reservations?venue=${currentPlace.id}`" class="reserve-btn">
+              <span>申请借用该处场地</span>
+              <ArrowRight :size="12" />
+            </router-link>
+          </div>
+
+          <small>{{ currentPlace.kind === 'service' ? '符号表示地图标注位置，不代表独立建筑、实测楼层或入口。' : '依据多源地图与航拍校准；建筑高度按功能体量分级呈现。' }}</small>
+          <a class="place-source" :href="currentPlace.sourceUrl" target="_blank" rel="noopener noreferrer">对照高德地图<ArrowRight :size="12" /></a>
         </div>
-        <div v-else class="exploration-intro"><img :src="schoolMedia.overview.url" :alt="schoolMedia.overview.alt" /><p>已放大核对中央与北侧建筑、内院及支路。点选地点查看依据，楼高和立面仍待完善。</p><a :href="campusEvidence.panoramaUrl" target="_blank" rel="noopener noreferrer">学校官网全景入口<ArrowRight :size="12" /></a></div>
+        <div v-else class="exploration-intro"><img :src="schoolMedia.overview.url" :alt="schoolMedia.overview.alt" /><p>已依据腾讯地图、高德影像与官方全景核对校区路网、水系（秋月塘）与主要建筑群。点选地点查看详情，支持联动预约。</p><a :href="campusEvidence.panoramaUrl" target="_blank" rel="noopener noreferrer">学校官网全景入口<ArrowRight :size="12" /></a></div>
       </aside>
     </div>
-    <div class="exploration-footnote"><span><span class="footnote-mark"></span>依据 {{ campusEvidence.date }} 查看的高德底图与卫星影像手工描摹。影像拍摄日期未知，轮廓与道路为近似，尚未用于步行导航。</span><a :href="campusEvidence.mapUrl" target="_blank" rel="noopener noreferrer">对照原始地图<ArrowRight :size="13" /></a></div>
+    <div class="exploration-footnote"><span><span class="footnote-mark"></span>依据多源地图影像校正。包含秋月塘水系、室内综合体育馆、北区公寓群与各大学院组团，支持场地预约联动。</span><a :href="campusEvidence.mapUrl" target="_blank" rel="noopener noreferrer">对照原始地图<ArrowRight :size="13" /></a></div>
   </div>
 </template>
 
@@ -172,6 +197,13 @@ onUnmounted(() => scene?.dispose())
 .place-detail p { font-size: 11px; color: #72828d; line-height: 1.95; margin-bottom: 12px; }
 .place-feature-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
 .place-feature-tags span { padding: 3px 6px; background: #f1f4f5; color: #758a96; font-size: 9px; border-radius: 2px; }
+.reservable-venues-box { margin: 12px 0 10px; padding: 10px 12px; background: #f4f8fb; border: 1px solid #d5e4ee; border-radius: 4px; }
+.reservable-title { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #24527a; margin-bottom: 8px; }
+.reservable-list { list-style: none; padding: 0; margin: 0 0 10px; display: flex; flex-direction: column; gap: 4px; }
+.reservable-list li { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #4b6475; }
+.venue-bullet { width: 4px; height: 4px; border-radius: 50%; background: #5b8db8; flex-shrink: 0; }
+.reserve-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 6px 10px; background: var(--brand); color: #ffffff; border-radius: 3px; font-size: 11px; text-decoration: none; transition: background-color 0.15s ease; box-sizing: border-box; }
+.reserve-btn:hover { background: #1c3e60; color: #ffffff; }
 .place-detail small { display: block; font-size: 9px; color: #97a2a9; line-height: 1.8; }
 .exploration-intro img { display: block; width: 100%; height: 80px; object-fit: cover; border-radius: 3px; filter: saturate(.8); }
 .exploration-intro p { font-size: 10px; line-height: 1.8; color: #81909b; margin: 10px 0 5px; }

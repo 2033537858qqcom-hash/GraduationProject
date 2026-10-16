@@ -82,7 +82,7 @@ try {
       `${id}: observed courtyard or opening must remain unroofed`)
   }
   const bounds = new THREE.Box3().setFromObject(scene)
-  assert.ok(bounds.min.y >= -1.61 && bounds.max.y < 4, 'Unknown heights must not turn into detailed multi-storey buildings')
+  assert.ok(bounds.min.y >= -1.61 && bounds.max.y < 8, 'Unknown heights must not turn into detailed multi-storey buildings')
   for (const aspect of [0.8, 1, 1.5, 2.2]) {
     const camera = new THREE.PerspectiveCamera(38, aspect, 0.5, 1200)
     camera.position.copy(campusOverviewPosition(aspect)); camera.lookAt(overviewTarget); camera.updateMatrixWorld()

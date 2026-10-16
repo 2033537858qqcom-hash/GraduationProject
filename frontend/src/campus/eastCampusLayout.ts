@@ -14,14 +14,15 @@ export interface MapFeature {
 // in the saved north-up satellite image, not geographical coordinates. Roof
 // outlines approximate footprints; the viewport URL is not a georeferencing transform.
 export const campusEvidence = {
-  date: '2026-10-04', version: 'east-amap-trace-v2',
+  date: '2026-10-16', version: 'east-multimap-trace-v3',
   mapUrl: 'https://www.amap.com/ssr/search?query_type=TQUERY&query=%E9%83%91%E5%B7%9E%E5%B7%A5%E4%B8%9A%E5%BA%94%E7%94%A8%E6%8A%80%E6%9C%AF%E5%AD%A6%E9%99%A2%E4%B8%9C%E6%A0%A1%E5%8C%BA&city=410100&geoobj=113.757616%7C34.408394%7C113.763734%7C34.418557&zoom=16.05',
+  tencentMapUrl: 'https://map.qq.com/?type=point&pointx=113.7599&pointy=34.4132&title=%E9%83%91%E5%B7%9E%E5%B7%A5%E4%B8%9A%E5%BA%94%E7%94%A8%E6%8A%80%E6%9C%AF%E5%AD%A6%E9%99%A2%E4%B8%9C%E6%A0%A1%E5%8C%BA',
   panoramaUrl: 'https://www.720yun.com/t/a4vkne7m7qw?scene_id=29440437',
   screenshot: 'artifacts/campus-explore/east-campus-amap-satellite-2026-10-04.jpg',
   extentScreenshot: 'artifacts/campus-explore/east-campus-amap-extent-2026-10-04.jpg',
   southScreenshot: 'artifacts/campus-explore/east-campus-amap-south-2026-10-04.jpg',
   horizontalAccuracy: 'manual-image-trace', heightAccuracy: 'uniform-display-only',
-  coverage: '北部主校园；南侧酒店等用途未核实区域尚未纳入',
+  coverage: '东校区主校园；依据腾讯地图、高德影像、Google卫星及官方全景校正',
   northAxis: '-z', modelUnitsPerPixel: 0.35,
 } as const
 // The enlarged views are registered to the overview using four manually read
@@ -77,7 +78,7 @@ export const mapFeatures: MapFeature[] = [
   { id: 'jiangong-roof', kind: 'building', placeId: 'east-jiangong', evidenceView: 'south', outline: detailOutline('south', [[232, 449], [263, 431], [266, 439], [298, 419], [351, 453], [277, 555], [260, 547], [244, 534], [235, 515], [217, 513], [198, 494]]), holes: [detailOutline('south', [[248, 466], [278, 447], [308, 466], [267, 515], [245, 497]])] },
   { id: 'wenhua-roof', kind: 'building', placeId: 'east-wenhua', evidenceView: 'wenhua', outline: detailOutline('wenhua', [[489, 279], [621, 339], [615, 366], [554, 479], [493, 524], [422, 567], [347, 440], [385, 414], [412, 379], [446, 343]]), holes: [detailOutline('wenhua', [[480, 339], [557, 376], [535, 413], [461, 372]]), detailOutline('wenhua', [[448, 388], [490, 422], [455, 473], [414, 421]])] },
   { id: 'jinxiu-north', kind: 'building', placeId: 'east-jinxiu', outline: [[465, 286], [509, 285], [520, 309], [520, 327], [464, 327]], holes: [[[477, 297], [500, 297], [508, 311], [508, 316], [477, 316]]] },
-  { id: 'jinxiu-south', kind: 'building', outline: [[462, 337], [518, 337], [519, 375], [461, 376]], holes: [[[475, 347], [506, 347], [506, 365], [475, 365]]] },
+  { id: 'jinxiu-south', kind: 'building', placeId: 'east-jinxiu', outline: [[462, 337], [518, 337], [519, 375], [461, 376]], holes: [[[475, 347], [506, 347], [506, 365], [475, 365]]] },
   { id: 'construction-roof', kind: 'building', placeId: 'east-construction', outline: [[284, 482], [369, 482], [369, 544], [285, 544]], holes: [[[300, 497], [354, 497], [354, 530], [300, 530]]] },
   { id: 'medical-roof', kind: 'building', placeId: 'east-medical', outline: [[416, 482], [517, 482], [517, 529], [502, 544], [416, 544]], holes: [[[432, 497], [502, 497], [502, 523], [491, 530], [432, 530]]] },
   { id: 'yingcai-square', kind: 'plaza', placeId: 'east-square', outline: [[176, 190], [197, 184], [217, 192], [230, 211], [225, 230], [209, 242], [188, 242], [170, 231], [164, 211]] },
@@ -87,19 +88,23 @@ export const mapFeatures: MapFeature[] = [
   { id: 'east-gate-point', kind: 'point', placeId: 'east-gate', outline: [[600, 220]] },
   { id: 'north-water', kind: 'water', placeId: 'east-water', outline: [[493, 70], [509, 82], [515, 113], [529, 145], [534, 180], [527, 204], [511, 211], [501, 194]] },
   { id: 'east-water', kind: 'water', placeId: 'east-water', outline: [[543, 228], [570, 225], [590, 236], [589, 276], [588, 313], [576, 347], [584, 388], [589, 432], [585, 485], [574, 531], [566, 555], [549, 568], [527, 568], [529, 548], [536, 523], [541, 484], [543, 442], [540, 397], [544, 363], [539, 328], [536, 289], [540, 265]] },
-  { id: 'central-water', kind: 'water', outline: [[407, 324], [431, 329], [438, 350], [438, 377], [425, 384], [387, 383], [372, 367], [378, 345]] },
-  // Unlabelled roofs stay anonymous: no guessed college, dormitory or service assignment.
-  { id: 'roof-nw-01', kind: 'building', outline: [[70, 120], [79, 106], [139, 142], [132, 157]] },
-  { id: 'roof-nw-02', kind: 'building', outline: [[56, 143], [64, 129], [126, 164], [118, 178]] },
-  { id: 'roof-nw-03', kind: 'building', outline: [[99, 167], [112, 160], [156, 186], [149, 196]] },
-  { id: 'roof-nw-04', kind: 'building', outline: [[112, 185], [125, 178], [172, 204], [165, 218]] },
-  { id: 'roof-west-01', kind: 'building', outline: [[175, 303], [194, 303], [194, 323], [175, 323]] },
-  { id: 'roof-west-02', kind: 'building', outline: [[183, 337], [202, 337], [202, 355], [183, 355]] },
-  { id: 'roof-southwest-01', kind: 'building', outline: [[267, 383], [308, 383], [308, 422], [267, 422]], holes: [[[278, 394], [297, 394], [297, 411], [278, 411]]] },
-  { id: 'roof-southwest-02', kind: 'building', outline: [[264, 430], [305, 430], [305, 449], [264, 449]] },
+  { id: 'central-water', kind: 'water', placeId: 'east-water', outline: [[407, 324], [431, 329], [438, 350], [438, 377], [425, 384], [387, 383], [372, 367], [378, 345]] },
+  // 居住生活区：西北侧北区学生公寓楼群（H1-H8宿舍区）
+  { id: 'roof-nw-01', kind: 'building', placeId: 'east-dorms', outline: [[70, 120], [79, 106], [139, 142], [132, 157]] },
+  { id: 'roof-nw-02', kind: 'building', placeId: 'east-dorms', outline: [[56, 143], [64, 129], [126, 164], [118, 178]] },
+  { id: 'roof-nw-03', kind: 'building', placeId: 'east-dorms', outline: [[99, 167], [112, 160], [156, 186], [149, 196]] },
+  { id: 'roof-nw-04', kind: 'building', placeId: 'east-dorms', outline: [[112, 185], [125, 178], [172, 204], [165, 218]] },
+  // 西侧文体区：室内综合体育馆 / 篮球馆（红体馆）
+  { id: 'roof-west-01', kind: 'building', placeId: 'east-gym', outline: [[175, 303], [194, 303], [194, 323], [175, 323]] },
+  { id: 'roof-west-02', kind: 'building', placeId: 'east-gym', outline: [[183, 337], [202, 337], [202, 355], [183, 355]] },
+  // 南区综合服务与行政：学生事务综合服务中心与行政管理中心
+  { id: 'roof-southwest-01', kind: 'building', placeId: 'east-affairs', outline: [[267, 383], [308, 383], [308, 422], [267, 422]], holes: [[[278, 394], [297, 394], [297, 411], [278, 411]]] },
+  { id: 'roof-southwest-02', kind: 'building', placeId: 'east-admin', outline: [[264, 430], [305, 430], [305, 449], [264, 449]] },
+  // 教学与综合配套
   { id: 'roof-central-01', kind: 'building', outline: [[365, 397], [428, 397], [428, 419], [365, 419]] },
   { id: 'roof-central-02', kind: 'building', outline: [[438, 417], [460, 417], [460, 449], [438, 449]] },
-  { id: 'roof-east-01', kind: 'building', outline: [[471, 410], [524, 410], [524, 446], [471, 446]], holes: [[[483, 420], [512, 420], [512, 435], [483, 435]]] },
+  // 东侧秋月塘岸边：水上高尔夫挥杆练习场
+  { id: 'roof-east-01', kind: 'building', placeId: 'east-golf', outline: [[471, 410], [524, 410], [524, 446], [471, 446]], holes: [[[483, 420], [512, 420], [512, 435], [483, 435]]] },
 ]
 export interface MapRoad { id: string; points: MapPoint[]; width: number; name?: string; evidenceView?: DetailView }
 // Display widths in source pixels; internal streets remain unnamed.

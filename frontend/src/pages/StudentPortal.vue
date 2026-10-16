@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowUpRight, BedDouble, Bell, CalendarDays, MapPin, BookOpen, Check, FileCheck2, ClipboardList, GraduationCap, Wrench } from '@lucide/vue'
+import { ArrowUpRight, BedDouble, Bell, CalendarCheck, CalendarDays, MapPin, BookOpen, Check, FileCheck2, ClipboardList, GraduationCap, Wrench } from '@lucide/vue'
 import ServiceEntry from '../components/ServiceEntry.vue'
 import { api, errorMessage } from '../lib/api'
 import type { Overview, Notice } from '../types'
@@ -14,6 +14,7 @@ const reading = ref<number | null>(null)
 const view = computed(() => route.path.endsWith('timetable') ? 'timetable' : route.path.endsWith('notices') ? 'notices' : 'home')
 const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 const services = [
+  { to: '/portal/reservations', title: '公共场地与设备借用', description: '借用多功能报告厅、研讨室、体育场馆与音响设备，在线防冲突', icon: CalendarCheck },
   { to: '/housing/mine', title: '我的住宿与入住历史', description: '查看本人床位、楼栋负责人和已结束的住宿记录', icon: BedDouble },
   { to: '/repairs/mine', title: '校园设施报修与进度', description: '报告设施故障，跟进维修并确认处理结果', icon: Wrench },
   { to: '/portal/learning', title: '课程与学习资料', description: '查看本学期课程、教师资料和班级通知', icon: BookOpen },
@@ -21,10 +22,10 @@ const services = [
   { to: '/portal/learning/grades', title: '课程成绩查询', description: '查询本人已发布的课程成绩与学分', icon: GraduationCap },
   { to: '/portal/learning/exams', title: '考试时间与地点', description: '查看本人考试日期、时间和考场', icon: ClipboardList },
   { to: '/portal/notices', title: '个人消息通知', description: '阅读发给你的教学通知与个人消息', icon: Bell },
-  { to: '/portal/affairs', title: '我的办事与办理进度', description: '办理请假、证明、报修与调宿，统一查看处理进度', icon: ClipboardList },
+  { to: '/portal/affairs', title: '我的办事与办理进度', description: '办理请假、证明、报修、调宿与场地借用，统一查看处理进度', icon: ClipboardList },
   { to: '/portal/certificates', title: '在校证明申请与下载', description: '核对本人登记信息，申请并下载受控演示证明', icon: FileCheck2 },
   { to: '/portal/leave?tab=calendar', title: '我的请假日程', description: '按月查看已通过的请假时间，核对来源申请', icon: CalendarDays },
-  { to: '/campus/explore', title: '三维校园导览', description: '探索校园建筑，查找校内地点', icon: MapPin },
+  { to: '/campus/explore', title: '三维校园导览', description: '探索校园建筑，查找校内地点与可借用场地', icon: MapPin },
 ]
 function lessonDate(value: string) { return value.slice(5, 10).replace('-', '月') + '日' }
 async function load() {

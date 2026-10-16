@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { BedDouble, BookOpen, Building2, CalendarDays, ChartColumn, ClipboardCheck, FileCheck2, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
+import { BedDouble, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn, ClipboardCheck, FileCheck2, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { currentUser } from '../stores/auth'
 import ServiceEntry from '../components/ServiceEntry.vue'
@@ -13,6 +13,7 @@ const content = computed(() => currentUser.value?.permissions.some(p => p.starts
 const foundation = computed(() => currentUser.value?.permissions.includes('foundation:manage'))
 const counselor = computed(() => currentUser.value?.permissions.includes('leave:review'))
 const affairs = computed(() => currentUser.value?.permissions.includes('certificate:review'))
+const reservationReviewer = computed(() => currentUser.value?.permissions.includes('reservation:review'))
 const repairConfiguration = computed(() => currentUser.value?.permissions.includes('repair:configure'))
 const repairResponsibilities = computed(() => currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work'))
 const housingConfiguration = computed(() => currentUser.value?.permissions.includes('housing:configure'))
@@ -56,6 +57,8 @@ onMounted(async () => {
         <ServiceEntry v-if="repairResponsibilities" to="/logistics/repair-responsibilities" title="我的后勤负责范围" description="核对本人当前负责的校区、故障类别与具体地点" :icon="Wrench" />
         <ServiceEntry v-if="counselor" to="/student-affairs/leave" title="班级请假申请处理" description="查看负责班级的待办，核对资料并通过、拒绝或退回" :icon="ClipboardCheck" />
         <ServiceEntry v-if="affairs" to="/student-affairs/certificates" title="学院证明申请处理" description="核对学生登记信息与用途，退回补交或生成演示证明" :icon="FileCheck2" />
+        <ServiceEntry v-if="reservationReviewer" to="/student-affairs/reservations" title="场地与设备借用审批" description="审核公共场地与器材借用申请，核对时段冲突，同意或退回" :icon="CalendarCheck" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" title="公共场地与设备借用" description="申请报告厅、研讨室、体育馆及影音设备借用，查询审核凭证" :icon="CalendarCheck" />
         <ServiceEntry v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" title="学院调宿初审" description="审核本学院调宿申请，通过后交给宿管安排床位" :icon="BedDouble" />
         <ServiceEntry v-if="teaching" to="/teaching" title="教学班与课程资料" description="查看学生名单，发布课程资料与班级通知" :icon="BookOpen" />
         <ServiceEntry v-if="teaching" to="/teaching/timetable" title="每周授课安排" description="查看本人授课时间、教学班和上课地点" :icon="CalendarDays" />

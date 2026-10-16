@@ -52,6 +52,7 @@ public class NoticeService {
             }
             if(type.equals("LEAVE")) { leaves.detail(user,mode,id); return (mode.equals("mine")?"/portal/leave":"/student-affairs/leave")+"?id="+id+"&tab=details"; }
             if(type.equals("CERTIFICATE")) { certificates.detail(user,mode,id); return (mode.equals("mine")?"/portal/certificates":"/student-affairs/certificates")+"?id="+id+"&tab=details"; }
+            if(type.equals("RESERVATION")) { return (view.equals("MINE")?"/portal/reservations":"/student-affairs/reservations")+"?id="+id+"&tab=details"; }
         } catch(ApiException ex) { return null; }
         return null;
     }

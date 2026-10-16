@@ -18,12 +18,13 @@ public class AffairsController {
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final HousingTransferService housing;
-    private static final Map<String,String> PERMISSIONS=Map.of("LEAVE","leave:apply","CERTIFICATE","certificate:apply","REPAIR","repair:apply","HOUSING","housing:read");
+    private static final Map<String,String> PERMISSIONS=Map.of("LEAVE","leave:apply","CERTIFICATE","certificate:apply","REPAIR","repair:apply","HOUSING","housing:read","RESERVATION","reservation:apply");
     private static final String UNION="""
         SELECT 'LEAVE' kind,id,student_id,status,version,created_at,updated_at FROM leave_request
         UNION ALL SELECT 'CERTIFICATE' kind,id,student_id,status,version,created_at,updated_at FROM certificate_request
         UNION ALL SELECT 'REPAIR' kind,id,reporter_id student_id,status,version,created_at,updated_at FROM repair_request
         UNION ALL SELECT 'HOUSING' kind,id,student_id,status,version,created_at,updated_at FROM housing_transfer
+        UNION ALL SELECT 'RESERVATION' kind,id,applicant_id student_id,status,version,created_at,updated_at FROM venue_reservation
         """;
     public AffairsController(JdbcClient jdbc,IdentityService identities,HousingTransferService housing) { this.jdbc=jdbc; this.identities=identities; this.housing=housing; }
     @GetMapping("/api/affairs/mine")
@@ -51,8 +52,8 @@ public class AffairsController {
             .param("u",user.id()).param("kinds",params.get("kinds")).query((r,n)->new Summary(r.getLong("total"),r.getLong("drafts"),r.getLong("pending"),r.getLong("returned"),r.getLong("finished"))).single();
         return new Page(rows,total,page,pageSize,summary);
     }
-    private String name(String kind) { return switch(kind) {case "LEAVE"->"请假申请";case "REPAIR"->"校园报修";case "HOUSING"->"调宿申请";default->"在校证明申请";}; }
-    private String path(String kind) { return switch(kind) {case "LEAVE"->"/portal/leave";case "REPAIR"->"/repairs/mine";case "HOUSING"->"/housing/transfer";default->"/portal/certificates";}; }
+    private String name(String kind) { return switch(kind) {case "LEAVE"->"请假申请";case "REPAIR"->"校园报修";case "HOUSING"->"调宿申请";case "RESERVATION"->"场地借用预约";default->"在校证明申请";}; }
+    private String path(String kind) { return switch(kind) {case "LEAVE"->"/portal/leave";case "REPAIR"->"/repairs/mine";case "HOUSING"->"/housing/transfer";case "RESERVATION"->"/portal/reservations";default->"/portal/certificates";}; }
     private void bad(String message) { throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_AFFAIRS",message); }
     public record Item(String kind,long id,String name,String status,int version,LocalDateTime createdAt,LocalDateTime updatedAt,String targetPath) {}
     public record Summary(long total,long drafts,long pending,long returned,long finished) {}

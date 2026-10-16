@@ -4,7 +4,7 @@ import { affairTimelinePath } from '../src/lib/affairTimeline.ts'
 
 test('timeline links are limited to one own business and safe numeric identifiers', () => {
   assert.equal(affairTimelinePath('LEAVE', 8), '/affairs/mine/LEAVE/8/timeline?page=1&pageSize=10')
-  for (const kind of ['LEAVE', 'CERTIFICATE', 'REPAIR', 'HOUSING']) assert.ok(affairTimelinePath(kind, 1).startsWith('/affairs/mine/' + kind))
+  for (const kind of ['LEAVE', 'CERTIFICATE', 'REPAIR', 'HOUSING', 'RESERVATION']) assert.ok(affairTimelinePath(kind, 1).startsWith('/affairs/mine/' + kind))
   for (const args of [['../review', 8], ['UNKNOWN', 8], ['LEAVE', 0], ['REPAIR', 1.5], ['HOUSING', Number.MAX_SAFE_INTEGER + 1]]) assert.throws(() => affairTimelinePath(...args))
 })
 test('paging carries the server revision and rejects invalid page or revision values', () => {

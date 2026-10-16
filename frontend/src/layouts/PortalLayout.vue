@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BedDouble, Bell, BookOpen, Building2, ChartColumn, ClipboardCheck, ClipboardList, FileCheck2, House, LogOut, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
+import { BedDouble, Bell, BookOpen, Building2, CalendarCheck, ChartColumn, ClipboardCheck, ClipboardList, FileCheck2, House, LogOut, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
 import { currentUser, logout } from '../stores/auth'
 import { errorMessage } from '../lib/api'
 import SchoolIdentity from '../components/SchoolIdentity.vue'
@@ -17,6 +17,7 @@ const content = computed(() => currentUser.value?.permissions.some(p => p.starts
 const foundation = computed(() => currentUser.value?.permissions.includes('foundation:manage'))
 const counselor = computed(() => currentUser.value?.permissions.includes('leave:review'))
 const affairs = computed(() => currentUser.value?.permissions.includes('certificate:review'))
+const reservationReviewer = computed(() => currentUser.value?.permissions.includes('reservation:review'))
 const repairConfiguration = computed(() => currentUser.value?.permissions.includes('repair:configure'))
 const repairResponsibilities = computed(() => currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work'))
 const housingConfiguration = computed(() => currentUser.value?.permissions.includes('housing:configure'))
@@ -48,7 +49,8 @@ async function leave() {
           <RouterLink to="/portal" exact-active-class="selected"><House :size="16" aria-hidden="true" />学生首页</RouterLink>
           <RouterLink to="/portal/learning" :class="{ selected: route.path.startsWith('/portal/learning') }"><BookOpen :size="16" aria-hidden="true" />学习与课表</RouterLink>
           <RouterLink to="/portal/notices" exact-active-class="selected"><Bell :size="16" aria-hidden="true" />消息通知</RouterLink>
-          <RouterLink to="/portal/affairs" :class="{ selected: ['/portal/affairs','/portal/leave','/portal/certificates'].includes(route.path) }"><ClipboardList :size="16" aria-hidden="true" />我的办事</RouterLink>
+          <RouterLink to="/portal/affairs" :class="{ selected: ['/portal/affairs','/portal/leave','/portal/certificates','/portal/reservations'].includes(route.path) }"><ClipboardList :size="16" aria-hidden="true" />我的办事</RouterLink>
+          <RouterLink v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" exact-active-class="selected"><CalendarCheck :size="16" aria-hidden="true" />场地借用</RouterLink>
           <RouterLink v-if="currentUser?.permissions.includes('housing:read')" to="/housing/mine" exact-active-class="selected"><BedDouble :size="16" aria-hidden="true" />我的住宿</RouterLink>
           <RouterLink v-if="currentUser?.permissions.includes('housing:read')" to="/housing/transfer" exact-active-class="selected"><BedDouble :size="16" aria-hidden="true" />调宿申请</RouterLink>
         </template>
@@ -57,6 +59,7 @@ async function leave() {
         <RouterLink v-if="currentUser?.permissions.includes('academic:manage')" to="/academic" active-class="selected"><NotebookPen :size="16" aria-hidden="true" />教务信息维护</RouterLink>
         <RouterLink v-if="counselor" to="/student-affairs/leave" exact-active-class="selected"><ClipboardCheck :size="16" aria-hidden="true" />班级请假处理</RouterLink>
         <RouterLink v-if="affairs" to="/student-affairs/certificates" exact-active-class="selected"><FileCheck2 :size="16" aria-hidden="true" />学院证明申请处理</RouterLink>
+        <RouterLink v-if="reservationReviewer" to="/student-affairs/reservations" exact-active-class="selected"><CalendarCheck :size="16" aria-hidden="true" />借用审批</RouterLink>
         <RouterLink v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" exact-active-class="selected"><BedDouble :size="16" aria-hidden="true" />学院调宿初审</RouterLink>
         <RouterLink v-if="!student" to="/notices" exact-active-class="selected"><Bell :size="16" aria-hidden="true" />个人消息</RouterLink>
         <RouterLink v-if="content" to="/admin/content" exact-active-class="selected"><Newspaper :size="16" aria-hidden="true" />官网内容管理</RouterLink>

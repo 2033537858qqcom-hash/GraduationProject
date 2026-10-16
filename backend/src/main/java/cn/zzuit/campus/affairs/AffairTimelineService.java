@@ -7,6 +7,7 @@ import cn.zzuit.campus.leave.LeaveService;
 import cn.zzuit.campus.certificate.CertificateService;
 import cn.zzuit.campus.repair.RepairService;
 import cn.zzuit.campus.housing.HousingTransferService;
+import cn.zzuit.campus.reservation.VenueReservationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -23,7 +24,8 @@ public class AffairTimelineService {
     private final CertificateService certificates;
     private final RepairService repairs;
     private final HousingTransferService housing;
-    private static final Map<String,String> PERMISSIONS=Map.of("LEAVE","leave:apply","CERTIFICATE","certificate:apply","REPAIR","repair:apply","HOUSING","housing:read");
+    private final VenueReservationService reservations;
+    private static final Map<String,String> PERMISSIONS=Map.of("LEAVE","leave:apply","CERTIFICATE","certificate:apply","REPAIR","repair:apply","HOUSING","housing:read","RESERVATION","reservation:apply");
     private static final Map<String,String> HOUSING_TITLES=Map.ofEntries(
         Map.entry("SAVE","保存调宿资料"),Map.entry("SUBMIT","提交调宿申请"),Map.entry("SUPPLEMENT","补交并重新提交"),Map.entry("WITHDRAW","撤回调宿申请"),
         Map.entry("RETURN","学院退回补交"),Map.entry("APPROVE","学院初审通过"),Map.entry("REJECT","学院未通过初审"),Map.entry("RESERVE","宿管预留床位"),
@@ -35,8 +37,8 @@ public class AffairTimelineService {
         UNION ALL
         SELECT 'SYSTEM' source,id,'EXPIRE' action,created_at FROM foundation_audit WHERE entity_type='HOUSING_TRANSFER' AND entity_id=:id AND action='TRANSFER_EXPIRE'
         """;
-    public AffairTimelineService(JdbcClient jdbc,IdentityService identities,LeaveService leaves,CertificateService certificates,RepairService repairs,HousingTransferService housing) {
-        this.jdbc=jdbc;this.identities=identities;this.leaves=leaves;this.certificates=certificates;this.repairs=repairs;this.housing=housing;
+    public AffairTimelineService(JdbcClient jdbc,IdentityService identities,LeaveService leaves,CertificateService certificates,RepairService repairs,HousingTransferService housing,VenueReservationService reservations) {
+        this.jdbc=jdbc;this.identities=identities;this.leaves=leaves;this.certificates=certificates;this.repairs=repairs;this.housing=housing;this.reservations=reservations;
     }
     public record Event(String key,String action,String title,String actor,String comment,String status,Integer version,LocalDateTime createdAt) {}
     public record Timeline(String kind,long requestId,String status,int version,LocalDateTime updatedAt,String nextStep,List<Event> items,long total,int page,int pageSize,String historyNote) {}
@@ -57,6 +59,12 @@ public class AffairTimelineService {
                 .param("id",id).param("limit",size).param("offset",((long)page-1)*size)
                 .query((r,n)->housingEvent(r.getString("source"),r.getLong("id"),r.getString("action"),r.getTimestamp("created_at").toLocalDateTime())).list();
             note="从近到远展示实际调宿操作。原日志未保存当时状态和版本，故不补造历史状态；材料内容请在原申请核对。";
+        } else if(kind.equals("RESERVATION")) {
+            total=jdbc.sql("SELECT COUNT(*) FROM venue_reservation_action WHERE reservation_id=:id").param("id",id).query(Long.class).single();
+            items=jdbc.sql("SELECT r.id,r.action,r.actor_name,r.comment,r.status,r.reservation_version request_version,r.created_at,(SELECT p.status FROM venue_reservation_action p WHERE p.reservation_id=r.reservation_id AND p.id<r.id ORDER BY p.id DESC LIMIT 1) previous_status FROM venue_reservation_action r WHERE r.reservation_id=:id ORDER BY r.id DESC LIMIT :limit OFFSET :offset")
+                .param("id",id).param("limit",size).param("offset",((long)page-1)*size)
+                .query((r,n)->new Event(kind+"-"+r.getLong("id"),r.getString("action"),title(kind,r.getString("action"),r.getString("previous_status")),r.getString("actor_name"),r.getString("comment"),r.getString("status"),r.getInt("request_version"),r.getTimestamp("created_at").toLocalDateTime())).list();
+            note="从近到远展示场地与设备借用申请审核轨迹。";
         } else {
             String table=kind.equals("LEAVE")?"leave_revision":kind.equals("CERTIFICATE")?"certificate_revision":"repair_action";
             total=jdbc.sql("SELECT COUNT(*) FROM "+table+" WHERE request_id=:id").param("id",id).query(Long.class).single();
@@ -77,6 +85,7 @@ public class AffairTimelineService {
                 yield jdbc.sql("SELECT status,version,updated_at,cancel_requested FROM housing_transfer WHERE id=:id AND student_id=:user").param("id",id).param("user",user.id())
                     .query((r,n)->new Current(r.getString(1),r.getInt(2),r.getTimestamp(3).toLocalDateTime(),r.getBoolean(4),null)).single();
             }
+            case "RESERVATION"->{var request=reservations.getDetail(user,id);yield new Current(request.status(),request.version(),request.updatedAt(),false,null);}
             default->throw invalid();
         };
     }
@@ -87,6 +96,9 @@ public class AffairTimelineService {
     }
     private String title(String kind,String action,String previousStatus) {
         if("RETURNED".equals(previousStatus) && List.of("SUBMITTED","submit").contains(action))return "补交后重新提交";
+        if(kind.equals("RESERVATION"))return switch(action) {
+            case "SAVE"->"保存借用草稿";case "SUBMIT"->"提交借用申请";case "WITHDRAW"->"撤回借用申请";case "APPROVE"->"审批通过借用";case "RETURN"->"退回补充说明";case "REJECT"->"未获审批通过";case "CANCEL"->"取消场地借用";default->"借用办理记录";
+        };
         if(kind.equals("REPAIR"))return switch(action) {
             case "SAVE"->"保存报修资料";case "UPLOAD"->"上传报修图片";case "REMOVE_IMAGE"->"移出当前图片";case "submit"->"提交报修";case "withdraw"->"撤回报修";
             case "return"->"后勤退回补充";case "reject"->"后勤拒绝报修";case "assign"->"派给维修人员";case "reassign"->"改派维修人员";case "accept"->"维修人员接单";
@@ -101,12 +113,12 @@ public class AffairTimelineService {
         return switch(current.status()) {
             case "DRAFT"->"请核对资料，在原申请中手动提交。";
             case "RETURNED"->"请查看退回意见，补充资料后在原申请重新提交。";
-            case "SUBMITTED"->kind.equals("REPAIR")?"等待后勤分诊，请留意个人消息。":kind.equals("HOUSING")?"等待所属学院初审，请留意补交要求。":"等待负责人员审核，请留意个人消息。";
+            case "SUBMITTED"->kind.equals("REPAIR")?"等待后勤分诊，请留意个人消息。":kind.equals("HOUSING")?"等待所属学院初审，请留意补交要求。":kind.equals("RESERVATION")?"申请已提交，等待学生事务部门审核场地时段。":"等待负责人员审核，请留意个人消息。";
             case "ASSIGNED"->"等待维修人员接单。";case "IN_PROGRESS"->"维修正在处理中，请留意进展。";
             case "AWAITING_CONFIRMATION"->"请核对维修结果，在原工单确认修复或反馈问题。";
             case "AWAITING_ASSIGNMENT"->"学院初审已通过，等待宿管安排床位。";
             case "AWAITING_CHECKIN"->"请在原申请核对床位和入住期限，联系宿管确认入住。";
-            case "APPROVED"->"请假已通过，可在请假日程核对时间。";
+            case "APPROVED"->kind.equals("RESERVATION")?"场地借用审批已通过，请准时入场并出示借用记录。":"请假已通过，可在请假日程核对时间。";
             case "COMPLETED"->kind.equals("CERTIFICATE")?"证明已生成，请在原申请下载演示证明。":kind.equals("HOUSING")?"调宿已完成，可在我的住宿核对新床位。":"报修已完成，可在原工单查看结果及评价。";
             case "EXPIRED"->"预留已到期，原住宿保留；如仍需调宿，请重新申请。";
             case "REJECTED","WITHDRAWN","CANCELLED"->"本次办理已结束，历史保留；重新办理请新建申请。";

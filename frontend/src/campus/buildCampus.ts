@@ -10,6 +10,9 @@ export function buildCampus(scene: THREE.Scene) {
     building: '#dfd7c8',
     library: '#eee7da',
     sports: '#cad6de',
+    gym: '#c84b42',
+    statue: '#9e793e',
+    stoneStatue: '#95989a',
     dorms: '#ddd5cb',
     canteen: '#d8ccb8',
     anonymous: '#e0ddd4',
@@ -26,6 +29,9 @@ export function buildCampus(scene: THREE.Scene) {
     building: new THREE.MeshStandardMaterial({ color: colors.building, roughness: 0.86 }),
     library: new THREE.MeshStandardMaterial({ color: colors.library, roughness: 0.82 }),
     sports: new THREE.MeshStandardMaterial({ color: colors.sports, roughness: 0.80 }),
+    gym: new THREE.MeshStandardMaterial({ color: colors.gym, roughness: 0.82 }),
+    statue: new THREE.MeshStandardMaterial({ color: colors.statue, roughness: 0.42, metalness: 0.55 }),
+    stoneStatue: new THREE.MeshStandardMaterial({ color: colors.stoneStatue, roughness: 0.78 }),
     dorms: new THREE.MeshStandardMaterial({ color: colors.dorms, roughness: 0.88 }),
     canteen: new THREE.MeshStandardMaterial({ color: colors.canteen, roughness: 0.85 }),
     anonymous: new THREE.MeshStandardMaterial({ color: colors.anonymous, roughness: 0.86 }),
@@ -101,9 +107,12 @@ export function buildCampus(scene: THREE.Scene) {
     if (kind !== 'building') return materials[kind]
     if (!placeId) return materials.anonymous
     if (placeId === 'east-library') return materials.library
-    if (placeId === 'east-gym' || placeId === 'east-swimming' || placeId === 'east-golf') return materials.sports
+    if (placeId === 'east-gym') return materials.gym
+    if (placeId === 'statue-huangdi') return materials.statue
+    if (placeId === 'statue-kongzi') return materials.stoneStatue
+    if (placeId === 'east-swimming' || placeId === 'east-golf') return materials.sports
     if (placeId === 'east-dorms' || placeId === 'east-h8') return materials.dorms
-    if (placeId === 'east-jinxiu') return materials.canteen
+    if (placeId === 'east-jinxiu' || placeId === 'east-canteen-wenhua') return materials.canteen
     return materials.building
   }
 

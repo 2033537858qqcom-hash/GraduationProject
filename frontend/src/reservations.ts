@@ -235,6 +235,7 @@ export interface VenueManagerItem {
   fullName: string
   departmentName: string
   identityNumber: string
+  eligible: boolean
 }
 
 export interface VenueManagementItem {
@@ -250,6 +251,9 @@ export interface VenueManagementItem {
   rules: string | null
   enabled: boolean
   managers: VenueManagerItem[]
+  activeReviewerCount: number
+  pendingReviewCount: number
+  unattendedReviewCount: number
 }
 
 export interface VenueUpdateCommand {

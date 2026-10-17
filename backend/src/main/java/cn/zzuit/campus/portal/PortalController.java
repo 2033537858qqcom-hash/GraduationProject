@@ -73,18 +73,22 @@ public class PortalController {
             "taskCounts", taskSummary.domainCounts(),
             "leavePending", taskSummary.domainCounts().getOrDefault("leave", 0L),
             "certificatePending", taskSummary.domainCounts().getOrDefault("certificate", 0L),
-            "message", taskSummary.totalPending() > 0
+            "complete", taskSummary.complete(),
+            "sourceErrors", taskSummary.sourceErrors(),
+            "message", !taskSummary.complete() ? "部分待办暂时无法读取，请重试；当前数量仅包含已读取业务。" : taskSummary.totalPending() > 0
                 ? "当前共有 " + taskSummary.totalPending() + " 项业务待办需要处理，请及时审批办理。"
                 : "当前没有未处理的待办业务，可从下方进入对应工作空间与服务目录。"
         );
     }
 
     @GetMapping("/api/workbench/tasks")
-    TaskAggregationService.TaskSummary tasks(
+    TaskAggregationService.TaskPage tasks(
         @AuthenticationPrincipal CampusPrincipal user,
-        @RequestParam(required = false) String domain
+        @RequestParam(required = false) String domain,
+        @RequestParam(defaultValue = "1") int page,
+        @RequestParam(defaultValue = "8") int pageSize
     ) {
-        return taskAggregator.aggregate(user, domain);
+        return taskAggregator.page(user, domain, page, pageSize);
     }
 
     public record Lesson(long id, String courseName, String teacherName, String classroom,

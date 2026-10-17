@@ -70,7 +70,7 @@ const canManage = computed(() => currentUser.value?.permissions.includes('reserv
 
 // Active Tab: 'venues' (browse), 'mine' (student applications), 'review' (staff approvals), 'manage' (venue management)
 const activeTab = ref<'venues' | 'mine' | 'review' | 'manage'>(
-  reviewMode.value ? 'review' : (route.query.tab === 'manage' && canManage.value) ? 'manage' : 'venues'
+  (route.query.tab === 'manage' && canManage.value) ? 'manage' : reviewMode.value ? 'review' : 'venues'
 )
 
 // Data states
@@ -92,6 +92,7 @@ const managingVenue = ref<VenueManagementItem | null>(null)
 const selectedCandidateId = ref<string>('')
 const reservations = ref<ReservationItem[]>([])
 const selectedReservation = ref<ReservationDetail | null>(null)
+const isOwnReservation = computed(() => selectedReservation.value?.applicantId === currentUser.value?.id)
 const totalItems = ref(0)
 const currentPage = ref(1)
 const pageSize = 20
@@ -312,6 +313,7 @@ async function loadReservations() {
 async function chooseReservation(id: number) {
   loading.value = true
   error.value = ''
+  selectedReservation.value = null
   try {
     selectedReservation.value = await getDetail(id)
     reviewComment.value = ''
@@ -324,6 +326,13 @@ async function chooseReservation(id: number) {
 }
 
 // Check schedule for a venue
+async function editReservation(id: number) {
+  await chooseReservation(id)
+  if (selectedReservation.value?.id === id && isOwnReservation.value) {
+    editExistingReservation(selectedReservation.value)
+  }
+}
+
 async function openSchedule(venue: VenueSummary) {
   scheduleVenue.value = venue
   showScheduleModal.value = true
@@ -570,6 +579,8 @@ async function toggleVenueEnabled(venue: VenueManagementItem) {
 }
 
 function openManagerModal(venue: VenueManagementItem) {
+  error.value = ''
+  success.value = ''
   managingVenue.value = venue
   selectedCandidateId.value = ''
   showManagerModal.value = true
@@ -596,7 +607,7 @@ async function handleAddManager() {
 
 async function handleRemoveManager(userId: number) {
   if (!managingVenue.value) return
-  if (!await ask(`确认解除该负责人的审批指派？`, 'decision')) return
+  if (!await ask('确认解除该负责人的审批指派？有待审申请时，请先添加接任人员。', 'decision')) return
   busy.value = true
   error.value = ''
   success.value = ''
@@ -632,11 +643,11 @@ function printPass() {
 
 // Initial setup
 onMounted(async () => {
-  if (reviewMode.value) {
+  if (route.query.tab === 'manage' && canManage.value) {
+    activeTab.value = 'manage'
+  } else if (reviewMode.value) {
     activeTab.value = 'review'
     filterStatus.value = 'SUBMITTED'
-  } else if (route.query.tab === 'manage' && canManage.value) {
-    activeTab.value = 'manage'
   } else if (route.query.tab === 'mine') {
     activeTab.value = 'mine'
   } else if (route.query.venue) {
@@ -688,7 +699,7 @@ watch(() => route.query.venue, () => {
         <span class="portal-context">{{ reviewMode ? '学生事务中心 · 空间与资源审核' : '学生服务中心 · 资源借用' }}</span>
         <h1>{{ reviewMode ? '公共场地与设备借用审批' : '公共场地与设备借用' }}</h1>
         <p class="muted">
-          {{ reviewMode ? '审批全校公共报告厅、多功能研讨室、室内体育馆与影音设备借用申请，严格核验时段冲突。' : '在线借用学术报告厅、会议研讨室、综合体育馆与大型展演器材，全自动时段冲突检测与电子通行凭证。' }}
+          {{ reviewMode ? '办理本人负责场地与设备的借用申请，核验活动安排及使用时段；本人的申请由其他负责人审批。' : '在线查询场地与设备开放情况，提交借用申请并查看办理结果。' }}
         </p>
       </div>
       <div class="form-actions">
@@ -860,20 +871,26 @@ watch(() => route.query.venue, () => {
             <div class="managers-box-header">
               <span class="box-label">
                 <ShieldCheck :size="14" />
-                责任审批人员 ({{ venue.managers.length }})
+                有效审批人员 {{ venue.activeReviewerCount }} / 已配置 {{ venue.managers.length }}
               </span>
               <button class="text-button compact" :disabled="busy" @click="openManagerModal(venue)">
                 <UserCheck :size="14" />
                 配置人员
               </button>
             </div>
-            <div v-if="!venue.managers.length" class="no-manager-alert">
+            <div v-if="venue.activeReviewerCount === 0" class="no-manager-alert">
               <ShieldAlert :size="14" />
-              <span>尚未指定审批人！未配置审批人前学生无法提交借用申请。</span>
+              <span>暂无有效审批人，请配置已启用且具备审批权限的人员。</span>
             </div>
-            <div v-else class="manager-tags-list">
-              <span v-for="m in venue.managers" :key="m.userId" class="manager-tag">
+            <div v-if="venue.unattendedReviewCount > 0" class="no-manager-alert" role="status">
+              <ShieldAlert :size="14" />
+              <span>{{ venue.unattendedReviewCount }} 条待审申请无人可审，请配置接任人员。</span>
+            </div>
+            <p class="muted">待审申请 {{ venue.pendingReviewCount }} 条</p>
+            <div v-if="venue.managers.length" class="manager-tags-list">
+              <span v-for="m in venue.managers" :key="m.userId" class="manager-tag" :class="{ 'is-inactive': !m.eligible }">
                 <strong>{{ m.fullName }}</strong>
+                <small v-if="!m.eligible">已失效</small>
                 <small>({{ m.departmentName }})</small>
               </span>
             </div>
@@ -963,13 +980,13 @@ watch(() => route.query.venue, () => {
                   <button class="text-button" @click="chooseReservation(item.id)">
                     {{ item.status === 'APPROVED' ? '查看凭证与详情' : '查看详情' }}
                   </button>
-                  <button v-if="!reviewMode && ['DRAFT', 'RETURNED'].includes(item.status)" class="text-button" @click="chooseReservation(item.id); editExistingReservation(selectedReservation || item as any)">
+                  <button v-if="activeTab === 'mine' && ['DRAFT', 'RETURNED'].includes(item.status)" class="text-button" :disabled="loading || busy" @click="editReservation(item.id)">
                     修改资料
                   </button>
-                  <button v-if="!reviewMode && item.status === 'SUBMITTED'" class="text-button" @click="handleWithdraw(item.id)">
+                  <button v-if="activeTab === 'mine' && item.status === 'SUBMITTED'" class="text-button" @click="handleWithdraw(item.id)">
                     撤回
                   </button>
-                  <button v-if="!reviewMode && item.status === 'APPROVED'" class="text-button cancel-text-btn" @click="handleCancel(item.id)">
+                  <button v-if="activeTab === 'mine' && item.status === 'APPROVED'" class="text-button cancel-text-btn" @click="handleCancel(item.id)">
                     取消预约
                   </button>
                 </div>
@@ -1090,7 +1107,7 @@ watch(() => route.query.venue, () => {
       </dl>
 
       <!-- STAFF REVIEW ACTION FORM -->
-      <div v-if="reviewMode && selectedReservation.status === 'SUBMITTED'" class="leave-review-form reservation-review-box">
+      <div v-if="canReview && !isOwnReservation && activeTab === 'review' && selectedReservation.status === 'SUBMITTED'" class="leave-review-form reservation-review-box">
         <h3><Clock :size="16" /> 审核意见与决定</h3>
         <label>
           <div class="label-heading-row">
@@ -1121,7 +1138,7 @@ watch(() => route.query.venue, () => {
       </div>
 
       <!-- STUDENT ACTIONS (Edit, Withdraw, Cancel) -->
-      <div v-if="!reviewMode" class="form-actions reservation-detail-actions">
+      <div v-if="canApply && isOwnReservation" class="form-actions reservation-detail-actions">
         <button
           v-if="['DRAFT', 'RETURNED'].includes(selectedReservation.status)"
           class="button primary compact"
@@ -1413,7 +1430,7 @@ watch(() => route.query.venue, () => {
           </label>
 
           <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer;">
-            <input type="checkbox" v-model="venueEditForm.enabled" />
+            <input v-model="venueEditForm.enabled" type="checkbox" />
             <span>开启该场地/设备的对外预约开放（取消勾选将暂停开放）</span>
           </label>
 
@@ -1444,7 +1461,12 @@ watch(() => route.query.venue, () => {
 
         <div class="modal-body-content" style="display: flex; flex-direction: column; gap: 16px;">
           <p class="muted" style="font-size: 13px; line-height: 1.6;">
-            借用申请提交时，系统将精准根据责任审批人名单通知并路由任务。至少应配置 1 位责任审批人，否则学生无法完成提交。
+            申请需要至少一位有效且非申请人本人的审批人。添加负责人会通知其接手已有待审申请；请先添加接任人员，再解除原负责人。
+          </p>
+          <p v-if="error" class="alert" role="alert">{{ error }}</p>
+          <p v-if="success" class="success-message" role="status">{{ success }}</p>
+          <p v-if="managingVenue.unattendedReviewCount > 0" class="alert" role="status">
+            当前 {{ managingVenue.unattendedReviewCount }} 条待审申请无人可审，请添加接任人员。
           </p>
 
           <!-- Current Assigned Reviewers -->
@@ -1456,7 +1478,7 @@ watch(() => route.query.venue, () => {
             <ul v-else class="manager-item-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
               <li v-for="m in managingVenue.managers" :key="m.userId" class="manager-row-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
                 <div style="display: flex; flex-direction: column; gap: 2px;">
-                  <strong style="font-size: 14px; color: #1e293b;">{{ m.fullName }}</strong>
+                  <strong style="font-size: 14px; color: #1e293b;">{{ m.fullName }} · {{ m.eligible ? '可审批' : '已失效：账号停用或缺少审批权限' }}</strong>
                   <span style="font-size: 12px; color: #64748b;">账号：{{ m.username }} · 部门：{{ m.departmentName }} · 工号：{{ m.identityNumber }}</span>
                 </div>
                 <button class="text-button" style="color: #ef4444;" :disabled="busy" @click="handleRemoveManager(m.userId)">
@@ -2160,6 +2182,13 @@ watch(() => route.query.venue, () => {
   display: flex;
   gap: 8px;
   margin-top: auto;
+}
+.manager-tag.is-inactive {
+  background: #f1f5f9;
+  color: #64748b;
+}
+.manager-tag.is-inactive small {
+  color: inherit;
 }
 .warning-btn {
   color: #b45309 !important;

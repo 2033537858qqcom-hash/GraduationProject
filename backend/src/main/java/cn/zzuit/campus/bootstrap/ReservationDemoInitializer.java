@@ -25,14 +25,6 @@ public class ReservationDemoInitializer implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments arguments) {
         var affairsUser = jdbc.sql("SELECT id FROM app_user WHERE username = 'affairs1001'").query(Long.class).optional();
-        if (affairsUser.isPresent()) {
-            jdbc.sql("""
-                INSERT INTO venue_manager (venue_id, user_id)
-                SELECT v.id, :uid FROM venue_resource v
-                WHERE NOT EXISTS (SELECT 1 FROM venue_manager vm WHERE vm.venue_id = v.id AND vm.user_id = :uid)
-                """).param("uid", affairsUser.get()).update();
-        }
-
         var studentOpt = jdbc.sql("SELECT id, full_name, identity_number FROM app_user WHERE username = '20260001'")
             .query((r, n) -> new DemoStudent(r.getLong("id"), r.getString("full_name"), r.getString("identity_number")))
             .optional();
@@ -43,7 +35,7 @@ public class ReservationDemoInitializer implements ApplicationRunner {
         }
 
         var student = studentOpt.get();
-        var adminId = jdbc.sql("SELECT id FROM app_user WHERE username = 'admin'").query(Long.class).optional().orElse(student.id());
+        if (affairsUser.isEmpty()) return;
 
         // 1. 示例1：图书馆学术报告厅借用（已审批通过）
         var libVenue = jdbc.sql("SELECT id, name, place_id, location_detail FROM venue_resource WHERE code = 'VEN-LIB-101'")
@@ -86,9 +78,9 @@ public class ReservationDemoInitializer implements ApplicationRunner {
                 .param("id", resId1).param("actorId", student.id()).param("actorName", student.fullName()).update();
             jdbc.sql("""
                 INSERT INTO venue_reservation_action (reservation_id, reservation_version, actor_id, actor_name, action, status, comment)
-                VALUES (:id, 1, :actorId, '系统管理员', 'APPROVE', 'APPROVED', '审批通过，已协调多媒体中控配合。')
+                VALUES (:id, 1, :actorId, '学生事务人员（演示）', 'APPROVE', 'APPROVED', '审批通过，已协调多媒体中控配合。')
                 """)
-                .param("id", resId1).param("actorId", adminId).update();
+                .param("id", resId1).param("actorId", affairsUser.get()).update();
         }
 
         // 2. 示例2：室内体育馆羽毛球场借用（审核中）

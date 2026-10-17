@@ -257,7 +257,7 @@ onBeforeUnmount(() => { sequence++; locationSequence++; finish(false); window.re
                       <span><strong>派单时间：</strong><small>{{ time(asn.assignedAt) }}</small></span>
                       <span v-if="asn.endedAt" style="margin-left: 12px"><strong>改派时间：</strong><small>{{ time(asn.endedAt) }}</small></span>
                     </div>
-                    <p class="assignment-comment" v-if="asn.comment">
+                    <p v-if="asn.comment" class="assignment-comment">
                       <strong>派工／改派说明：</strong>{{ asn.comment }}
                     </p>
                   </div>

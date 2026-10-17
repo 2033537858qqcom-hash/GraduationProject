@@ -139,7 +139,8 @@ public class ReservationDtos {
         String username,
         String fullName,
         String departmentName,
-        String identityNumber
+        String identityNumber,
+        boolean eligible
     ) {}
 
     public record VenueManagementItem(
@@ -154,7 +155,10 @@ public class ReservationDtos {
         String availableEquipment,
         String rules,
         boolean enabled,
-        List<VenueManagerItem> managers
+        List<VenueManagerItem> managers,
+        int activeReviewerCount,
+        long pendingReviewCount,
+        long unattendedReviewCount
     ) {}
 
     public record AssignManagerCommand(

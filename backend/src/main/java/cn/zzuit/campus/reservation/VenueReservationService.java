@@ -20,6 +20,16 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class VenueReservationService {
 
+    // vm must refer to a venue_manager row. Use the same live eligibility rule for
+    // routing, handoff protection and configuration warnings.
+    private static final String ELIGIBLE_REVIEWER = """
+        EXISTS (SELECT 1 FROM app_user review_user
+            JOIN user_role review_role ON review_role.user_id = review_user.id
+            JOIN role_permission review_permission ON review_permission.role_code = review_role.role_code
+            WHERE review_user.id = vm.user_id AND review_user.enabled = TRUE
+              AND review_permission.permission_code = 'reservation:review')
+        """;
+
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final NoticeWriter noticeWriter;
@@ -32,6 +42,13 @@ public class VenueReservationService {
 
     private void lock() {
         jdbc.sql("UPDATE foundation_write_lock SET revision = revision + 1 WHERE id = 1").update();
+    }
+
+    private void lock(CampusPrincipal user, String permission) {
+        lock();
+        // Check after taking the shared account/scope lock, before opening a
+        // consistent-read snapshot (also required for MySQL REPEATABLE READ).
+        identities.requirePermission(user, permission);
     }
 
     public boolean isVenueManager(long userId, long venueId) {
@@ -51,12 +68,9 @@ public class VenueReservationService {
 
     public List<Long> getVenueReviewerIds(long venueId) {
         return jdbc.sql("""
-            SELECT u.id FROM venue_manager vm
-            JOIN app_user u ON u.id = vm.user_id
-            JOIN user_role ur ON ur.user_id = u.id
-            JOIN role_permission rp ON rp.role_code = ur.role_code
-            WHERE vm.venue_id = :venueId AND rp.permission_code = 'reservation:review' AND u.enabled = TRUE
-            """)
+            SELECT vm.user_id FROM venue_manager vm
+            WHERE vm.venue_id = :venueId AND
+            """ + ELIGIBLE_REVIEWER)
             .param("venueId", venueId)
             .query(Long.class)
             .list();
@@ -119,8 +133,7 @@ public class VenueReservationService {
 
     @Transactional
     public void updateVenue(CampusPrincipal user, long id, VenueUpdateCommand cmd) {
-        identities.requirePermission(user, "reservation:manage");
-        lock();
+        lock(user, "reservation:manage");
         var venue = getVenue(id);
         jdbc.sql("""
             UPDATE venue_resource
@@ -148,7 +161,8 @@ public class VenueReservationService {
         return venues.stream().map(v -> {
             var managers = jdbc.sql("""
                 SELECT u.id, u.username, u.full_name, COALESCE(d.name, '公共服务部门') AS dept_name,
-                       u.identity_number
+                       u.identity_number,
+                """ + ELIGIBLE_REVIEWER + " AS eligible " + """
                 FROM venue_manager vm
                 JOIN app_user u ON u.id = vm.user_id
                 LEFT JOIN department d ON d.id = u.department_id
@@ -161,8 +175,19 @@ public class VenueReservationService {
                     r.getString("username"),
                     r.getString("full_name"),
                     r.getString("dept_name"),
-                    r.getString("identity_number")
+                    r.getString("identity_number"),
+                    r.getBoolean("eligible")
                 )).list();
+            var pending = jdbc.sql("""
+                SELECT COUNT(*) AS pending_count,
+                    COALESCE(SUM(CASE WHEN NOT EXISTS (
+                        SELECT 1 FROM venue_manager vm
+                        WHERE vm.venue_id = r.venue_id AND vm.user_id <> r.applicant_id AND
+                """ + ELIGIBLE_REVIEWER + """
+                    ) THEN 1 ELSE 0 END), 0) AS unattended_count
+                FROM venue_reservation r WHERE r.venue_id = :venueId AND r.status = 'SUBMITTED'
+                """).param("venueId", v.id())
+                .query((r, n) -> new long[] {r.getLong("pending_count"), r.getLong("unattended_count")}).single();
             return new VenueManagementItem(
                 v.id(),
                 v.code(),
@@ -175,7 +200,10 @@ public class VenueReservationService {
                 v.availableEquipment(),
                 v.rules(),
                 v.enabled(),
-                managers
+                managers,
+                (int) managers.stream().filter(VenueManagerItem::eligible).count(),
+                pending[0],
+                pending[1]
             );
         }).toList();
     }
@@ -197,14 +225,14 @@ public class VenueReservationService {
                 r.getString("username"),
                 r.getString("full_name"),
                 r.getString("dept_name"),
-                r.getString("identity_number")
+                r.getString("identity_number"),
+                true
             )).list();
     }
 
     @Transactional
     public void addVenueManager(CampusPrincipal user, long venueId, long managerUserId) {
-        identities.requirePermission(user, "reservation:manage");
-        lock();
+        lock(user, "reservation:manage");
         getVenue(venueId);
 
         var hasReview = jdbc.sql("""
@@ -225,14 +253,38 @@ public class VenueReservationService {
                 .param("vid", venueId)
                 .param("uid", managerUserId)
                 .update();
+            // New responsibility includes existing pending work. Never notify a
+            // person about approving their own application or on an idempotent add.
+            var pending = jdbc.sql("""
+                SELECT id, venue_name, activity_theme FROM venue_reservation
+                WHERE venue_id = :vid AND status = 'SUBMITTED' AND applicant_id <> :uid
+                """).param("vid", venueId).param("uid", managerUserId)
+                .query((r, n) -> Map.of("id", r.getLong("id"), "message",
+                    "【" + r.getString("venue_name") + "】" + r.getString("activity_theme"))).list();
+            for (var task : pending) {
+                noticeWriter.write(managerUserId, "新增负责场地有待审批申请", "RESERVATION",
+                    (Long) task.get("id"), "REVIEW", (String) task.get("message"));
+            }
         }
     }
 
     @Transactional
     public void removeVenueManager(CampusPrincipal user, long venueId, long managerUserId) {
-        identities.requirePermission(user, "reservation:manage");
-        lock();
+        lock(user, "reservation:manage");
         getVenue(venueId);
+        if (!isVenueManager(managerUserId, venueId)) return;
+        long stranded = jdbc.sql("""
+            SELECT COUNT(*) FROM venue_reservation r
+            WHERE r.venue_id = :vid AND r.status = 'SUBMITTED'
+              AND NOT EXISTS (SELECT 1 FROM venue_manager vm
+                WHERE vm.venue_id = r.venue_id AND vm.user_id <> :uid
+                  AND vm.user_id <> r.applicant_id AND
+            """ + ELIGIBLE_REVIEWER + ")")
+            .param("vid", venueId).param("uid", managerUserId).query(Long.class).single();
+        if (stranded > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "REVIEWER_HANDOFF_REQUIRED",
+                "该场地有 " + stranded + " 条待审申请将无人可审，请先添加其他有效责任审批人，再解除指定（申请人本人不能接审）");
+        }
         jdbc.sql("DELETE FROM venue_manager WHERE venue_id = :vid AND user_id = :uid")
             .param("vid", venueId)
             .param("uid", managerUserId)
@@ -466,8 +518,7 @@ public class VenueReservationService {
 
     @Transactional
     public ReservationDetail saveDraft(CampusPrincipal user, CreateReservationCommand cmd) {
-        identities.requirePermission(user, "reservation:apply");
-        lock();
+        lock(user, "reservation:apply");
 
         var profile = identities.profile(user.id());
         var venue = getVenue(cmd.venueId());
@@ -563,8 +614,7 @@ public class VenueReservationService {
 
     @Transactional
     public ReservationDetail submit(CampusPrincipal user, CreateReservationCommand cmd) {
-        identities.requirePermission(user, "reservation:apply");
-        lock();
+        lock(user, "reservation:apply");
 
         if (cmd.activityTheme() == null || cmd.activityTheme().trim().length() < 2) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_THEME", "请填写借用活动主题（至少2个字）");
@@ -585,9 +635,9 @@ public class VenueReservationService {
         }
 
         // 校验目标场地是否配置了有效审批负责人（TASK-01）
-        var reviewers = getVenueReviewerIds(venue.id());
+        var reviewers = getVenueReviewerIds(venue.id()).stream().filter(id -> id != user.id()).toList();
         if (reviewers.isEmpty()) {
-            throw new ApiException(HttpStatus.CONFLICT, "NO_VENUE_REVIEWER", "该场地暂无有效审批负责人，无法受理借用，请联系管理员配置后再提交");
+            throw new ApiException(HttpStatus.CONFLICT, "NO_VENUE_REVIEWER", "该场地暂无其他有效审批负责人，无法受理借用，请联系资源管理人员配置后再提交（申请人不能自审）");
         }
 
         var existing = jdbc.sql("SELECT id, status, version FROM venue_reservation WHERE applicant_id = :u AND request_key = :k")
@@ -599,6 +649,9 @@ public class VenueReservationService {
         int nextVersion = 0;
         if (existing.isPresent()) {
             var current = existing.get();
+            if (!"DRAFT".equals(current.get("status")) && !"RETURNED".equals(current.get("status"))) {
+                throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_IMMUTABLE", "当前申请状态不允许再次提交，请刷新查看办理结果；新活动请新建申请");
+            }
             reservationId = (Long) current.get("id");
             nextVersion = ((Integer) current.get("version")) + 1;
             jdbc.sql("""
@@ -685,8 +738,7 @@ public class VenueReservationService {
 
     @Transactional
     public ReservationDetail withdraw(CampusPrincipal user, long id) {
-        identities.requirePermission(user, "reservation:apply");
-        lock();
+        lock(user, "reservation:apply");
         var detail = getDetail(user, id);
         if (detail.applicantId() != user.id()) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "只能撤回本人的借用申请");
@@ -707,6 +759,7 @@ public class VenueReservationService {
     public ReservationDetail cancel(CampusPrincipal user, long id, String reason) {
         lock();
         var detail = getDetail(user, id);
+        identities.requirePermission(user, detail.applicantId() == user.id() ? "reservation:apply" : "reservation:review");
         var perms = identities.permissions(user.id());
         boolean hasReviewPerm = perms.contains("reservation:review");
         boolean isResponsible = isVenueManager(user.id(), detail.venueId());
@@ -761,8 +814,9 @@ public class VenueReservationService {
             return new ReservationPage(List.of(), 0, page, pageSize);
         }
 
-        StringBuilder where = new StringBuilder(" WHERE r.status != 'DRAFT'");
+        StringBuilder where = new StringBuilder(" WHERE r.status != 'DRAFT' AND r.applicant_id <> :reviewerId");
         Map<String, Object> params = new HashMap<>();
+        params.put("reviewerId", user.id());
 
         if (venueId != null && venueId > 0) {
             where.append(" AND r.venue_id = :venueId");
@@ -795,8 +849,7 @@ public class VenueReservationService {
 
     @Transactional
     public ReservationDetail review(CampusPrincipal user, long id, ReviewReservationCommand cmd) {
-        identities.requirePermission(user, "reservation:review");
-        lock();
+        lock(user, "reservation:review");
 
         var detail = getDetail(user, id);
 

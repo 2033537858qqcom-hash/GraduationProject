@@ -24,5 +24,11 @@ public class CertificateDemoInitializer implements ApplicationRunner {
         jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id,demo) VALUES('affairs1001',:hash,'学生事务人员（演示）','DEMO-AFFAIRS-1001',1,1,TRUE)")
             .param("hash",passwords.encode(environment.getProperty("app.demo.password","Demo@2026"))).update();
         jdbc.sql("INSERT INTO user_role(user_id,role_code) SELECT id,'STUDENT_AFFAIRS' FROM app_user WHERE username='affairs1001'").update();
+        // Only bind resources when creating this demo account. A restart must not
+        // restore responsibilities deliberately removed by resource managers.
+        jdbc.sql("""
+            INSERT INTO venue_manager(venue_id,user_id)
+            SELECT v.id,u.id FROM venue_resource v CROSS JOIN app_user u WHERE u.username='affairs1001'
+            """).update();
     }
 }

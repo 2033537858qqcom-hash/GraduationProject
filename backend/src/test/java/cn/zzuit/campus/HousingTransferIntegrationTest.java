@@ -104,6 +104,36 @@ class HousingTransferIntegrationTest {
         assertThat(ok(login(name).get(ROOT+"/mine")).toString()).contains("AWAITING_ASSIGNMENT").doesNotContain("identityNumber");
         assertThat(source).isPositive();
     }
+    @Test void hiddenCrossCampusTransferCannotBeReservedIntoAnOwnedBed() throws Exception {
+        var admin=login("admin");var affairs=login("affairs1001");
+        var name=housedStudent(admin,"dorm1001");long id=submitApproved(login(name),affairs);
+        String outsiderName=account("hc","跨校区测试宿管","dorm1001","DORM_MANAGER");
+        long otherBuilding=building(admin,2);long otherBed=bed(admin,room(admin,otherBuilding),"A");
+        ok(admin.send("POST","/api/admin/housing/scopes",Map.of("userId",user(outsiderName),"buildingId",otherBuilding,"version",0,"reason","测试另一校区范围")));
+        var outsider=login(outsiderName);
+        assertThat(outsider.get(ROOT+"/assign/"+id).statusCode()).isEqualTo(404);
+        for(var item:ok(outsider.get(ROOT+"/assign?queue=waiting"))) assertThat(item.path("id").asLong()).isNotEqualTo(id);
+        int before=version(id);
+        var denied=outsider.send("POST",ROOT+"/assign/"+id+"/reserve",reserve(before,otherBed));
+        assertThat(denied.statusCode()).as(denied.body()).isEqualTo(404);
+        assertThat(version(id)).isEqualTo(before);
+        assertThat(jdbc.sql("SELECT status FROM dorm_bed WHERE id=:id").param("id",otherBed).query(String.class).single()).isEqualTo("VACANT");
+        assertThat(jdbc.sql("SELECT status FROM housing_transfer WHERE id=:id").param("id",id).query(String.class).single()).isEqualTo("AWAITING_ASSIGNMENT");
+        var manager=login("dorm1001");long validBed=extraBed(admin,buildingOf(currentBed(name)));
+        assertThat(ok(manager.send("POST",ROOT+"/assign/"+id+"/reserve",reserve(before,validBed))).path("status").asText()).isEqualTo("AWAITING_CHECKIN");
+    }
+    @Test void disabledManagedBuildingDoesNotGrantTheCampusWaitingPool() throws Exception {
+        var admin=login("admin");var affairs=login("affairs1001");
+        var name=housedStudent(admin,"dorm1001");long id=submitApproved(login(name),affairs);
+        String staff=account("hd","停用范围测试宿管","dorm1001","DORM_MANAGER");
+        long managedBuilding=building(admin,1);
+        ok(admin.send("POST","/api/admin/housing/scopes",Map.of("userId",user(staff),"buildingId",managedBuilding,"version",0,"reason","测试可停用范围")));
+        var actor=login(staff);
+        ok(actor.get(ROOT+"/assign/"+id));
+        jdbc.sql("UPDATE dorm_building SET enabled=FALSE WHERE id=:id").param("id",managedBuilding).update();
+        assertThat(actor.get(ROOT+"/assign/"+id).statusCode()).isEqualTo(404);
+        for(var item:ok(actor.get(ROOT+"/assign?queue=waiting"))) assertThat(item.path("id").asLong()).isNotEqualTo(id);
+    }
     @Test void openTransferBlocksCheckoutAndReturnCanBeSupplemented() throws Exception {
         var admin=login("admin");var manager=login("dorm1001");var affairs=login("affairs1001");
         var name=housedStudent(admin,"dorm1001");long assignment=currentAssignment(name);

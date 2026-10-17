@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   BedDouble, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn,
   ClipboardCheck, FileCheck2, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench
@@ -7,48 +7,15 @@ import {
 import { api, errorMessage } from '../lib/api'
 import { currentUser } from '../stores/auth'
 import ServiceEntry from '../components/ServiceEntry.vue'
-
-interface AggregatedTask {
-  id: string
-  domain: string
-  categoryName: string
-  title: string
-  status: string
-  statusText: string
-  applicantName: string
-  scopeDetail: string
-  targetPath: string
-  createdAt: string
-  urgency: string
-}
-
-interface WorkspaceInfo {
-  code: string
-  name: string
-  roleTitle: string
-  scopeNote: string
-  entryPaths: string[]
-}
-
-interface WorkbenchOverviewResponse {
-  profile: any
-  workspaces: WorkspaceInfo[]
-  tasks: AggregatedTask[]
-  totalPending: number
-  taskCounts: Record<string, number>
-  leavePending: number
-  certificatePending: number
-  message: string
-}
+import { useTaskQueue } from '../composables/useTaskQueue'
+import type { TaskDomain, WorkbenchOverview, WorkspaceInfo } from '../workbench'
 
 const error = ref('')
 const loading = ref(true)
 const workspaces = ref<WorkspaceInfo[]>([])
 const activeWorkspaceCode = ref(localStorage.getItem('campus_active_workspace') || '')
-const tasks = ref<AggregatedTask[]>([])
-const totalPending = ref(0)
-const taskCounts = ref<Record<string, number>>({})
-const taskFilter = ref('ALL')
+const { tasks, totalPending, taskCounts, taskFilter, currentPage, total, pageCount, complete, sourceErrors,
+  loading: taskLoading, error: taskError, load: loadTasks, initialize: initializeTasks, invalidate } = useTaskQueue()
 const showAllServices = ref(false)
 
 const activeWorkspace = computed(() => {
@@ -60,16 +27,21 @@ function selectWorkspace(code: string) {
   localStorage.setItem('campus_active_workspace', code)
 }
 
-const filteredTasks = computed(() => {
-  if (taskFilter.value === 'ALL') return tasks.value
-  if (taskFilter.value === 'LEAVE') return tasks.value.filter(t => t.domain === 'LEAVE')
-  if (taskFilter.value === 'CERTIFICATE') return tasks.value.filter(t => t.domain === 'CERTIFICATE')
-  if (taskFilter.value === 'RESERVATION') return tasks.value.filter(t => t.domain === 'RESERVATION')
-  if (taskFilter.value === 'HOUSING') return tasks.value.filter(t => t.domain === 'HOUSING_REVIEW' || t.domain === 'HOUSING_ASSIGN')
-  if (taskFilter.value === 'REPAIR') return tasks.value.filter(t => t.domain === 'REPAIR_DISPATCH' || t.domain === 'REPAIR_WORK')
-  if (taskFilter.value === 'CONTENT') return tasks.value.filter(t => t.domain === 'CONTENT')
-  return tasks.value
-})
+const categoryDefinitions: { domain: TaskDomain; label: string; sources: string[] }[] = [
+  { domain: 'ALL', label: '全部', sources: [] },
+  { domain: 'LEAVE', label: '请假', sources: ['leave'] },
+  { domain: 'CERTIFICATE', label: '证明', sources: ['certificate'] },
+  { domain: 'RESERVATION', label: '借用', sources: ['reservation'] },
+  { domain: 'HOUSING', label: '调宿', sources: ['housingReview', 'housingAssign'] },
+  { domain: 'REPAIR', label: '报修', sources: ['repairDispatch', 'repairWork'] },
+  { domain: 'CONTENT', label: '官网', sources: ['content'] },
+]
+const taskCategories = computed(() => categoryDefinitions
+  .filter(category => category.domain === 'ALL' || category.domain === taskFilter.value || category.sources.some(source =>
+    (taskCounts.value[source] ?? 0) > 0 || sourceErrors.value.some(error => error.domain === source)))
+  .map(category => ({ ...category, count: category.domain === 'ALL' ? totalPending.value :
+    category.sources.some(source => sourceErrors.value.some(error => error.domain === source)) ? '待重试' :
+      category.sources.reduce((sum, source) => sum + (taskCounts.value[source] ?? 0), 0) })))
 
 function entryVisible(pathPrefix: string) {
   if (showAllServices.value) return true
@@ -112,11 +84,9 @@ const housingDesk = computed(() => currentUser.value?.permissions.includes('hous
 onMounted(async () => {
   loading.value = true
   try {
-    const res = await api<WorkbenchOverviewResponse>('/workbench/overview')
+    const res = await api<WorkbenchOverview>('/workbench/overview')
     workspaces.value = res.workspaces || []
-    tasks.value = res.tasks || []
-    totalPending.value = res.totalPending || 0
-    taskCounts.value = res.taskCounts || {}
+    initializeTasks(res)
 
     // 若本地无存储或存储的工作空间不在当前权限列表，则默认选择首个专业工作空间（非 PERSONAL）
     const exists = workspaces.value.some(w => w.code === activeWorkspaceCode.value)
@@ -130,6 +100,7 @@ onMounted(async () => {
     loading.value = false
   }
 })
+onBeforeUnmount(invalidate)
 </script>
 
 <template>
@@ -179,85 +150,37 @@ onMounted(async () => {
         <div class="heading-with-badge">
           <h2 id="workbench-tasks-heading">
             <ClipboardCheck :size="18" />
-            待办业务与审核
+            全部岗位待办
           </h2>
-          <span v-if="totalPending > 0" class="service-badge badge-warning">
-            共 {{ totalPending }} 项待处理
-          </span>
-          <span v-else class="service-badge badge-success">
-            全部已处理完成
-          </span>
+          <span v-if="loading || taskLoading" class="service-badge">读取中</span>
+          <span v-else-if="error || taskError" class="service-badge badge-warning">读取失败，请重试</span>
+          <span v-else-if="!complete" class="service-badge badge-warning">部分读取失败 · 已读取 {{ totalPending }} 项</span>
+          <span v-else-if="totalPending > 0" class="service-badge badge-warning">共 {{ totalPending }} 项待处理</span>
+          <span v-else class="service-badge badge-success">暂无待处理事项</span>
         </div>
-        <div v-if="totalPending > 0" class="task-filter-pills" role="tablist" aria-label="待办任务分类筛选">
-          <button
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'ALL' }"
-            @click="taskFilter = 'ALL'"
-          >
-            全部 ({{ totalPending }})
-          </button>
-          <button
-            v-if="taskCounts.leave"
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'LEAVE' }"
-            @click="taskFilter = 'LEAVE'"
-          >
-            请假 ({{ taskCounts.leave }})
-          </button>
-          <button
-            v-if="taskCounts.certificate"
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'CERTIFICATE' }"
-            @click="taskFilter = 'CERTIFICATE'"
-          >
-            证明 ({{ taskCounts.certificate }})
-          </button>
-          <button
-            v-if="taskCounts.reservation"
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'RESERVATION' }"
-            @click="taskFilter = 'RESERVATION'"
-          >
-            借用 ({{ taskCounts.reservation }})
-          </button>
-          <button
-            v-if="taskCounts.housingReview || taskCounts.housingAssign"
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'HOUSING' }"
-            @click="taskFilter = 'HOUSING'"
-          >
-            调宿 ({{ (taskCounts.housingReview || 0) + (taskCounts.housingAssign || 0) }})
-          </button>
-          <button
-            v-if="taskCounts.repairDispatch || taskCounts.repairWork"
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'REPAIR' }"
-            @click="taskFilter = 'REPAIR'"
-          >
-            报修 ({{ (taskCounts.repairDispatch || 0) + (taskCounts.repairWork || 0) }})
-          </button>
-          <button
-            v-if="taskCounts.content"
-            type="button"
-            class="task-pill-btn"
-            :class="{ active: taskFilter === 'CONTENT' }"
-            @click="taskFilter = 'CONTENT'"
-          >
-            官网 ({{ taskCounts.content }})
+        <div v-if="!loading && !error && (totalPending > 0 || sourceErrors.length)" class="task-filter-pills" role="tablist" aria-label="待办任务分类筛选">
+          <button v-for="category in taskCategories" :key="category.domain" type="button" class="task-pill-btn"
+            role="tab" :aria-selected="taskFilter === category.domain" :class="{ active: taskFilter === category.domain }"
+            :disabled="taskLoading" @click="loadTasks(category.domain)">
+            {{ category.label }} ({{ category.count }})
           </button>
         </div>
       </div>
+      <p class="muted">汇总当前账号全部已授权岗位的待处理事项。</p>
+      <div v-if="sourceErrors.length" class="task-source-warning" role="status">
+        <p>部分待办暂时无法读取：{{ sourceErrors.map(source => source.label).join('、') }}。当前数量仅包含已读取的业务。</p>
+        <button class="text-button" :disabled="taskLoading" @click="loadTasks(taskFilter, currentPage)">重新读取</button>
+      </div>
+      <p v-if="loading || taskLoading" class="loading-state" role="status">正在读取待办…</p>
+      <div v-else-if="taskError" class="alert" role="alert">
+        {{ taskError }}
+        <button class="text-button" @click="loadTasks(taskFilter, currentPage)">重试</button>
+      </div>
 
       <!-- 任务列表 -->
-      <div v-if="filteredTasks.length > 0" class="workbench-task-grid">
+      <div v-else-if="!error && tasks.length > 0" class="workbench-task-grid">
         <article
-          v-for="task in filteredTasks"
+          v-for="task in tasks"
           :key="task.id"
           class="workbench-task-card"
           :class="{ 'urgent-task': task.urgency === 'URGENT' }"
@@ -293,9 +216,16 @@ onMounted(async () => {
       </div>
 
       <!-- 空状态 -->
-      <div v-else class="workbench-tasks-empty">
-        <p>当前没有待处理的审核或业务待办，工作已全部就绪。</p>
+      <div v-else-if="!error" class="workbench-tasks-empty">
+        <p>{{ !complete ? '部分业务尚未读取成功，请重试后确认待办。' : '当前分类暂无待处理事项。' }}</p>
       </div>
+      <nav v-if="!loading && !taskLoading && !taskError && !error && total > 0" class="pagination" aria-label="待办分页">
+        <span>{{ !complete ? '已读取' : '当前分类共' }} {{ total }} 项 · 第 {{ currentPage }} / {{ pageCount }} 页</span>
+        <div>
+          <button class="button compact" :disabled="currentPage <= 1" @click="loadTasks(taskFilter, currentPage - 1)">上一页</button>
+          <button class="button compact" :disabled="currentPage >= pageCount" @click="loadTasks(taskFilter, currentPage + 1)">下一页</button>
+        </div>
+      </nav>
     </section>
 
     <!-- 4. 岗位服务入口 (按工作空间过滤或查看全部) -->
@@ -689,6 +619,22 @@ onMounted(async () => {
 .toggle-all-btn {
   font-size: 12.5px;
 }
+.task-source-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 12px 14px;
+  margin-top: 12px;
+  border: 1px solid #f2d59e;
+  border-radius: 8px;
+  background: #fffbef;
+  color: #835c24;
+  font-size: 13px;
+}
+.task-source-warning p { margin: 0; }
+.task-pill-btn:disabled { cursor: wait; opacity: .65; }
 @media (max-width: 768px) {
   .workbench-task-grid {
     grid-template-columns: 1fr;

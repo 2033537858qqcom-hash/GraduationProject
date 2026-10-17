@@ -266,6 +266,10 @@ public class AgentTools {
                 items.add(new Fact("review:" + entry.getKey(), name + "待办", entry.getValue() + " 条待处理", path));
             }
         }
+        if (!summary.complete()) {
+            String failed=String.join("、",summary.sourceErrors().stream().map(e -> e.label()).toList());
+            return result("my_review_pending", "PARTIAL", failed+"待办暂时无法读取；已读取 "+summary.totalPending()+" 项，请打开工作台重试。", summary.totalPending(), items, List.of(), "/workbench");
+        }
         if (summary.totalPending() == 0 && items.isEmpty()) {
             return result("my_review_pending", "OK", "当前没有任何待处理的审核或业务待办。", 0, List.of(), List.of(), "/workbench");
         }

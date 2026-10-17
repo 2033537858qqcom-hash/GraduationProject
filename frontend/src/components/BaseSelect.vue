@@ -1,9 +1,9 @@
-<script setup lang="ts">
+<script setup lang="ts" generic="T extends string | number | boolean">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ChevronDown, Check } from '@lucide/vue'
 
-export interface SelectOption {
-  value: string | number | boolean
+export interface SelectOption<Value = string | number | boolean> {
+  value: Value
   label: string
   disabled?: boolean
   description?: string
@@ -11,8 +11,8 @@ export interface SelectOption {
 
 const props = withDefaults(
   defineProps<{
-    modelValue?: string | number | boolean | null
-    options: (SelectOption | string | number)[]
+    modelValue?: T | null
+    options: (SelectOption<T> | T)[]
     placeholder?: string
     disabled?: boolean
     compact?: boolean
@@ -21,7 +21,7 @@ const props = withDefaults(
     ariaLabel?: string
   }>(),
   {
-    modelValue: '',
+    modelValue: null,
     placeholder: '请选择',
     disabled: false,
     compact: false,
@@ -32,8 +32,8 @@ const props = withDefaults(
 )
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: any): void
-  (e: 'change', value: any): void
+  (e: 'update:modelValue', value: T): void
+  (e: 'change', value: T): void
 }>()
 
 const isOpen = ref(false)
@@ -41,13 +41,13 @@ const containerRef = ref<HTMLElement | null>(null)
 const listboxRef = ref<HTMLElement | null>(null)
 const activeIndex = ref<number>(-1)
 
-const normalizedOptions = computed<SelectOption[]>(() => {
+const normalizedOptions = computed<SelectOption<T>[]>(() => {
   return props.options.map(item => {
     if (typeof item === 'object' && item !== null && 'value' in item && 'label' in item) {
-      return item as SelectOption
+      return item as SelectOption<T>
     }
     return {
-      value: item as any,
+      value: item as T,
       label: String(item),
     }
   })
@@ -90,7 +90,7 @@ function closeDropdown() {
   activeIndex.value = -1
 }
 
-function selectOption(option: SelectOption) {
+function selectOption(option: SelectOption<T>) {
   if (option.disabled || props.disabled) return
   emit('update:modelValue', option.value)
   emit('change', option.value)

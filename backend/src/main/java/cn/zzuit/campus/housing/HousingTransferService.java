@@ -47,7 +47,7 @@ public class HousingTransferService {
         identities.requirePermission(user,"housing:review");lock();expireDue();return view(reviewable(user,id),"review");
     }
     @Transactional public Transfer assignDetail(CampusPrincipal user,long id) {
-        identities.requirePermission(user,"housing:assign");lock();expireDue();return view(assignable(user,id),"assign");
+        lock();identities.requirePermission(user,"housing:assign");expireDue();return view(assignable(user,id),"assign");
     }
     /** Link authorization must not expire reservations or write new notices while listing messages. */
     public void requireNoticeAccess(CampusPrincipal user,long id,String view) {
@@ -163,26 +163,16 @@ public class HousingTransferService {
     }
 
     @Transactional public List<Transfer> assignQueue(CampusPrincipal user,String queue) {
-        identities.requirePermission(user,"housing:assign");lock();expireDue();
-        if("waiting".equals(queue)) return jdbc.sql(SELECT+"""
-            WHERE t.status='AWAITING_ASSIGNMENT'
-              AND EXISTS (
-                  SELECT 1 FROM dorm_manager_scope ms
-                  JOIN dorm_building mb ON mb.id=ms.building_id
-                  JOIN dorm_bed sb ON sb.id=t.source_bed_id
-                  JOIN dorm_room sr ON sr.id=sb.room_id
-                  JOIN dorm_building sbuild ON sbuild.id=sr.building_id
-                  WHERE ms.user_id=:user AND ms.enabled=TRUE AND mb.campus_id=sbuild.campus_id
-              )
-            ORDER BY t.updated_at,t.id
-            """).param("user",user.id()).query(this::row).list().stream().map(row->view(row,"assign")).toList();
+        lock();identities.requirePermission(user,"housing:assign");expireDue();
+        if("waiting".equals(queue)) return jdbc.sql(SELECT+"WHERE t.status='AWAITING_ASSIGNMENT' AND "+waitingCampusScope()+" ORDER BY t.updated_at,t.id")
+            .param("user",user.id()).query(this::row).list().stream().map(row->view(row,"assign")).toList();
         if(!"reserved".equals(queue)) bad("调宿队列无效");
         return jdbc.sql(SELECT+"WHERE t.status='AWAITING_CHECKIN' AND t.target_building_id IN ("+effectiveBuildings()+") ORDER BY t.reserve_until,t.id").param("user",user.id()).query(this::row).list().stream().map(row->view(row,"assign")).toList();
     }
     @Transactional public Transfer reserve(CampusPrincipal user,long id,ReserveInput input) {
-        identities.requirePermission(user,"housing:assign");lock();String digest=digest("reserve",input.bedId(),input.reason());
+        lock();identities.requirePermission(user,"housing:assign");String digest=digest("reserve",input.bedId(),input.reason());
         var repeated=repeat(user,input.requestKey(),digest);if(repeated!=null) return view(assignable(user,repeated),"assign");
-        var row=load(id);if(!effective(user,bedBuilding(input.bedId()))) throw missing("床位不存在");
+        var row=assignable(user,id);if(!effective(user,bedBuilding(input.bedId()))) throw missing("床位不存在");
         if(!"AWAITING_ASSIGNMENT".equals(row.status())) conflict("当前申请不能安排床位");if(row.version()!=input.version()) stale();
         var bed=bed(input.bedId());if(bed.bedId()==row.sourceBedId()) conflict("不能预留学生当前入住的床位");
         if(!bed.assignable()) conflict(bed.enabledChain()?"床位当前不可预留":"楼栋、房间或床位已停用");
@@ -300,6 +290,15 @@ public class HousingTransferService {
         SELECT s.building_id building_id FROM dorm_manager_scope s JOIN app_user u ON u.id=s.user_id AND u.enabled=TRUE JOIN dorm_building b ON b.id=s.building_id AND b.enabled=TRUE
         WHERE s.user_id=:user AND s.enabled=TRUE AND EXISTS(SELECT 1 FROM user_role ur JOIN role_permission rp ON rp.role_code=ur.role_code AND rp.permission_code='housing:assign' WHERE ur.user_id=s.user_id)
         """;}
+    // The same live campus scope governs waiting queues, details and reservation writes.
+    // t is the housing_transfer alias in both callers.
+    private String waitingCampusScope() {return """
+        EXISTS (SELECT 1 FROM dorm_bed sb JOIN dorm_room sr ON sr.id=sb.room_id
+            JOIN dorm_building source_building ON source_building.id=sr.building_id
+            WHERE sb.id=t.source_bed_id AND source_building.campus_id IN (
+                SELECT managed.campus_id FROM dorm_building managed
+                WHERE managed.id IN (
+        """+effectiveBuildings()+")))";}
     private String reviewer() {return "u.enabled=TRUE AND EXISTS(SELECT 1 FROM user_role ur JOIN role_permission rp ON rp.role_code=ur.role_code AND rp.permission_code='housing:review' WHERE ur.user_id=u.id)";}
     private long college(CampusPrincipal user) {return jdbc.sql("SELECT u.department_id FROM app_user u JOIN department d ON d.id=u.department_id AND d.kind='COLLEGE' WHERE u.id=:id AND "+reviewer()).param("id",user.id()).query(Long.class).optional().orElseThrow(()->new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN","调宿初审岗位须归属学院"));}
     private String[] profileText(long id) {return jdbc.sql("SELECT username,full_name,CAST(department_id AS VARCHAR(20)) FROM app_user WHERE id=:id").param("id",id).query((r,n)->new String[]{r.getString(1),r.getString(2),r.getString(3)}).single();}
@@ -309,14 +308,8 @@ public class HousingTransferService {
         var row=load(id);
         if(!List.of("AWAITING_ASSIGNMENT","AWAITING_CHECKIN","COMPLETED","CANCELLED","EXPIRED").contains(row.status())) throw missing("调宿申请不存在");
         if("AWAITING_ASSIGNMENT".equals(row.status())) {
-            boolean campusMatch = jdbc.sql("""
-                SELECT COUNT(*) FROM dorm_manager_scope ms
-                JOIN dorm_building mb ON mb.id=ms.building_id
-                JOIN dorm_bed sb ON sb.id=:sourceBedId
-                JOIN dorm_room sr ON sr.id=sb.room_id
-                JOIN dorm_building sbuild ON sbuild.id=sr.building_id
-                WHERE ms.user_id=:user AND ms.enabled=TRUE AND mb.campus_id=sbuild.campus_id
-                """).param("user", user.id()).param("sourceBedId", row.sourceBedId()).query(Long.class).single() > 0;
+            boolean campusMatch=jdbc.sql("SELECT COUNT(*) FROM housing_transfer t WHERE t.id=:id AND "+waitingCampusScope())
+                .param("user",user.id()).param("id",id).query(Long.class).single()>0;
             if (!campusMatch) throw missing("调宿申请不存在");
         } else if(row.targetBuildingId()==null || !effective(user,row.targetBuildingId())) throw missing("调宿申请不存在");
         return row;

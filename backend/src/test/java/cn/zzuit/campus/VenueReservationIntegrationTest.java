@@ -313,6 +313,19 @@ class VenueReservationIntegrationTest {
         var gymVenues = ok(affairs.get("/api/reservations/venues?placeId=east-gym"));
         long venueId = gymVenues.get(0).path("id").asLong();
 
+        // Submission requires a different eligible reviewer; self-review remains
+        // forbidden even when the same person also owns the resource queue.
+        String secondReviewer = "auth03_" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.sql("""
+            INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id,demo)
+            SELECT :name,password_hash,'另一审批人（测试）',:name,campus_id,department_id,TRUE
+            FROM app_user WHERE username='affairs1001'
+            """).param("name", secondReviewer).update();
+        long secondReviewerId = jdbc.sql("SELECT id FROM app_user WHERE username=:name")
+            .param("name", secondReviewer).query(Long.class).single();
+        jdbc.sql("INSERT INTO user_role(user_id,role_code) VALUES(:u,'STUDENT_AFFAIRS')").param("u", secondReviewerId).update();
+        jdbc.sql("INSERT INTO venue_manager(venue_id,user_id) VALUES(:v,:u)").param("v", venueId).param("u", secondReviewerId).update();
+
         var start = LocalDateTime.now().plusDays(25).withHour(14).withMinute(0).withSecond(0).truncatedTo(ChronoUnit.SECONDS);
         var end = start.plusHours(2);
         String key = "REQ-AUTH03-" + UUID.randomUUID();

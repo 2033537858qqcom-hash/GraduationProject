@@ -8,6 +8,7 @@ import type { AssistantTaskView } from '../lib/assistantSessions'
 import { useAssistantDraft } from '../lib/useAssistantDraft'
 import { repairCategories, repairStatuses } from '../repairs'
 import BaseSelect from './BaseSelect.vue'
+import ContactTimeSelect from './ContactTimeSelect.vue'
 const categoryOptions = [
   { value: '', label: '请选择类别' },
   ...Object.entries(repairCategories).map(([key, label]) => ({ value: key, label })),
@@ -80,7 +81,7 @@ watch(() => fields.locationId, id => { const selected = places.value.find(item =
             <div class="assistant-draft-grid"><label>所在校区<BaseSelect v-model="campusId" :options="campusOptions" @change="onCampusChange" /></label><label>报修地点<BaseSelect v-model="selectedLocationId" :options="locationOptions" /></label></div>
             <label>具体位置<input v-model="fields.locationDetail" type="text" maxlength="300" placeholder="可选，例如楼层或方位，不由模型猜测" /></label>
             <label>联系手机或邮箱<input v-model="fields.contact" type="text" maxlength="80" placeholder="仅在本地表单填写" autocomplete="off" /></label>
-            <label>方便联系的时间<input v-model="fields.contactWindow" type="text" maxlength="100" placeholder="可选，仅在本地填写" /></label>
+            <label>方便联系的时间<ContactTimeSelect v-model="fields.contactWindow" :disabled="busy || saving || uncertain" /></label>
           </fieldset>
           <p v-if="checked && preview?.locationName" class="assistant-draft-meta">已选地点：{{ preview.locationName }}</p>
           <p v-if="placeNote" class="assistant-draft-meta">{{ placeNote }}</p>

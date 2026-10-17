@@ -71,13 +71,13 @@ const services = computed<PortalServiceItem[]>(() => [
   },
   {
     to: '/housing/mine',
-    title: '我的住宿与入住历史',
-    description: '查看本人床位、楼栋负责人和已结束的住宿记录',
+    title: '我的住宿与调宿申请',
+    description: '查看床位档案与楼栋宿管，在线申请调宿并跟进办理进度',
     icon: BedDouble,
     categoryKey: 'FACILITY',
     category: '生活设施',
-    badge: '床位信息',
-    badgeType: 'neutral' as const,
+    badge: '床位·调宿',
+    badgeType: 'primary' as const,
     theme: 'teal',
   },
   {

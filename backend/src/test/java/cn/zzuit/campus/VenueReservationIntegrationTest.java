@@ -14,8 +14,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -31,6 +33,9 @@ class VenueReservationIntegrationTest {
 
     @LocalServerPort
     int port;
+
+    @Autowired
+    private JdbcClient jdbc;
 
     final JsonMapper json = JsonMapper.builder().build();
 
@@ -192,6 +197,233 @@ class VenueReservationIntegrationTest {
             "endsAt", end.toString()
         )));
         assertThat(student2Submit.path("status").asText()).isEqualTo("SUBMITTED");
+    }
+
+    @Test
+    void auth01_adminCannotViewOrCancelOthersReservation() throws Exception {
+        var student1 = login("20260001");
+        var admin = login("admin");
+
+        var gymVenues = ok(student1.get("/api/reservations/venues?placeId=east-gym"));
+        long venueId = gymVenues.get(0).path("id").asLong();
+
+        var start = LocalDateTime.now().plusDays(20).withHour(9).withMinute(0).withSecond(0).truncatedTo(ChronoUnit.SECONDS);
+        var end = start.plusHours(2);
+        String key = "REQ-AUTH01-" + UUID.randomUUID();
+
+        var submitted = ok(student1.send("POST", "/api/reservations/submit", Map.of(
+            "requestKey", key,
+            "venueId", venueId,
+            "activityTheme", "AUTH01-测试管理员越权读取与取消",
+            "activityType", "ACADEMIC",
+            "expectedParticipants", 10,
+            "contactPhone", "13800138000",
+            "startsAt", start.toString(),
+            "endsAt", end.toString()
+        )));
+        long resId = submitted.path("id").asLong();
+
+        // 1. 管理员尝试读取他人预约详情 -> 403 Forbidden
+        var detailResp = admin.get("/api/reservations/" + resId);
+        assertThat(detailResp.statusCode()).isEqualTo(403);
+
+        // 2. 管理员尝试取消他人预约 -> 403 Forbidden
+        var cancelResp = admin.send("POST", "/api/reservations/" + resId + "/cancel", Map.of(
+            "reason", "管理员违规越权取消"
+        ));
+        assertThat(cancelResp.statusCode()).isEqualTo(403);
+    }
+
+    @Test
+    void auth02_reviewerCannotReviewOutsideManagedVenues() throws Exception {
+        var student1 = login("20260001");
+        var affairs = login("affairs1001");
+
+        // 创建新场地并仅由 academic1001 管辖
+        jdbc.sql("""
+            INSERT INTO venue_resource (campus_id, code, name, category, place_id, building_name, location_detail, capacity, available_equipment, rules, enabled)
+            VALUES (1, 'VEN-TEST-AUTH02', '跨管辖隔离场地', 'VENUE', 'isolated-hall', '综合楼', '综合楼301', 30, '投影仪', '规则', TRUE)
+        """).update();
+        long isolatedVenueId = jdbc.sql("SELECT id FROM venue_resource WHERE code = 'VEN-TEST-AUTH02'").query(Long.class).single();
+
+        long academicId = jdbc.sql("SELECT id FROM app_user WHERE username = 'academic1001'").query(Long.class).single();
+        if (jdbc.sql("SELECT COUNT(*) FROM user_role WHERE user_id = :uid AND role_code = 'STUDENT_AFFAIRS'").param("uid", academicId).query(Long.class).single() == 0) {
+            jdbc.sql("INSERT INTO user_role (user_id, role_code) VALUES (:uid, 'STUDENT_AFFAIRS')").param("uid", academicId).update();
+        }
+        jdbc.sql("INSERT INTO venue_manager (venue_id, user_id) VALUES (:vid, :uid)").param("vid", isolatedVenueId).param("uid", academicId).update();
+
+        var start = LocalDateTime.now().plusDays(22).withHour(9).withMinute(0).withSecond(0).truncatedTo(ChronoUnit.SECONDS);
+        var end = start.plusHours(2);
+        String key = "REQ-AUTH02-" + UUID.randomUUID();
+
+        var submitted = ok(student1.send("POST", "/api/reservations/submit", Map.of(
+            "requestKey", key,
+            "venueId", isolatedVenueId,
+            "activityTheme", "AUTH02-跨管辖审核拦截测试",
+            "activityType", "ACADEMIC",
+            "expectedParticipants", 10,
+            "contactPhone", "13800138000",
+            "startsAt", start.toString(),
+            "endsAt", end.toString()
+        )));
+        long resId = submitted.path("id").asLong();
+
+        // affairs1001 不在该场地的 venue_manager 中
+        // 1. review 列表中不应出现该记录
+        var affairsReviewList = ok(affairs.get("/api/reservations/review"));
+        for (var item : affairsReviewList.path("items")) {
+            assertThat(item.path("id").asLong()).isNotEqualTo(resId);
+        }
+
+        // 2. affairs1001 尝试审核该记录 -> 403 Forbidden
+        var reviewResp = affairs.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "action", "APPROVE",
+            "comment", "尝试越权审核非管辖场地"
+        ));
+        assertThat(reviewResp.statusCode()).isEqualTo(403);
+
+        // 3. academic1001 是该场地的 venue_manager，可以正常查看并审批
+        var academic = login("academic1001");
+        var academicReviewList = ok(academic.get("/api/reservations/review"));
+        boolean found = false;
+        for (var item : academicReviewList.path("items")) {
+            if (item.path("id").asLong() == resId) {
+                found = true;
+                break;
+            }
+        }
+        assertThat(found).isTrue();
+
+        var academicApprove = ok(academic.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "action", "APPROVE",
+            "comment", "管辖负责人正常审批通过"
+        )));
+        assertThat(academicApprove.path("status").asText()).isEqualTo("APPROVED");
+    }
+
+    @Test
+    void auth03_prohibitSelfReview() throws Exception {
+        // affairs1001 既有审核权限，又兼任教师具有申请权限
+        long affairsId = jdbc.sql("SELECT id FROM app_user WHERE username = 'affairs1001'").query(Long.class).single();
+        if (jdbc.sql("SELECT COUNT(*) FROM user_role WHERE user_id = :uid AND role_code = 'TEACHER'").param("uid", affairsId).query(Long.class).single() == 0) {
+            jdbc.sql("INSERT INTO user_role (user_id, role_code) VALUES (:uid, 'TEACHER')").param("uid", affairsId).update();
+        }
+
+        var affairs = login("affairs1001");
+        var gymVenues = ok(affairs.get("/api/reservations/venues?placeId=east-gym"));
+        long venueId = gymVenues.get(0).path("id").asLong();
+
+        var start = LocalDateTime.now().plusDays(25).withHour(14).withMinute(0).withSecond(0).truncatedTo(ChronoUnit.SECONDS);
+        var end = start.plusHours(2);
+        String key = "REQ-AUTH03-" + UUID.randomUUID();
+
+        var submitted = ok(affairs.send("POST", "/api/reservations/submit", Map.of(
+            "requestKey", key,
+            "venueId", venueId,
+            "activityTheme", "AUTH03-兼岗人员自提自审测试",
+            "activityType", "SPORTS",
+            "expectedParticipants", 10,
+            "contactPhone", "13800138001",
+            "startsAt", start.toString(),
+            "endsAt", end.toString()
+        )));
+        long resId = submitted.path("id").asLong();
+
+        // 尝试自己审批自己 -> 403 Forbidden 包含 CANNOT_SELF_REVIEW
+        var selfReviewResp = affairs.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "action", "APPROVE",
+            "comment", "自己审批自己"
+        ));
+        assertThat(selfReviewResp.statusCode()).isEqualTo(403);
+        assertThat(selfReviewResp.body()).contains("CANNOT_SELF_REVIEW");
+    }
+
+    @Test
+    void auth04_draftNotVisibleToNonApplicant() throws Exception {
+        var student1 = login("20260001");
+        var student2 = login("20260002");
+        var affairs = login("affairs1001");
+
+        var gymVenues = ok(student1.get("/api/reservations/venues?placeId=east-gym"));
+        long venueId = gymVenues.get(0).path("id").asLong();
+
+        var start = LocalDateTime.now().plusDays(28).withHour(10).withMinute(0).withSecond(0).truncatedTo(ChronoUnit.SECONDS);
+        var end = start.plusHours(2);
+        String key = "REQ-AUTH04-" + UUID.randomUUID();
+
+        var draft = ok(student1.send("POST", "/api/reservations/draft", Map.of(
+            "requestKey", key,
+            "venueId", venueId,
+            "activityTheme", "AUTH04-草稿隔离隐私保护测试",
+            "activityType", "ACADEMIC",
+            "expectedParticipants", 5,
+            "contactPhone", "13800138000",
+            "startsAt", start.toString(),
+            "endsAt", end.toString()
+        )));
+        long draftId = draft.path("id").asLong();
+
+        // 1. 其他学生尝试读取 -> 403 Forbidden
+        var respStudent2 = student2.get("/api/reservations/" + draftId);
+        assertThat(respStudent2.statusCode()).isEqualTo(403);
+
+        // 2. 场地审核人尝试读取未提交的草稿 -> 403 Forbidden
+        var respAffairs = affairs.get("/api/reservations/" + draftId);
+        assertThat(respAffairs.statusCode()).isEqualTo(403);
+
+        // 3. 申请人本人可正常读取草稿
+        var respOwner = ok(student1.get("/api/reservations/" + draftId));
+        assertThat(respOwner.path("id").asLong()).isEqualTo(draftId);
+        assertThat(respOwner.path("status").asText()).isEqualTo("DRAFT");
+    }
+
+    @Test
+    void task01_rejectSubmissionWhenNoVenueReviewerConfigured() throws Exception {
+        var student1 = login("20260001");
+
+        // 创建没有任何 venue_manager 绑定的孤儿场地
+        jdbc.sql("""
+            INSERT INTO venue_resource (campus_id, code, name, category, place_id, building_name, location_detail, capacity, available_equipment, rules, enabled)
+            VALUES (1, 'VEN-ORPHAN-001', '未指定负责人的测试场地', 'VENUE', 'orphan-hall', '综合楼', '综合楼401', 20, '无', '无', TRUE)
+        """).update();
+        long orphanVenueId = jdbc.sql("SELECT id FROM venue_resource WHERE code = 'VEN-ORPHAN-001'").query(Long.class).single();
+
+        var start = LocalDateTime.now().plusDays(30).withHour(10).withMinute(0).withSecond(0).truncatedTo(ChronoUnit.SECONDS);
+        var end = start.plusHours(2);
+        String key = "REQ-TASK01-" + UUID.randomUUID();
+
+        // 1. 保存草稿能够正常成功（保留用户填写内容）
+        var draft = ok(student1.send("POST", "/api/reservations/draft", Map.of(
+            "requestKey", key,
+            "venueId", orphanVenueId,
+            "activityTheme", "TASK01-无审批人配置阻断测试",
+            "activityType", "ACADEMIC",
+            "expectedParticipants", 8,
+            "contactPhone", "13800138000",
+            "startsAt", start.toString(),
+            "endsAt", end.toString()
+        )));
+        long draftId = draft.path("id").asLong();
+        assertThat(draft.path("status").asText()).isEqualTo("DRAFT");
+
+        // 2. 提交申请时阻断，返回 409 Conflict 且明确提示 NO_VENUE_REVIEWER
+        var submitResp = student1.send("POST", "/api/reservations/submit", Map.of(
+            "requestKey", key,
+            "venueId", orphanVenueId,
+            "activityTheme", "TASK01-无审批人配置阻断测试",
+            "activityType", "ACADEMIC",
+            "expectedParticipants", 8,
+            "contactPhone", "13800138000",
+            "startsAt", start.toString(),
+            "endsAt", end.toString()
+        ));
+        assertThat(submitResp.statusCode()).isEqualTo(409);
+        assertThat(submitResp.body()).contains("NO_VENUE_REVIEWER");
+
+        // 3. 校验草稿数据完好无损，用户不需要重新录入
+        var preserved = ok(student1.get("/api/reservations/" + draftId));
+        assertThat(preserved.path("status").asText()).isEqualTo("DRAFT");
+        assertThat(preserved.path("activityTheme").asText()).isEqualTo("TASK01-无审批人配置阻断测试");
     }
 
     private JsonNode ok(HttpResponse<String> response) {

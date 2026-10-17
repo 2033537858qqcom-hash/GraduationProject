@@ -24,6 +24,15 @@ public class ReservationDemoInitializer implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments arguments) {
+        var affairsUser = jdbc.sql("SELECT id FROM app_user WHERE username = 'affairs1001'").query(Long.class).optional();
+        if (affairsUser.isPresent()) {
+            jdbc.sql("""
+                INSERT INTO venue_manager (venue_id, user_id)
+                SELECT v.id, :uid FROM venue_resource v
+                WHERE NOT EXISTS (SELECT 1 FROM venue_manager vm WHERE vm.venue_id = v.id AND vm.user_id = :uid)
+                """).param("uid", affairsUser.get()).update();
+        }
+
         var studentOpt = jdbc.sql("SELECT id, full_name, identity_number FROM app_user WHERE username = '20260001'")
             .query((r, n) -> new DemoStudent(r.getLong("id"), r.getString("full_name"), r.getString("identity_number")))
             .optional();

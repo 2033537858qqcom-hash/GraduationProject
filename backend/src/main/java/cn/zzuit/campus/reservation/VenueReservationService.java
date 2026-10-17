@@ -34,6 +34,34 @@ public class VenueReservationService {
         jdbc.sql("UPDATE foundation_write_lock SET revision = revision + 1 WHERE id = 1").update();
     }
 
+    public boolean isVenueManager(long userId, long venueId) {
+        return jdbc.sql("SELECT COUNT(*) FROM venue_manager WHERE venue_id = :vid AND user_id = :uid")
+            .param("vid", venueId)
+            .param("uid", userId)
+            .query(Long.class)
+            .single() > 0;
+    }
+
+    public List<Long> getManagedVenueIds(long userId) {
+        return jdbc.sql("SELECT venue_id FROM venue_manager WHERE user_id = :uid")
+            .param("uid", userId)
+            .query(Long.class)
+            .list();
+    }
+
+    public List<Long> getVenueReviewerIds(long venueId) {
+        return jdbc.sql("""
+            SELECT u.id FROM venue_manager vm
+            JOIN app_user u ON u.id = vm.user_id
+            JOIN user_role ur ON ur.user_id = u.id
+            JOIN role_permission rp ON rp.role_code = ur.role_code
+            WHERE vm.venue_id = :venueId AND rp.permission_code = 'reservation:review' AND u.enabled = TRUE
+            """)
+            .param("venueId", venueId)
+            .query(Long.class)
+            .list();
+    }
+
     // ==================== 场地与设备目录 ====================
 
     public List<VenueSummary> listVenues(String category, String placeId, String keyword, Boolean enabledOnly) {
@@ -277,10 +305,21 @@ public class VenueReservationService {
             .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "RESERVATION_NOT_FOUND", "借用申请不存在"));
 
         long applicantId = res.applicantId();
-        var perms = identities.permissions(user.id());
-        boolean isStaff = perms.contains("reservation:review") || perms.contains("reservation:manage");
-        if (!isStaff && applicantId != user.id()) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权查看该借用申请记录");
+        boolean isOwner = (applicantId == user.id());
+
+        // 1. 草稿隐私保护：仅申请人本人可查看草稿，审核人或管理员也无权读取他人草稿
+        if ("DRAFT".equals(res.status()) && !isOwner) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "草稿仅允许申请人本人查看");
+        }
+
+        // 2. 非草稿状态：仅申请人本人，或具备该场地审批权限的有效负责人可查看
+        if (!isOwner) {
+            var perms = identities.permissions(user.id());
+            boolean hasReviewPerm = perms.contains("reservation:review");
+            boolean isResponsible = isVenueManager(user.id(), res.venueId());
+            if (!hasReviewPerm || !isResponsible) {
+                throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权查看该借用申请记录");
+            }
         }
 
         var actions = jdbc.sql("""
@@ -448,6 +487,12 @@ public class VenueReservationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VENUE_DISABLED", "该场地目前暂停借用");
         }
 
+        // 校验目标场地是否配置了有效审批负责人（TASK-01）
+        var reviewers = getVenueReviewerIds(venue.id());
+        if (reviewers.isEmpty()) {
+            throw new ApiException(HttpStatus.CONFLICT, "NO_VENUE_REVIEWER", "该场地暂无有效审批负责人，无法受理借用，请联系管理员配置后再提交");
+        }
+
         var existing = jdbc.sql("SELECT id, status, version FROM venue_reservation WHERE applicant_id = :u AND request_key = :k")
             .param("u", user.id()).param("k", cmd.requestKey())
             .query((r, n) -> Map.of("id", r.getLong(1), "status", r.getString(2), "version", r.getInt(3)))
@@ -530,17 +575,12 @@ public class VenueReservationService {
 
         recordAction(reservationId, nextVersion, user.id(), profile.fullName(), "SUBMIT", "SUBMITTED", "提交场地借用申请");
 
-        // 查找学生事务或场地管理员发送待办通知
-        var reviewers = jdbc.sql("""
-            SELECT u.id FROM app_user u
-            JOIN user_role ur ON ur.user_id = u.id
-            JOIN role_permission rp ON rp.role_code = ur.role_code
-            WHERE rp.permission_code = 'reservation:review' AND u.enabled = TRUE
-            LIMIT 5
-            """).query(Long.class).list();
+        // 向该场地的真实有效负责人发送待办通知（排除申请人本人）
         for (long reviewerId : reviewers) {
-            noticeWriter.write(reviewerId, "收到新的场地借用申请待审批", "RESERVATION", reservationId, "REVIEW",
-                "【" + venue.name() + "】" + cmd.activityTheme().trim());
+            if (reviewerId != user.id()) {
+                noticeWriter.write(reviewerId, "收到新的场地借用申请待审批", "RESERVATION", reservationId, "REVIEW",
+                    "【" + venue.name() + "】" + cmd.activityTheme().trim());
+            }
         }
 
         return getDetail(user, reservationId);
@@ -571,7 +611,9 @@ public class VenueReservationService {
         lock();
         var detail = getDetail(user, id);
         var perms = identities.permissions(user.id());
-        boolean isStaff = perms.contains("reservation:review") || perms.contains("reservation:manage");
+        boolean hasReviewPerm = perms.contains("reservation:review");
+        boolean isResponsible = isVenueManager(user.id(), detail.venueId());
+        boolean isStaff = hasReviewPerm && isResponsible;
         if (!isStaff && detail.applicantId() != user.id()) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权取消该借用申请");
         }
@@ -613,16 +655,29 @@ public class VenueReservationService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "INVALID_PAGING", "分页参数无效");
         }
 
-        StringBuilder where = new StringBuilder(" WHERE 1=1");
+        var managedVenueIds = getManagedVenueIds(user.id());
+        if (managedVenueIds.isEmpty()) {
+            return new ReservationPage(List.of(), 0, page, pageSize);
+        }
+
+        if (venueId != null && venueId > 0 && !managedVenueIds.contains(venueId)) {
+            return new ReservationPage(List.of(), 0, page, pageSize);
+        }
+
+        StringBuilder where = new StringBuilder(" WHERE r.status != 'DRAFT'");
         Map<String, Object> params = new HashMap<>();
+
+        if (venueId != null && venueId > 0) {
+            where.append(" AND r.venue_id = :venueId");
+            params.put("venueId", venueId);
+        } else {
+            where.append(" AND r.venue_id IN (:managedVenueIds)");
+            params.put("managedVenueIds", managedVenueIds);
+        }
 
         if (status != null && !status.isBlank()) {
             where.append(" AND r.status = :status");
             params.put("status", status.trim());
-        }
-        if (venueId != null && venueId > 0) {
-            where.append(" AND r.venue_id = :venueId");
-            params.put("venueId", venueId);
         }
 
         long total = jdbc.sql("SELECT COUNT(*) FROM venue_reservation r" + where)
@@ -647,6 +702,17 @@ public class VenueReservationService {
         lock();
 
         var detail = getDetail(user, id);
+
+        // 1. 禁止自审（AUTH-03）
+        if (detail.applicantId() == user.id()) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "CANNOT_SELF_REVIEW", "操作者不得审核本人的借用申请");
+        }
+
+        // 2. 负责范围校验（AUTH-02）
+        if (!isVenueManager(user.id(), detail.venueId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权审批非本人负责的场地与设备借用申请");
+        }
+
         if (!"SUBMITTED".equals(detail.status())) {
             throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_NOT_PENDING", "当前申请不在待审批状态");
         }
@@ -667,18 +733,23 @@ public class VenueReservationService {
                 throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_TIME_CONFLICT", "该场地时段刚刚已被其他申请占用：" + conflict.message());
             }
 
-            jdbc.sql("""
+            int updated = jdbc.sql("""
                 UPDATE venue_reservation
                 SET status = 'APPROVED',
                     processing_comment = :comment,
                     version = :v,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
+                WHERE id = :id AND version = :curV AND status = 'SUBMITTED'
                 """)
                 .param("comment", comment.isBlank() ? "审批通过，请按时使用" : comment)
                 .param("v", nextVersion)
                 .param("id", id)
+                .param("curV", detail.version())
                 .update();
+
+            if (updated == 0) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION", "申请状态已被其他人处理或已发生变更");
+            }
 
             recordAction(id, nextVersion, user.id(), profile.fullName(), "APPROVE", "APPROVED", comment.isBlank() ? "审批通过" : comment);
             noticeWriter.write(detail.applicantId(), "场地借用申请已审批通过", "RESERVATION", id, "MINE",
@@ -687,18 +758,23 @@ public class VenueReservationService {
             if (comment.isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "COMMENT_REQUIRED", "退回申请时必须填写退回理由");
             }
-            jdbc.sql("""
+            int updated = jdbc.sql("""
                 UPDATE venue_reservation
                 SET status = 'RETURNED',
                     processing_comment = :comment,
                     version = :v,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
+                WHERE id = :id AND version = :curV AND status = 'SUBMITTED'
                 """)
                 .param("comment", comment)
                 .param("v", nextVersion)
                 .param("id", id)
+                .param("curV", detail.version())
                 .update();
+
+            if (updated == 0) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION", "申请状态已被其他人处理或已发生变更");
+            }
 
             recordAction(id, nextVersion, user.id(), profile.fullName(), "RETURN", "RETURNED", comment);
             noticeWriter.write(detail.applicantId(), "场地借用申请已退回补充材料", "RESERVATION", id, "MINE",
@@ -707,18 +783,23 @@ public class VenueReservationService {
             if (comment.isBlank()) {
                 throw new ApiException(HttpStatus.BAD_REQUEST, "COMMENT_REQUIRED", "拒绝申请时必须填写拒绝原因");
             }
-            jdbc.sql("""
+            int updated = jdbc.sql("""
                 UPDATE venue_reservation
                 SET status = 'REJECTED',
                     processing_comment = :comment,
                     version = :v,
                     updated_at = CURRENT_TIMESTAMP
-                WHERE id = :id
+                WHERE id = :id AND version = :curV AND status = 'SUBMITTED'
                 """)
                 .param("comment", comment)
                 .param("v", nextVersion)
                 .param("id", id)
+                .param("curV", detail.version())
                 .update();
+
+            if (updated == 0) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION", "申请状态已被其他人处理或已发生变更");
+            }
 
             recordAction(id, nextVersion, user.id(), profile.fullName(), "REJECT", "REJECTED", comment);
             noticeWriter.write(detail.applicantId(), "场地借用申请未通过审批", "RESERVATION", id, "MINE",

@@ -17,6 +17,7 @@ export function safeAssistantDestination(value: unknown): string | null {
   if (/^\/(?:portal\/learning\/(?:timetable|grades|exams)|teaching\/timetable)\?term=[1-9]\d{0,14}(?:&week=\d{4}-\d{2}-\d{2})?$/.test(value)) return value
   if (/^\/(?:portal\/(?:leave|certificates)|student-affairs\/(?:leave|certificates)|repairs\/mine|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value)) return value
   if (/^\/(?:repairs\/mine|logistics\/repairs\/(?:dispatch|tasks))$/.test(value)) return value
+  if (/^\/campus\/explore(?:\?navigate=[a-z0-9-]+)?$/.test(value)) return value
   return null
 }
 export function assistantContextLabel(context: AssistantContext | null) {
@@ -29,6 +30,7 @@ export function assistantContextLabel(context: AssistantContext | null) {
   return `${context.type.startsWith('LEAVE') ? '请假' : '证明'}申请 #${context.id}${context.type.endsWith('REVIEW') ? ' · 岗位范围' : ' · 本人范围'}`
 }
 export function assistantSuggestions(path: string, tools: string[], context: AssistantContext | null): string[] {
+  if (path === '/campus/explore' && tools.includes('campus_navigation')) return ['去图书馆怎么走', '去毓秀楼怎么走', '去红体馆怎么走', '去锦绣餐厅怎么走']
   if (context?.type === 'HOUSING_MINE' && tools.includes('housing_transfer_status')) return ['当前调宿的处理进度', '调宿怎么办理']
   if (path.startsWith('/housing') && tools.includes('my_housing')) return ['我的住宿', '我的调宿进度', '调宿怎么办理']
   if (context?.type.startsWith('REPAIR') && tools.includes('repair_status')) return ['当前报修的处理进度', '报修怎么办理']
@@ -41,6 +43,7 @@ export function assistantSuggestions(path: string, tools: string[], context: Ass
   if (path.startsWith('/student-affairs') && tools.includes('my_review_pending')) return ['岗位待办', path.includes('certificates') ? '证明怎么领取' : '请假怎么申请']
   if (path.includes('/learning') || path.startsWith('/teaching')) return tools.includes('my_timetable') ? ['本周课表', '下周课表'] : ['课表查询规则', '我有多少未读消息']
   if (path.startsWith('/portal') && tools.includes('my_affairs')) return ['我的办事进度', '哪些申请需要补交', '我有多少未读消息']
+  if (tools.includes('campus_navigation') && (path === '/campus/explore' || path === '/workbench')) return ['去图书馆怎么走', '去毓秀楼怎么走', '我有多少未读消息']
   if (tools.includes('my_review_pending')) return ['岗位待办', '证明办理规则', '我有多少未读消息']
   if (tools.includes('my_timetable')) return ['本周课表', '我有多少未读消息']
   return ['请假怎么申请', '证明怎么领取', '我有多少未读消息']

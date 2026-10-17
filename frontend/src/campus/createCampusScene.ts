@@ -7,7 +7,7 @@ import { campusOverviewPosition, overviewTarget } from './framing'
 
 export type CampusView = 'overview' | 'top' | 'detail' | 'free'
 export interface PlaceLabel { id: string; left: number; top: number; visible: boolean }
-interface SceneCallbacks {
+export interface SceneCallbacks {
   select: (id: string) => void
   labels: (labels: PlaceLabel[]) => void
   view: (view: CampusView) => void
@@ -18,7 +18,7 @@ interface SceneCallbacks {
 export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) {
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 1200)
-  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, logarithmicDepthBuffer: true })
   let disposed = false, contextLost = false, frame = 0
   const resize = new ResizeObserver(size)
   let width = 1, height = 1, view: CampusView = 'overview', current: CampusPlace | undefined
@@ -43,7 +43,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true; controls.dampingFactor = 0.09
   controls.minDistance = 30; controls.maxDistance = 760
-  controls.minPolarAngle = 0.035; controls.maxPolarAngle = Math.PI / 2.35
+  controls.minPolarAngle = 0.035; controls.maxPolarAngle = Math.PI / 2.08
   controls.maxTargetRadius = 118
   controls.cursor.set(0, 0, 0)
   controls.screenSpacePanning = false
@@ -78,14 +78,22 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
       controls.target.lerpVectors(transition.targetFrom, transition.targetTo, eased)
       if (progress === 1) stopTransition()
     }
+    model.tick?.(time)
     controls.update()
+    if (camera.position.y < 3.8) camera.position.y = 3.8
+    if (controls.target.y < 0.3) controls.target.y = 0.3
+    for (const occluder of labelOccluders) {
+      if (occluder.bounds.containsPoint(camera.position)) {
+        camera.position.y = Math.max(camera.position.y, occluder.bounds.max.y + 2.0)
+      }
+    }
     renderer.render(scene, camera)
     const nextLabels = campusPlaces.map(place => {
       const anchorHeight = place.height + 4
       labelAnchor.set(place.x, anchorHeight, place.z)
       projected.copy(labelAnchor).project(camera)
-      const important = ['east-library', 'south-gate', 'east-gate', 'statue-huangdi', 'east-sports', 'east-square', 'east-art', 'east-wenhua', 'east-shuhua', 'east-gym', 'east-water', 'east-dorms', 'east-affairs', 'east-admin', 'east-jidian'].includes(place.id)
-      const mobile = ['east-library', 'south-gate', 'east-gate', 'statue-huangdi', 'east-sports', 'east-square', 'east-gym', 'east-water'].includes(place.id)
+      const important = ['east-library', 'south-gate', 'north-gate', 'east-gate', 'east-sports', 'east-square', 'east-art', 'east-wenhua', 'east-shuhua', 'east-gym', 'east-water', 'east-h1', 'east-h2', 'east-affairs', 'east-admin', 'east-jingyi', 'east-jinxiu-dining', 'east-jinxiu', 'east-canteen-wenhua', 'east-auditorium'].includes(place.id)
+      const mobile = ['east-library', 'south-gate', 'east-gate', 'east-sports', 'east-square', 'east-gym', 'east-jinxiu-dining', 'east-jingyi', 'east-water'].includes(place.id)
       const distance = camera.position.distanceTo(new THREE.Vector3(place.x, place.height, place.z))
       const anchorDistance = camera.position.distanceTo(labelAnchor)
       labelRay.set(camera.position, labelAnchor.clone().sub(camera.position).normalize())
@@ -201,10 +209,15 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
     dispose,
     select(id: string | null) {
       current = campusPlaces.find(place => place.id === id); model.select(current)
-      if (!current) { move(overviewPosition(), overviewTarget, 'overview'); return }
-      const target = new THREE.Vector3(current.x, current.height * 0.25, current.z)
+      if (!current) {
+        controls.minDistance = 30
+        move(overviewPosition(), overviewTarget, 'overview')
+        return
+      }
+      const target = new THREE.Vector3(current.x, current.height * 0.35, current.z)
       const extent = Math.max(current.width, current.depth)
-      const distance = Math.max(42, extent * 1.4) * (width / height < 1 ? 1.25 : 1)
+      const distance = Math.max(48, extent * 1.45) * (width / height < 1 ? 1.25 : 1)
+      controls.minDistance = Math.max(22, extent * 0.65 + 8)
       move(target.clone().add(new THREE.Vector3(distance * 0.85, distance * 0.83, distance)), target, 'detail')
     },
     overview() { move(overviewPosition(), overviewTarget, 'overview') },

@@ -12,17 +12,21 @@ export interface MapFeature {
 
 // Manual tracing of visible Amap views, not a cadastral survey. Points are pixels
 // in the saved north-up satellite image, not geographical coordinates. Roof
-// outlines approximate footprints; the viewport URL is not a georeferencing transform.
+// outlines approximate footprints; guide-only markers are approximate correspondences
+// in that image frame. The viewport URL is not a georeferencing transform.
 export const campusEvidence = {
-  date: '2026-10-16', version: 'east-multimap-trace-v3',
+  date: '2026-10-17', version: 'east-layout-reference-v4',
   mapUrl: 'https://www.amap.com/ssr/search?query_type=TQUERY&query=%E9%83%91%E5%B7%9E%E5%B7%A5%E4%B8%9A%E5%BA%94%E7%94%A8%E6%8A%80%E6%9C%AF%E5%AD%A6%E9%99%A2%E4%B8%9C%E6%A0%A1%E5%8C%BA&city=410100&geoobj=113.757616%7C34.408394%7C113.763734%7C34.418557&zoom=16.05',
   tencentMapUrl: 'https://map.qq.com/?type=point&pointx=113.7599&pointy=34.4132&title=%E9%83%91%E5%B7%9E%E5%B7%A5%E4%B8%9A%E5%BA%94%E7%94%A8%E6%8A%80%E6%9C%AF%E5%AD%A6%E9%99%A2%E4%B8%9C%E6%A0%A1%E5%8C%BA',
+  layoutReferenceUrl: '/campus/east-campus-layout-reference.jpg',
+  layoutReferenceFile: 'frontend/public/campus/east-campus-layout-reference.jpg',
+  layoutReferenceDate: 'unknown',
   panoramaUrl: 'https://www.720yun.com/t/a4vkne7m7qw?scene_id=29440437',
   screenshot: 'artifacts/campus-explore/east-campus-amap-satellite-2026-10-04.jpg',
   extentScreenshot: 'artifacts/campus-explore/east-campus-amap-extent-2026-10-04.jpg',
   southScreenshot: 'artifacts/campus-explore/east-campus-amap-south-2026-10-04.jpg',
-  horizontalAccuracy: 'manual-image-trace', heightAccuracy: 'uniform-display-only',
-  coverage: '东校区主校园；依据腾讯地图、高德影像、Google卫星及官方全景校正',
+  horizontalAccuracy: 'manual-image-trace', heightAccuracy: 'display-only',
+  coverage: '东校区主要建筑；分布图核对名称，留存影像提供轮廓，未作实地测绘',
   northAxis: '-z', modelUnitsPerPixel: 0.35,
 } as const
 // The enlarged views are registered to the overview using four manually read
@@ -65,7 +69,6 @@ export const mapFeatures: MapFeature[] = [
   { id: 'shuhua-roof', kind: 'building', placeId: 'east-shuhua', evidenceView: 'north', outline: detailOutline('north', [[324, 228], [414, 222], [478, 239], [478, 359], [323, 359], [326, 310], [342, 310], [342, 272], [324, 272]]), holes: [detailOutline('north', [[385, 279], [434, 279], [434, 314], [383, 314]])] },
   { id: 'zhiyuan-roof', kind: 'building', placeId: 'east-zhiyuan', evidenceView: 'north', outline: detailOutline('north', [[515, 234], [625, 234], [691, 243], [691, 366], [539, 366], [539, 330], [558, 330], [558, 289], [515, 289]]), holes: [detailOutline('north', [[593, 286], [649, 283], [649, 318], [594, 319]])] },
   { id: 'h8-annex-roof', kind: 'building', placeId: 'east-h8', evidenceView: 'north', outline: detailOutline('north', [[111, 237], [205, 239], [230, 264], [230, 286], [111, 285]]) },
-  { id: 'jingyi-roof', kind: 'building', placeId: 'east-jingyi', evidenceView: 'central', outline: detailOutline('central', [[326, 181], [437, 169], [437, 205], [591, 209], [649, 223], [649, 338], [492, 338], [492, 384], [368, 384], [368, 303], [311, 303], [310, 244], [327, 244]]), holes: [detailOutline('central', [[344, 218], [403, 215], [403, 268], [345, 269]]), detailOutline('central', [[562, 254], [609, 254], [609, 289], [562, 289]])] },
   // Raised symbol, not a measured clinic building or floor height.
   { id: 'clinic-map-point', kind: 'point', placeId: 'east-clinic', evidenceView: 'central', markerHeight: 3.6, outline: detailOutline('central', [[145, 445]]) },
   { id: 'art-north', kind: 'building', placeId: 'east-art', outline: [[228, 125], [242, 116], [292, 141], [283, 157]] },
@@ -78,82 +81,72 @@ export const mapFeatures: MapFeature[] = [
   { id: 'jiangong-roof', kind: 'building', placeId: 'east-jiangong', evidenceView: 'south', outline: detailOutline('south', [[232, 449], [263, 431], [266, 439], [298, 419], [351, 453], [277, 555], [260, 547], [244, 534], [235, 515], [217, 513], [198, 494]]), holes: [detailOutline('south', [[248, 466], [278, 447], [308, 466], [267, 515], [245, 497]])] },
   { id: 'wenhua-roof', kind: 'building', placeId: 'east-wenhua', evidenceView: 'wenhua', outline: detailOutline('wenhua', [[489, 279], [621, 339], [615, 366], [554, 479], [493, 524], [422, 567], [347, 440], [385, 414], [412, 379], [446, 343]]), holes: [detailOutline('wenhua', [[480, 339], [557, 376], [535, 413], [461, 372]]), detailOutline('wenhua', [[448, 388], [490, 422], [455, 473], [414, 421]])] },
   { id: 'jinxiu-north', kind: 'building', placeId: 'east-jinxiu', outline: [[465, 286], [509, 285], [520, 309], [520, 327], [464, 327]], holes: [[[477, 297], [500, 297], [508, 311], [508, 316], [477, 316]]] },
-  { id: 'jinxiu-south', kind: 'building', placeId: 'east-jinxiu', outline: [[462, 337], [518, 337], [519, 375], [461, 376]], holes: [[[475, 347], [506, 347], [506, 365], [475, 365]]] },
+  { id: 'jinxiu-south', kind: 'building', placeId: 'east-fenghua', outline: [[462, 337], [518, 337], [519, 375], [461, 376]], holes: [[[475, 347], [506, 347], [506, 365], [475, 365]]] },
   { id: 'construction-roof', kind: 'building', placeId: 'east-construction', outline: [[284, 482], [369, 482], [369, 544], [285, 544]], holes: [[[300, 497], [354, 497], [354, 530], [300, 530]]] },
   { id: 'medical-roof', kind: 'building', placeId: 'east-medical', outline: [[416, 482], [517, 482], [517, 529], [502, 544], [416, 544]], holes: [[[432, 497], [502, 497], [502, 523], [491, 530], [432, 530]]] },
   { id: 'yingcai-square', kind: 'plaza', placeId: 'east-square', outline: [[176, 190], [197, 184], [217, 192], [230, 211], [225, 230], [209, 242], [188, 242], [170, 231], [164, 211]] },
-  // 文化景观：孔子行教圣像（图书馆西侧文化庭院）
-  { id: 'kongzi-statue-body', kind: 'building', placeId: 'statue-kongzi', outline: [[232, 191], [238, 191], [241, 194], [241, 198], [238, 201], [232, 201], [229, 198], [229, 194]] },
-  { id: 'kongzi-statue-plaza', kind: 'plaza', placeId: 'statue-kongzi', outline: [[225, 185], [245, 185], [247, 187], [247, 205], [245, 207], [225, 207], [223, 205], [223, 187]] },
   { id: 'west-track', kind: 'track', placeId: 'east-sports', outline: [[39, 190], [64, 175], [99, 175], [124, 190], [142, 214], [143, 240], [130, 270], [106, 293], [78, 309], [49, 300], [25, 278], [15, 250], [20, 222]] },
   { id: 'west-field', kind: 'field', placeId: 'east-sports', outline: [[67, 196], [112, 222], [82, 275], [38, 249]] },
   { id: 'west-courts', kind: 'court', placeId: 'east-sports', outline: [[113, 298], [172, 320], [153, 375], [94, 349]] },
   { id: 'east-gate-point', kind: 'point', placeId: 'east-gate', outline: [[600, 220]] },
   { id: 'north-water', kind: 'water', placeId: 'east-water', outline: [[493, 70], [509, 82], [515, 113], [529, 145], [534, 180], [527, 204], [511, 211], [501, 194]] },
   { id: 'east-water', kind: 'water', placeId: 'east-water', outline: [[543, 228], [570, 225], [590, 236], [589, 276], [588, 313], [576, 347], [584, 388], [589, 432], [585, 485], [574, 531], [566, 555], [549, 568], [527, 568], [529, 548], [536, 523], [541, 484], [543, 442], [540, 397], [544, 363], [539, 328], [536, 289], [540, 265]] },
-  { id: 'central-water', kind: 'water', placeId: 'east-water', outline: [[407, 324], [431, 329], [438, 350], [438, 377], [425, 384], [387, 383], [372, 367], [378, 345]] },
-  // 居住生活区：西北侧北区学生公寓楼群（H1-H7标准化学生宿舍区）
-  { id: 'dorm-block-h1-h2', kind: 'building', placeId: 'east-dorms', outline: [[60, 105], [130, 105], [130, 122], [60, 122]] },
-  { id: 'dorm-block-h3-h4', kind: 'building', placeId: 'east-dorms', outline: [[55, 132], [135, 132], [135, 149], [55, 149]] },
-  { id: 'dorm-block-h5-h6', kind: 'building', placeId: 'east-dorms', outline: [[70, 158], [145, 158], [145, 175], [70, 175]] },
-  { id: 'dorm-block-h7', kind: 'building', placeId: 'east-dorms', outline: [[95, 184], [165, 184], [165, 201], [95, 201]] },
-  // 西侧文体区：室内综合体育馆 / 篮球馆（红体馆，千人观众席与专业主赛场）
-  { id: 'gym-main-arena', kind: 'building', placeId: 'east-gym', outline: [[168, 298], [222, 298], [222, 348], [168, 348]] },
-  { id: 'gym-south-foyer', kind: 'building', placeId: 'east-gym', outline: [[178, 348], [212, 348], [212, 358], [178, 358]] },
-  { id: 'gym-west-training', kind: 'building', placeId: 'east-gym', outline: [[158, 308], [168, 308], [168, 338], [158, 338]] },
-  // 西南工科组团：机电工程学院（智能制造实训基地与新能源汽车实验室）
-  { id: 'jidian-north-building', kind: 'building', placeId: 'east-jidian', outline: [[175, 380], [245, 380], [245, 412], [175, 412]], holes: [[[187, 388], [233, 388], [233, 404], [187, 404]]] },
-  { id: 'jidian-south-building', kind: 'building', placeId: 'east-jidian', outline: [[175, 420], [245, 420], [245, 452], [175, 452]], holes: [[[187, 428], [233, 428], [233, 444], [187, 444]]] },
-  { id: 'jidian-gallery-link', kind: 'building', placeId: 'east-jidian', outline: [[204, 412], [216, 412], [216, 420], [204, 420]] },
-  // 中南核心服务与行政：学生事务综合服务中心与行政管理中心
-  { id: 'affairs-main-center', kind: 'building', placeId: 'east-affairs', outline: [[266, 380], [314, 380], [314, 418], [266, 418]], holes: [[[278, 390], [302, 390], [302, 408], [278, 408]]] },
-  { id: 'admin-main-center', kind: 'building', placeId: 'east-admin', outline: [[264, 425], [316, 425], [316, 456], [264, 456]] },
-  { id: 'admin-south-portico', kind: 'building', placeId: 'east-admin', outline: [[278, 456], [302, 456], [302, 461], [278, 461]] },
-  // 教学与综合配套
-  { id: 'roof-central-01', kind: 'building', outline: [[365, 397], [420, 397], [420, 420], [365, 420]] },
-  // 东南生活与餐饮：文华餐厅（第二学生食堂）
-  { id: 'canteen-wenhua-main', kind: 'building', placeId: 'east-canteen-wenhua', outline: [[426, 395], [474, 395], [474, 440], [426, 440]] },
-  { id: 'canteen-wenhua-portico', kind: 'building', placeId: 'east-canteen-wenhua', outline: [[440, 440], [460, 440], [460, 446], [440, 446]] },
-  // 东侧秋月塘岸边：水上高尔夫挥杆练习场
-  { id: 'roof-east-01', kind: 'building', placeId: 'east-golf', outline: [[471, 410], [524, 410], [524, 446], [471, 446]], holes: [[[483, 420], [512, 420], [512, 435], [483, 435]]] },
-  // 南中轴核心文化地标：轩辕黄帝青铜塑像（新郑黄帝故里文化象征）
-  { id: 'huangdi-statue-monument', kind: 'building', placeId: 'statue-huangdi', outline: [[390, 524], [398, 524], [401, 527], [401, 533], [398, 536], [390, 536], [387, 533], [387, 527]] },
-  { id: 'huangdi-statue-plaza', kind: 'plaza', placeId: 'statue-huangdi', outline: [[380, 516], [408, 516], [412, 520], [412, 540], [408, 544], [380, 544], [376, 540], [376, 520]] },
-  // 校园法定主入口：正南门（南大门，新郑市学院路16号）
-  { id: 'south-gate-portal-arch', kind: 'building', placeId: 'south-gate', outline: [[372, 582], [416, 582], [416, 592], [372, 592]] },
-  { id: 'south-gate-entry-plaza', kind: 'plaza', placeId: 'south-gate', outline: [[360, 565], [428, 565], [428, 582], [360, 582]] },
+  { id: 'central-water', kind: 'water', outline: [[407, 324], [431, 329], [438, 350], [438, 377], [425, 384], [387, 383], [372, 367], [378, 345]] },
+  // Roofs retain the observed outlines. Assignments below are supported by the supplied
+  // distribution plan; remaining unknown roofs stay anonymous.
+  { id: 'roof-nw-01', kind: 'building', outline: [[70, 120], [79, 106], [139, 142], [132, 157]] },
+  { id: 'roof-nw-02', kind: 'building', outline: [[56, 143], [64, 129], [126, 164], [118, 178]] },
+  { id: 'roof-nw-03', kind: 'building', outline: [[99, 167], [112, 160], [156, 186], [149, 196]] },
+  { id: 'roof-nw-04', kind: 'building', outline: [[112, 185], [125, 178], [172, 204], [165, 218]] },
+  { id: 'roof-west-01', kind: 'building', outline: [[175, 303], [194, 303], [194, 323], [175, 323]] },
+  { id: 'roof-west-02', kind: 'building', outline: [[183, 337], [202, 337], [202, 355], [183, 355]] },
+  { id: 'roof-southwest-01', kind: 'building', placeId: 'east-canteen-wenhua', outline: [[267, 383], [308, 383], [308, 422], [267, 422]], holes: [[[278, 394], [297, 394], [297, 411], [278, 411]]] },
+  { id: 'roof-southwest-02', kind: 'building', placeId: 'east-construction-training', outline: [[264, 430], [305, 430], [305, 449], [264, 449]] },
+  { id: 'roof-central-01', kind: 'building', placeId: 'east-admin', outline: [[365, 397], [428, 397], [428, 419], [365, 419]] },
+  { id: 'roof-central-02', kind: 'building', outline: [[438, 417], [460, 417], [460, 449], [438, 449]] },
+  { id: 'roof-east-01', kind: 'building', placeId: 'east-auditorium', outline: [[471, 410], [524, 410], [524, 446], [471, 446]], holes: [[[483, 420], [512, 420], [512, 435], [483, 435]]] },
+  // 锦绣餐厅与静逸楼为独立建筑，中间由校内道路自然分隔，无物理连通
+  { id: 'jinxiu-dining-roof', kind: 'building', placeId: 'east-jinxiu-dining', evidenceView: 'central', outline: detailOutline('central', [[326,181],[437,169],[445,169],[445,384],[368,384],[368,303],[311,303],[310,244],[327,244]]), holes: [detailOutline('central', [[344,218],[403,215],[403,268],[345,269]])] },
+  { id: 'jingyi-roof', kind: 'building', placeId: 'east-jingyi', evidenceView: 'central', outline: detailOutline('central', [[508,208],[591,209],[649,223],[649,338],[508,338]]), holes: [detailOutline('central', [[562,254],[609,254],[609,289],[562,289]])] },
+  // Near-circular northwest roof visible in the saved overview; its identity is
+  // supplied by the school distribution plan, not guessed from its colour.
+  { id: 'gym-northwest-roof', kind: 'building', placeId: 'east-gym', outline: [[102,91],[109,80],[122,77],[135,82],[142,93],[140,106],[130,115],[116,117],[105,108],[100,99]] },
+  // Guide-only positions remain symbols. No footprint, floor or entrance is invented.
+  { id: 'h1-guide-point', kind: 'point', placeId: 'east-h1', outline: [[180,285]] },
+  { id: 'h2-guide-point', kind: 'point', placeId: 'east-h2', outline: [[208,388]] },
+  { id: 'affairs-guide-point', kind: 'point', placeId: 'east-affairs', outline: [[476,152]] },
+  { id: 'north-gate-point', kind: 'point', placeId: 'north-gate', outline: [[318,64]] },
+  { id: 'south-gate-point', kind: 'point', placeId: 'south-gate', outline: [[394,587]] },
 ]
 export interface MapRoad { id: string; points: MapPoint[]; width: number; name?: string; evidenceView?: DetailView }
 // Display widths in source pixels; internal streets remain unnamed.
 export const mapRoads: MapRoad[] = [
   { id: 'north-road', name: '少典路', width: 11, points: [[-20, 53], [625, 53]] },
   { id: 'east-road', name: '万福路', width: 11, points: [[618, 53], [618, 594]] },
-  { id: 'west-road', name: '中兴路', width: 9, points: [[114, 65], [45, 142], [-18, 224], [-17, 274], [48, 329], [134, 383], [219, 448], [266, 507], [281, 590]] },
+  { id: 'west-road', name: '中华路', width: 9, points: [[114, 65], [45, 142], [-18, 224], [-17, 274], [48, 329], [134, 383], [219, 448], [266, 507], [281, 590]] },
   { id: 'south-road', name: '学院路', width: 12, points: [[264, 596], [619, 596]] },
-  { id: 'north-axis', name: '启航大道', width: 6, points: [[318, 71], [318, 183]] },
-  { id: 'library-ring', name: '致远环路', width: 6, points: [[320, 183], [346, 191], [362, 212], [362, 238], [346, 258], [321, 270], [296, 258], [281, 238], [281, 214], [295, 194], [320, 183]] },
-  { id: 'east-entrance-axis', name: '博学路', width: 7, points: [[364, 224], [466, 223], [601, 218]] },
-  { id: 'south-axis', name: '迎宾大道 (北段)', width: 6, points: [[320, 270], [320, 383], [317, 454]] },
-  { id: 'east-internal', width: 6, points: [[465, 80], [464, 222], [459, 301], [452, 382], [457, 455], [532, 455], [532, 554]] },
+  { id: 'jinxiu-jingyi-road', name: '静逸西路', width: 5, points: [[399.95, 120], [399.95, 225]] },
+  { id: 'north-axis', name: '外环北路中轴', width: 6, points: [[318, 71], [318, 183]] },
+  { id: 'library-ring', name: '中环路 (图书馆环路)', width: 6, points: [[320, 183], [346, 191], [362, 212], [362, 238], [346, 258], [321, 270], [296, 258], [281, 238], [281, 214], [295, 194], [320, 183]] },
+  { id: 'east-entrance-axis', width: 7, points: [[364, 224], [466, 223], [601, 218]] },
+  { id: 'south-axis', width: 6, points: [[320, 270], [320, 383], [317, 454]] },
+  { id: 'east-internal', name: '外环东路', width: 6, points: [[465, 80], [464, 222], [459, 301], [452, 382], [457, 455], [532, 455], [532, 554]] },
   { id: 'east-bank', width: 5, points: [[532, 223], [530, 292], [533, 382], [531, 477], [520, 548], [506, 558]] },
   { id: 'central-east-curve', width: 5, points: [[353, 256], [379, 245], [410, 257], [440, 295], [449, 323], [444, 345], [427, 369], [398, 388], [354, 391]] },
   { id: 'central-west-curve', width: 5, points: [[287, 251], [262, 235], [237, 232], [222, 247], [215, 277], [226, 311], [255, 337], [289, 343], [318, 333]] },
   { id: 'square-link', width: 5, points: [[227, 221], [280, 224]] },
-  { id: 'square-north-link', width: 5, points: [[216, 189], [234, 177], [277, 193]] },
+  { id: 'square-north-link', name: '艺馨路', width: 5, points: [[216, 189], [234, 177], [277, 193]] },
   { id: 'square-west-link', width: 5, points: [[169, 206], [129, 184], [116, 170], [66, 142]] },
-  { id: 'west-sports-link', width: 5, points: [[132, 281], [163, 265], [169, 236], [190, 249], [213, 267]] },
+  { id: 'west-sports-link', name: '英才大道', width: 5, points: [[132, 281], [163, 265], [169, 236], [190, 249], [213, 267]] },
   { id: 'south-cross-01', width: 6, points: [[250, 461], [532, 460]] },
   { id: 'south-cross-02', width: 5, points: [[277, 558], [506, 558]] },
-  { id: 'south-approach-north', name: '迎宾大道 (南段)', width: 12, points: [[394, 463], [394, 516]] },
-  { id: 'south-approach-south', name: '迎宾大道 (迎宾段)', width: 12, points: [[394, 544], [394, 582]] },
-  { id: 'south-gate-portal-link', name: '正南门出入通道', width: 12, points: [[394, 582], [394, 596]] },
-  { id: 'jidian-service-road', width: 5, points: [[245, 416], [266, 416]] },
+  { id: 'south-approach', name: '人文大道', width: 12, points: [[394, 463], [394, 596]] },
   { id: 'southwest-road', width: 5, points: [[275, 474], [276, 548], [287, 558]] },
   { id: 'medical-front', width: 5, points: [[406, 477], [406, 548], [412, 558]] },
   { id: 'north-building-link', width: 3.5, evidenceView: 'north', points: detailOutline('north', [[104, 195], [270, 195], [501, 199], [685, 212], [727, 250]]) },
-  { id: 'north-central-lane', width: 3.5, evidenceView: 'north', points: detailOutline('north', [[501, 199], [501, 409], [711, 423]]) },
+  { id: 'north-central-lane', name: '外环北路北段', width: 3.5, evidenceView: 'north', points: detailOutline('north', [[501, 199], [501, 409], [711, 423]]) },
   { id: 'h8-front-link', width: 3, evidenceView: 'north', points: detailOutline('north', [[265, 301], [169, 302], [166, 359]]) },
-  { id: 'jingyi-west-link', width: 3.5, evidenceView: 'central', points: detailOutline('central', [[227, 222], [299, 216], [300, 295], [359, 315], [359, 384]]) },
+  { id: 'jingyi-west-link', name: '自强路段', width: 3.5, evidenceView: 'central', points: detailOutline('central', [[227, 222], [299, 216], [300, 295], [359, 315], [359, 384]]) },
   { id: 'wenhua-north-approach', width: 3.5, evidenceView: 'wenhua', points: detailOutline('wenhua', [[578, 230], [526, 326]]) },
   { id: 'wenhua-cross-link', width: 3.5, evidenceView: 'wenhua', points: detailOutline('wenhua', [[278, 405], [381, 399]]) },
   { id: 'jiangong-front-link', width: 3.5, evidenceView: 'south', points: detailOutline('south', [[439, 523], [361, 540], [300, 559]]) },

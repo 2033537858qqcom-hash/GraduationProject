@@ -14,12 +14,13 @@ test('only explicit application routes and valid IDs become context', () => {
   assert.equal(assistantContext('/admin/foundation', '2'), null)
 })
 test('model or source URLs cannot create arbitrary navigation targets', () => {
-  for (const path of ['https://evil.test', '//evil.test', '/assistant/guides/../../admin', '/assistant/guides/%2e%2e', '/api/assistant/query', '/portal/certificates?id=2&tab=details&userId=3', '/admin/foundation', '/portal/learning\\evil']) assert.equal(safeAssistantDestination(path), null)
-  for (const path of ['/assistant/guides/leave', '/portal/learning/grades', '/portal/certificates?id=2&tab=details', '/student-affairs/leave', '/portal/learning/timetable?term=1&week=2026-10-12', '/portal/learning/grades?term=1', '/repairs/mine', '/repairs/mine?id=8&tab=details', '/logistics/repairs/dispatch?id=8&tab=details', '/logistics/repairs/tasks']) assert.equal(safeAssistantDestination(path), path)
+  for (const path of ['https://evil.test', '//evil.test', '/assistant/guides/../../admin', '/assistant/guides/%2e%2e', '/api/assistant/query', '/portal/certificates?id=2&tab=details&userId=3', '/admin/foundation', '/portal/learning\\evil', '/campus/explore?navigate=evil%20inject', '/campus/explore?foo=bar']) assert.equal(safeAssistantDestination(path), null)
+  for (const path of ['/assistant/guides/leave', '/portal/learning/grades', '/portal/certificates?id=2&tab=details', '/student-affairs/leave', '/portal/learning/timetable?term=1&week=2026-10-12', '/portal/learning/grades?term=1', '/repairs/mine', '/repairs/mine?id=8&tab=details', '/logistics/repairs/dispatch?id=8&tab=details', '/logistics/repairs/tasks', '/campus/explore', '/campus/explore?navigate=east-jinxiu']) assert.equal(safeAssistantDestination(path), path)
   assert.equal(safeAssistantDestination('/repairs/mine?id=8&tab=details&contact=1'), null)
   assert.equal(safeAssistantDestination('/logistics/repairs/statistics'), null)
 })
 test('suggestions follow permissions and current application context', () => {
+  assert.deepEqual(assistantSuggestions('/campus/explore', ['campus_navigation'], null), ['去图书馆怎么走', '去毓秀楼怎么走', '去红体馆怎么走', '去锦绣餐厅怎么走'])
   assert.deepEqual(assistantSuggestions('/portal/learning/grades', ['my_grades'], null), ['我的已发布成绩', '成绩怎么查询'])
   assert.deepEqual(assistantSuggestions('/portal/certificates', ['application_status'], { type: 'CERTIFICATE_MINE', id: 2 }), ['当前申请的处理进度', '证明怎么领取'])
   assert.equal(assistantSuggestions('/workbench', ['search_guides', 'my_notice_summary'], null).includes('岗位待办'), false)

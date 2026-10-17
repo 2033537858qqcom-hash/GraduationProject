@@ -171,7 +171,10 @@ public class AgentService {
         if(context!=null && context.type().equals("HOUSING_MINE") && q.matches(".*(这条|当前|这个|状态|进度).*")) result.add(tools.call("housing_transfer_status",Map.of()));
         else if(context!=null && context.type().startsWith("REPAIR_") && names.contains("repair_status") && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("repair_status",Map.of()));
         else if(context!=null && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("application_status",Map.of()));
-        if(q.matches(".*(怎么|如何|规则|最长|材料|领取|办理流程).*")) result.add(tools.call("search_guides",Map.of("query",q.length()>200?q.substring(0,200):q)));
+        if(names.contains("campus_navigation") && (q.matches(".*(怎么走|怎么去|在哪|在哪个位置|在什么位置|路线|导航|去往|怎么到|步行路线).*")
+            || (q.contains("去") && (q.contains("楼") || q.contains("馆") || q.contains("门") || q.contains("餐厅") || q.contains("操场") || q.contains("食堂") || q.contains("食府") || q.contains("广场") || q.contains("湖"))))) {
+            result.add(tools.call("campus_navigation",Map.of("destination",q,"origin","南门")));
+        } else if(q.matches(".*(怎么|如何|规则|最长|材料|领取|办理流程).*")) result.add(tools.call("search_guides",Map.of("query",q.length()>200?q.substring(0,200):q)));
         if(q.matches(".*(我的住宿|我的宿舍|住在哪|住哪里|当前住宿|当前房间|本人住宿).*")) result.add(tools.call("my_housing",Map.of()));
         if(q.matches(".*(我的调宿|调宿进度|调宿记录|调宿申请.*状态).*")) result.add(tools.call("my_housing_transfers",Map.of()));
         if(q.matches(".*(课表|课程安排|本周|这周|下周|上课|授课).*")) {

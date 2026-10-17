@@ -6,14 +6,14 @@ import * as THREE from 'three'
 
 // Regression checks for source provenance, orientation, selection and camera framing.
 // Passing these checks is not a survey or a claim that every traced edge is exact.
-const server = await createServer({ server: { middlewareMode: true } })
+const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false } })
 try {
   const { buildCampus } = await server.ssrLoadModule('/src/campus/buildCampus.ts')
   const { campusPlaces, campusTour } = await server.ssrLoadModule('/src/campus/manifest.ts')
   const { campusEvidence, mapFeatures, mapToModel, detailViews, detailRegistration, detailToMap } = await server.ssrLoadModule('/src/campus/eastCampusLayout.ts')
   const { campusOverviewPosition, overviewTarget } = await server.ssrLoadModule('/src/campus/framing.ts')
   assert.equal(campusEvidence.horizontalAccuracy, 'manual-image-trace')
-  assert.equal(campusEvidence.heightAccuracy, 'uniform-display-only')
+  assert.equal(campusEvidence.heightAccuracy, 'display-only')
   for (const file of [campusEvidence.screenshot, campusEvidence.extentScreenshot, campusEvidence.southScreenshot]) {
     assert.ok(existsSync(`../${file}`), `The source screenshot must be preserved: ${file}`)
   }
@@ -25,7 +25,9 @@ try {
     assert.ok(Math.hypot(traced[0] - anchor.overview[0], traced[1] - anchor.overview[1]) < 2,
       'Detail image registration must preserve the overview anchor positions')
   }
-  assert.ok(campusPlaces.every(place => place.verification === 'map-observed' && place.heightStatus === 'display-only' && !place.id.startsWith('demo-')))
+  assert.ok(existsSync(`../${campusEvidence.layoutReferenceFile}`), 'The supplied campus distribution plan must be preserved')
+  assert.ok(campusPlaces.every(place => ['map-observed', 'reference-located'].includes(place.verification) && place.heightStatus === 'display-only' && !place.id.startsWith('demo-')))
+  for (const item of campusPlaces) assert.ok(existsSync(`../${item.sourceScreenshot}`), `${item.name}: source evidence is missing`)
   assert.equal(new Set(campusPlaces.map(place => place.id)).size, campusPlaces.length)
   assert.equal(new Set(mapFeatures.map(feature => feature.id)).size, mapFeatures.length)
   assert.ok(campusTour.every(id => campusPlaces.some(place => place.id === id)))
@@ -38,10 +40,11 @@ try {
   assert.ok(place('east-jingyi').z > place('east-zhiyuan').z && place('east-jingyi').z < place('east-library').z)
   assert.ok(place('east-jiangong').z > place('east-xinke').z && place('east-jiangong').z < place('east-construction').z)
   assert.ok(place('south-gate').z > place('east-admin').z, 'The south gate is the southernmost entrance on Xueyuan Road')
-  assert.ok(place('statue-huangdi').z > place('east-admin').z && place('statue-huangdi').z < place('south-gate').z, 'Huangdi statue sits on the south entrance axis')
-  assert.ok(place('east-jidian').x < place('east-affairs').x, 'Jidian engineering college is in the southwest engineering block')
-  assert.ok(place('east-canteen-wenhua').z > place('east-wenhua').z, 'Wenhua canteen is south of Wenhua building')
-  assert.ok(place('statue-kongzi').x < place('east-library').x && place('statue-kongzi').x > place('east-square').x, 'Kongzi statue is between Library and Yingcai Square')
+  assert.ok(place('east-jinxiu-dining').x < place('east-jingyi').x, 'The supplied plan places 锦绣餐厅 west of 静逸楼')
+  assert.ok(place('east-fenghua').z > place('east-jinxiu').z, '风华楼 must remain separate from 毓秀楼')
+  assert.ok(place('east-gym').x < place('east-swimming').x && place('east-gym').z < place('east-swimming').z, '红体馆 belongs in the northwest, not over the courts')
+  assert.ok(place('east-canteen-wenhua').x < place('east-admin').x, '文华餐厅 is west of 行政楼')
+  assert.ok(place('east-affairs').z < place('east-library').z, 'The service centre belongs in the northeast guide area')
   assert.equal(place('east-clinic').kind, 'service', 'The clinic POI must not become an invented independent building')
   const scene = new THREE.Scene(), model = buildCampus(scene)
   scene.updateMatrixWorld(true)
@@ -98,5 +101,5 @@ try {
     }
   }
   model.select(place('east-medical')); model.select(place('east-library')); model.select(); model.dispose()
-  console.log(`Campus checks passed: ${campusPlaces.length} map-labelled places, ${mapFeatures.length} traced features, ${meshes.length} root meshes, ${Math.round(triangles).toLocaleString()} triangles.`)
+  console.log(`Campus checks passed: ${campusPlaces.length} referenced places, ${mapFeatures.length} traced features, ${meshes.length} root meshes, ${Math.round(triangles).toLocaleString()} triangles.`)
 } finally { await server.close() }

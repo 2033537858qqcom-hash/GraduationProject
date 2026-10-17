@@ -1,0 +1,38 @@
+# Include inside the site's server block after substituting ONLY
+# ${AMAP_SECURITY_JSCODE}. Do not commit the generated secret-bearing file.
+# Use the CA bundle path provided by your deployment image.
+location ^~ /_AMapService/v4/map/styles {
+    limit_except GET { deny all; }
+    if ($arg_jscode != "") { return 400; }
+    if ("${AMAP_SECURITY_JSCODE}" = "") { return 503; }
+    set $args "$args&jscode=${AMAP_SECURITY_JSCODE}";
+    proxy_set_header Host webapi.amap.com;
+    proxy_set_header Cookie "";
+    proxy_set_header Authorization "";
+    proxy_set_header Proxy-Authorization "";
+    proxy_set_header X-CSRF-Token "";
+    proxy_set_header X-XSRF-Token "";
+    proxy_hide_header Set-Cookie;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    proxy_pass https://webapi.amap.com/v4/map/styles;
+}
+
+location ^~ /_AMapService/ {
+    limit_except GET { deny all; }
+    if ($arg_jscode != "") { return 400; }
+    if ("${AMAP_SECURITY_JSCODE}" = "") { return 503; }
+    set $args "$args&jscode=${AMAP_SECURITY_JSCODE}";
+    proxy_set_header Host restapi.amap.com;
+    proxy_set_header Cookie "";
+    proxy_set_header Authorization "";
+    proxy_set_header Proxy-Authorization "";
+    proxy_set_header X-CSRF-Token "";
+    proxy_set_header X-XSRF-Token "";
+    proxy_hide_header Set-Cookie;
+    proxy_ssl_server_name on;
+    proxy_ssl_verify on;
+    proxy_ssl_trusted_certificate /etc/ssl/certs/ca-certificates.crt;
+    proxy_pass https://restapi.amap.com/;
+}

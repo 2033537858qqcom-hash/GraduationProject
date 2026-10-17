@@ -505,7 +505,7 @@ watch(() => route.query.venue, () => {
     <dialog ref="dialog" class="foundation-dialog" aria-labelledby="res-dialog-heading" @cancel.prevent="finish(false)">
       <h2 id="res-dialog-heading">{{ confirmKind === 'leave' ? '处理未保存的内容' : '操作确认' }}</h2>
       <p>{{ confirmMessage }}</p>
-      <label v-if="confirmKind === 'cancel'">取消原因说明<textarea v-model="dialogComment" rows="2" maxlength="300" placeholder="说明取消预约的原因" /></label>
+      <label v-if="confirmKind === 'cancel'"><div class="label-heading-row"><span>取消原因说明</span><small class="muted">选填 · 最多 300 字</small></div><textarea v-model="dialogComment" rows="2" maxlength="300" placeholder="说明取消预约的原因" /></label>
       <div class="form-actions">
         <button ref="cancelButton" class="button compact" @click="finish(false)">{{ confirmKind === 'leave' ? '继续编辑' : '取消' }}</button>
         <button class="button primary compact" @click="finish(true)">{{ confirmKind === 'leave' ? '放弃并离开' : '确认执行' }}</button>
@@ -819,7 +819,10 @@ watch(() => route.query.venue, () => {
       <div v-if="reviewMode && selectedReservation.status === 'SUBMITTED'" class="leave-review-form reservation-review-box">
         <h3><Clock :size="16" /> 审核意见与决定</h3>
         <label>
-          审批处理意见 / 附言
+          <div class="label-heading-row">
+            <span>审批处理意见 / 附言</span>
+            <small class="muted">必填 · 最多 1000 字</small>
+          </div>
           <textarea
             v-model="reviewComment"
             rows="3"
@@ -1011,10 +1014,13 @@ watch(() => route.query.venue, () => {
           </div>
 
           <label>
-            需要借用的配套器材 / 附加需求 (选填)
+            <div class="label-heading-row">
+              <span>需要借用的配套器材 / 附加需求 (选填)</span>
+              <small class="muted">选填 · 最多 400 字</small>
+            </div>
             <textarea
               v-model="bookingForm.borrowEquipment"
-              rows="2"
+              rows="3"
               maxlength="400"
               placeholder="例：无线手持麦克风2支、激光翻页笔1支、活动展架2套"
               :disabled="busy"

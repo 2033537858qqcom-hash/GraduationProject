@@ -11,7 +11,7 @@
 .repair-status.inactive { background: #f5f2ed; color: #806a4a; }
 .repair-card-actions { display: flex; flex-wrap: wrap; gap: 18px; padding-top: 12px; margin-top: 12px; border-top: 1px solid #edf0f3; }
 .repair-pagination { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: 12px; margin: 20px 0; font-size: 13px; color: #63798d; }
-.repair-editor, .repair-history { padding: 26px; margin-top: 24px; }
+.repair-editor, .repair-history { padding: 26px; margin-top: 24px; border-radius: 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 6px 18px rgba(15, 23, 42, 0.02); }
 .repair-editor h2, .repair-history h2 { font-size: 20px; display: flex; align-items: center; gap: 8px; }
 .repair-editor-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .repair-form-wide { grid-column: 1 / -1; }

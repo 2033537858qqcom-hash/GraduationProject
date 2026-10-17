@@ -37,7 +37,7 @@ defineExpose({ allowLeave })
           <fieldset :disabled="busy || saving || uncertain">
             <label>请假类型<BaseSelect v-model="fields.reasonType" :options="reasonTypeOptions" /></label>
             <div class="assistant-draft-grid"><label>开始日期<input v-model="fields.startDate" type="date" /></label><label>开始时间<input v-model="fields.startTime" type="time" /></label><label>结束日期<input v-model="fields.endDate" type="date" /></label><label>结束时间<input v-model="fields.endTime" type="time" /></label></div>
-            <label>请假事由<textarea v-model="fields.reason" rows="2" maxlength="2000" placeholder="说明实际事由，确认模型提取的文字" /></label>
+            <label><div class="label-heading-row"><span>请假事由</span><small class="muted">必填 · 最多 2000 字</small></div><textarea v-model="fields.reason" rows="3" maxlength="2000" placeholder="说明实际请假事由，确认提取的文字" /></label>
             <label>联系手机或邮箱<input v-model="fields.contact" type="text" maxlength="80" placeholder="仅在本地表单填写" autocomplete="off" /></label>
           </fieldset>
           <p v-if="checked && preview?.duration" class="assistant-draft-meta">请假时长：{{ preview.duration }}</p>

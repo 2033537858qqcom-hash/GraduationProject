@@ -76,7 +76,7 @@ watch(() => fields.locationId, id => { const selected = places.value.find(item =
           <fieldset :disabled="busy || saving || uncertain">
             <label>故障类别<BaseSelect v-model="fields.category" :options="categoryOptions" /></label>
             <label>故障标题<input v-model="fields.title" type="text" maxlength="100" placeholder="用简短标题说明故障" /></label>
-            <label>故障现象<textarea v-model="fields.description" rows="2" maxlength="2000" placeholder="只保留实际看到的现象" /></label>
+            <label><div class="label-heading-row"><span>故障现象</span><small class="muted">必填 · 最多 2000 字</small></div><textarea v-model="fields.description" rows="3" maxlength="2000" placeholder="请详细描述实际看到的故障现象" /></label>
             <div class="assistant-draft-grid"><label>所在校区<BaseSelect v-model="campusId" :options="campusOptions" @change="onCampusChange" /></label><label>报修地点<BaseSelect v-model="selectedLocationId" :options="locationOptions" /></label></div>
             <label>具体位置<input v-model="fields.locationDetail" type="text" maxlength="300" placeholder="可选，例如楼层或方位，不由模型猜测" /></label>
             <label>联系手机或邮箱<input v-model="fields.contact" type="text" maxlength="80" placeholder="仅在本地表单填写" autocomplete="off" /></label>

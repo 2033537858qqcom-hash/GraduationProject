@@ -87,7 +87,7 @@ onBeforeUnmount(() => { sequence++ })
         <template v-if="item.allowedActions.includes('reserve')"><label>空闲床位<BaseSelect v-model="bedId" :options="bedOptions" :disabled="busy" /></label><button class="button compact" type="button" :disabled="busy || !bedId" @click="reserve(item)">预留 72 小时</button></template>
         <div v-if="item.status === 'AWAITING_CHECKIN'" class="repair-card-actions"><button v-if="item.allowedActions.includes('check-in')" class="text-button" type="button" :disabled="busy || item.cancelRequested" @click="post(item, 'check-in')">确认入住</button><button v-if="item.allowedActions.includes('release')" class="text-button" type="button" :disabled="busy" @click="post(item, 'release')">退回待安排</button><button v-if="item.allowedActions.includes('accept-cancel')" class="text-button" type="button" :disabled="busy" @click="post(item, 'cancel')">同意取消</button><button v-if="item.allowedActions.includes('keep')" class="text-button" type="button" :disabled="busy" @click="post(item, 'keep')">不同意取消</button></div>
       </article>
-      <label v-if="items.some(item => item.allowedActions.length)" class="repair-editor">处理说明<textarea v-model="comment" maxlength="200" rows="2" :disabled="busy"></textarea></label>
+      <label v-if="items.some(item => item.allowedActions.length)" class="repair-editor"><div class="label-heading-row"><span>处理说明</span><small class="muted">选填 · 最多 200 字</small></div><textarea v-model="comment" maxlength="200" rows="3" :disabled="busy" placeholder="填写分配说明或处理意见（如调宿审核、取消处理等）"></textarea></label>
     </template>
   </section>
 </template>

@@ -29,7 +29,7 @@ defineExpose({ allowLeave })
         <p class="assistant-draft-reply" role="status">{{ busy ? '正在整理与核对…' : preview && !checked ? '用途已修改，请重新核对。' : preview?.summary ?? '请说明这份证明的用途，也可以直接填写。' }}</p>
         <ul v-if="checked && preview?.issues.length" class="assistant-draft-issues"><li v-for="issue in preview.issues" :key="issue">{{ issue }}</li></ul>
         <form @submit.prevent="prepare(false)">
-          <fieldset :disabled="busy || saving || uncertain"><label>证明用途<textarea v-model="fields.purpose" rows="2" maxlength="300" placeholder="例如：供实习单位核验本人在校身份" /></label></fieldset>
+          <fieldset :disabled="busy || saving || uncertain"><label><div class="label-heading-row"><span>证明用途</span><small class="muted">必填 · 最多 300 字</small></div><textarea v-model="fields.purpose" rows="3" maxlength="300" placeholder="例如：供用人单位或签证机构核验本人在校身份" /></label></fieldset>
           <button type="submit" class="assistant-draft-check" :disabled="busy || saving || uncertain">核对并暂存</button><span v-if="!checked && preview" class="assistant-draft-meta">已修改，需重新核对</span>
         </form>
         <section v-if="preview?.identity" class="certificate-identity" aria-label="本人登记资料">

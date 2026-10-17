@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Bell, Check, RefreshCw, ArrowUpRight } from '@lucide/vue'
+import { Bell, Check, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import BaseSelect from '../components/BaseSelect.vue'
 import { safeAffairDestination } from '../lib/navigation'
@@ -104,21 +104,27 @@ onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load(
       </article>
 
       <div class="pagination">
-        <span>第 {{ list.page }} 页</span>
-        <button
-          class="button compact"
-          :disabled="loading || reading !== null || list.page <= 1"
-          @click="page(list.page - 1)"
-        >
-          上一页
-        </button>
-        <button
-          class="button compact"
-          :disabled="loading || reading !== null || list.page * list.pageSize >= list.total"
-          @click="page(list.page + 1)"
-        >
-          下一页
-        </button>
+        <span class="pagination-info">
+          第 {{ list.page }} / {{ Math.max(1, Math.ceil(list.total / list.pageSize)) }} 页 · 共 {{ list.total }} 条
+        </span>
+        <div class="pagination-actions">
+          <button
+            class="button compact"
+            :disabled="loading || reading !== null || list.page <= 1"
+            @click="page(list.page - 1)"
+          >
+            <ChevronLeft :size="14" />
+            上一页
+          </button>
+          <button
+            class="button compact"
+            :disabled="loading || reading !== null || list.page * list.pageSize >= list.total"
+            @click="page(list.page + 1)"
+          >
+            下一页
+            <ChevronRight :size="14" />
+          </button>
+        </div>
       </div>
     </section>
 

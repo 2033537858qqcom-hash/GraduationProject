@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, ArrowRight, Building2, CalendarCheck, Check, CloudSun, Compass, Dumbbell, Layers, LocateFixed, MapPin, Minus, Moon, Plus, Search, Stethoscope, Sun, Tag, Trees, Utensils, X } from '@lucide/vue'
+import { ArrowLeft, ArrowRight, BedDouble, Building2, CalendarCheck, Check, CloudSun, Compass, Dumbbell, Layers, LocateFixed, MapPin, Minus, Moon, Plus, Search, Stethoscope, Sun, Tag, Trees, Utensils, X } from '@lucide/vue'
 import { campusCategories, campusPlaces, campusTour } from '../campus/manifest'
 import type { CampusCategory, CampusPlace } from '../campus/manifest'
 import { createCampusScene } from '../campus/createCampusScene'
@@ -36,8 +36,8 @@ const filteredPlaces = computed(() => campusPlaces.filter(place =>
   (category.value === 'all' || place.category === category.value) &&
   `${place.name}${place.description}${place.features.join('')}`.includes(search.value.trim()),
 ))
-const categoryIcons = { learning: Building2, services: MapPin, sports: Dumbbell, landscape: Trees }
-const categoryNames = { learning: '校园楼宇', services: '校园服务', sports: '文体场馆', landscape: '景观与入口' }
+const categoryIcons = { learning: Building2, housing: BedDouble, services: MapPin, sports: Dumbbell, landscape: Trees }
+const categoryNames = { learning: '校园楼宇', housing: '学生公寓', services: '校园服务', sports: '文体场馆', landscape: '景观与入口' }
 const relatedPlace = computed(() => campusPlaces.find(place => place.id === currentPlace.value?.relatedPlaceId))
 function placeIcon(place: CampusPlace) {
   if (['east-jinxiu-dining', 'east-canteen-wenhua'].includes(place.id)) return Utensils
@@ -235,7 +235,7 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
           <small>{{ currentPlace.locationType === 'point' ? '符号表示图示位置，未确认独立楼体轮廓、楼层或入口。' : '建筑轮廓与功能分区为示意，高度和楼层未实测；可用场地以预约服务中的清单为准。' }}</small>
           <a class="place-source" :href="currentPlace.sourceUrl" target="_blank" rel="noopener noreferrer">{{ currentPlace.verification === 'reference-located' ? '查看分布图位置' : '对照地图轮廓' }}<ArrowRight :size="12" /></a>
         </div>
-        <div v-else class="exploration-intro"><img :src="campusEvidence.layoutReferenceUrl" alt="东校区校园建筑分布图" /><p>楼名和功能分布参考校内分布图，建筑外轮廓参考留存卫星影像。H1、H2等尚未对应楼体的位置以标记点展示。</p><a :href="campusEvidence.layoutReferenceUrl" target="_blank" rel="noopener noreferrer">查看校园分布图<ArrowRight :size="12" /></a></div>
+        <div v-else class="exploration-intro"><img :src="campusEvidence.layoutReferenceUrl" alt="东校区校园建筑分布图" /><p>楼名和功能分布参考校内分布图，建筑外轮廓参考留存卫星影像。H1、H2 为学生公寓图示位置点，楼体轮廓尚待对应。</p><a :href="campusEvidence.layoutReferenceUrl" target="_blank" rel="noopener noreferrer">查看校园分布图<ArrowRight :size="12" /></a></div>
       </aside>
     </div>
     <div class="exploration-footnote"><span><span class="footnote-mark"></span>分布图未注明编制日期。楼层、高度和入口尚待现场资料核对，场景不用于实地导航。</span><a :href="campusEvidence.layoutReferenceUrl" target="_blank" rel="noopener noreferrer">对照校园分布图<ArrowRight :size="13" /></a></div>

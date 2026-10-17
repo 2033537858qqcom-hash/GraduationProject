@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { campusCoverage, mapFeatures, mapRoads, mapToModel } from './eastCampusLayout'
 import type { MapPoint, SurfaceKind } from './eastCampusLayout'
-import { featureVerticalRange } from './manifest'
+import { featureVerticalRange, sportsGrandstandRoofTop } from './manifest'
 import type { CampusPlace } from './manifest'
 
 function createFacadeTextures() {
@@ -148,6 +148,7 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     point: '#315f87',
     base: '#92a490',
     road: '#bac6c3',
+    grandstand: '#c5ced6',
   }
   const materials = {
     building: new THREE.MeshStandardMaterial({ color: colors.building, map: facadeTextures.building.map, roughnessMap: facadeTextures.building.roughnessMap, roughness: 0.86 }),
@@ -165,6 +166,7 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     point: new THREE.MeshStandardMaterial({ color: colors.point, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     base: new THREE.MeshStandardMaterial({ color: colors.base, roughness: 0.86 }),
     road: new THREE.MeshStandardMaterial({ color: colors.road, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    grandstand: new THREE.MeshStandardMaterial({ color: '#c5ced6', metalness: 0.58, roughness: 0.32 }),
   }
   const buckets = new Map<string, { material: THREE.Material; id?: string; geometries: THREE.BufferGeometry[] }>()
   const pickables: THREE.Mesh[] = []
@@ -251,6 +253,37 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
       surface(feature.outline, feature.holes ?? [], height, base, materialFor(feature.kind, feature.placeId), feature.placeId)
     }
   })
+
+  // Schematic silver arc grandstand roofs for the west stadium (GE 2022-05-26 shows bilateral arcs).
+  // Display-only height; not surveyed. Top is flush with sportsGrandstandRoofTop for label sync.
+  // Skip when overlay mode hides track/field context so roofs are not floating alone.
+  if (options.includeContext !== false) {
+    const track = mapFeatures.find(feature => feature.id === 'west-track')
+    if (track) {
+      const pts = track.outline.map(mapToModel)
+      const xs = pts.map(p => p[0]), zs = pts.map(p => p[1])
+      const minX = Math.min(...xs), maxX = Math.max(...xs)
+      const minZ = Math.min(...zs), maxZ = Math.max(...zs)
+      const cz = (minZ + maxZ) / 2
+      const lenZ = maxZ - minZ
+      const top = sportsGrandstandRoofTop
+      for (const x of [minX - 1.6, maxX + 1.6]) {
+        const path = new THREE.CatmullRomCurve3([
+          new THREE.Vector3(x, top - 1.05, minZ + lenZ * 0.06),
+          new THREE.Vector3(x, top - 0.22, cz),
+          new THREE.Vector3(x, top - 1.05, maxZ - lenZ * 0.06),
+        ])
+        const vault = new THREE.TubeGeometry(path, 28, 1.55, 8, false)
+        vault.computeBoundingBox()
+        vault.translate(0, top - (vault.boundingBox?.max.y ?? top), 0)
+        add(vault, materials.grandstand, 'east-sports')
+        const stand = new THREE.BoxGeometry(2.1, Math.max(0.4, top - 1.15), lenZ * 0.72)
+        stand.translate(x, Math.max(0.4, top - 1.15) / 2, cz)
+        add(stand, materials.grandstand, 'east-sports')
+      }
+    }
+  }
+
 
   const nonCastingMaterials = new Set([
     materials.water,

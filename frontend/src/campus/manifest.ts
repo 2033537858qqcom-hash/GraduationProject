@@ -2,7 +2,7 @@ import { campusEvidence, detailViews, mapFeatures, mapToModel } from './eastCamp
 import type { MapFeature } from './eastCampusLayout'
 import { campusPlaceDefinitions } from './placeDefinitions'
 
-export type CampusCategory = 'learning' | 'services' | 'sports' | 'landscape'
+export type CampusCategory = 'learning' | 'housing' | 'services' | 'sports' | 'landscape'
 export type BuildingKind = 'building' | 'plaza' | 'sports' | 'water' | 'entrance' | 'service'
 
 export interface CampusPlace {
@@ -26,6 +26,9 @@ export interface CampusPlace {
   /** Association within a shared group, not exclusive building ownership. */
   relatedPlaceId?: string
 }
+
+/** Display-only top of schematic silver grandstand arcs on east-sports; not surveyed. */
+export const sportsGrandstandRoofTop = 3.2
 
 // Schematic heights; no floor counts or real-world metres are inferred.
 export const buildingHeightMap: Record<string, number> = {
@@ -57,7 +60,10 @@ export const campusPlaces: CampusPlace[] = campusPlaceDefinitions.map(entry => {
     ...entry,
     x: (minX + maxX) / 2, z: (minZ + maxZ) / 2,
     width: Math.max(3, maxX - minX), depth: Math.max(3, maxZ - minZ),
-    height: Math.max(...features.map(feature => { const range = featureVerticalRange(feature); return range.base + range.height })),
+    height: Math.max(
+      ...features.map(feature => { const range = featureVerticalRange(feature); return range.base + range.height }),
+      entry.id === 'east-sports' ? sportsGrandstandRoofTop : 0,
+    ),
     sourceUrl: entry.locationSource === 'layout' ? campusEvidence.layoutReferenceUrl : campusEvidence.mapUrl,
     sourceScreenshot: entry.locationSource === 'layout' ? campusEvidence.layoutReferenceFile : evidenceView ? detailViews[evidenceView].standard : campusEvidence.screenshot,
     locationType: features.every(feature => feature.kind === 'point') ? 'point' : 'outline',
@@ -67,7 +73,7 @@ export const campusPlaces: CampusPlace[] = campusPlaceDefinitions.map(entry => {
 })
 
 export const campusCategories = [
-  { id: 'all', label: '全部' }, { id: 'learning', label: '楼宇' },
+  { id: 'all', label: '全部' }, { id: 'learning', label: '楼宇' }, { id: 'housing', label: '住宿' },
   { id: 'sports', label: '文体' }, { id: 'landscape', label: '景观' }, { id: 'services', label: '服务' },
 ] as const
 

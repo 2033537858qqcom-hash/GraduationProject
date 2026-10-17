@@ -244,15 +244,15 @@ public class AgentTools {
     }
     private record NavTarget(String id, String name, String category, String guide, List<String> aliases) {}
     private static final List<NavTarget> NAV_TARGETS = List.of(
-        new NavTarget("east-library", "图书馆", "学习资源", "位于中环路核心环抱形建筑，南向开敞内庭。从南门沿人文大道向北直行约250米即可抵达。", List.of("图书馆", "图书大厦", "借书", "自习室", "阅览室")),
-        new NavTarget("east-jinxiu", "毓秀楼", "教学办公", "位于文华楼组团东侧、临近东侧水系西岸。从南门向北沿人文大道，在文华楼东侧右转即可抵达。", List.of("毓秀楼", "毓秀")),
-        new NavTarget("east-fenghua", "风华楼", "教学空间", "位于毓秀楼南侧、紧邻水系西岸。从南门进入后向东北方向文华楼东侧步行即可抵达。", List.of("风华楼", "风华")),
-        new NavTarget("east-shuhua", "书华楼", "教学空间", "位于中环路北侧、致远楼西侧。从南门沿中环路西北方向步行可达。", List.of("书华楼", "书华")),
-        new NavTarget("east-zhiyuan", "致远楼", "教学空间", "位于书华楼东侧、静逸楼北侧，中环路北段。从南门穿过中环路北行可达。", List.of("致远楼", "致远")),
-        new NavTarget("east-jingyi", "静逸楼", "教学空间", "位于中环路北侧、致远楼南侧，与锦绣餐厅由校内道路独立分隔。从南门沿中环路向北直行可达。", List.of("静逸楼", "静逸")),
+        new NavTarget("east-library", "图书馆", "学习资源", "位于中环路核心环抱形建筑，南向开敞内庭。示意路线：从南门沿人文大道向北可达（场景不用于实地导航，距离未实测）。", List.of("图书馆", "图书大厦", "借书", "自习室", "阅览室")),
+        new NavTarget("east-jinxiu", "毓秀楼", "学生公寓", "东校区学生公寓，位于文华楼组团东侧、临近东侧水系（秋月塘）西岸。示意路线：从南门向北沿人文大道，在文华楼东侧右转可达（不用于实地导航）。", List.of("毓秀楼", "毓秀")),
+        new NavTarget("east-fenghua", "风华楼", "学生公寓", "东校区学生公寓，位于毓秀楼南侧、紧邻水系西岸。示意路线：从南门进入后向东北方向文华楼东侧可达（不用于实地导航）。", List.of("风华楼", "风华")),
+        new NavTarget("east-shuhua", "书华楼", "学生公寓", "东校区学生公寓，位于中环路北侧、致远楼西侧。示意路线：从南门沿中环路西北方向可达（不用于实地导航）。", List.of("书华楼", "书华")),
+        new NavTarget("east-zhiyuan", "致远楼", "学生公寓", "东校区学生公寓，位于书华楼东侧、静逸楼北侧，中环路北段。示意路线：从南门穿过中环路北行可达（不用于实地导航）。", List.of("致远楼", "致远")),
+        new NavTarget("east-jingyi", "静逸楼", "学生公寓", "东校区学生公寓，位于中环路北侧、致远楼南侧，与锦绣餐厅由校内道路独立分隔。示意路线：从南门沿中环路向北可达（不用于实地导航）。", List.of("静逸楼", "静逸")),
         new NavTarget("east-jinxiu-dining", "锦绣餐厅", "生活餐饮", "东校区主要师生食堂（高德地图收录为锦绣食府），与静逸楼由道路自然分隔。从中环路西北侧步行即可抵达。", List.of("锦绣餐厅", "锦绣食府", "锦绣食堂", "北食堂", "锦绣")),
         new NavTarget("east-canteen-wenhua", "文华餐厅", "生活餐饮", "位于西南生活服务区、行政楼西侧。从南门进入沿人文大道向左侧生活区步行可达。", List.of("文华餐厅", "文华食堂", "南食堂", "食堂", "餐厅")),
-        new NavTarget("east-gym", "红体馆", "文体场馆", "位于英才大道校内西门处，具有标志性近圆形屋顶。从南门沿英才大道向西步行约400米可达。", List.of("红体馆", "弘德体育馆", "体育馆", "篮球馆", "球馆")),
+        new NavTarget("east-gym", "红体馆", "文体场馆", "位于校园西北、英才大道西段，具有标志性近圆形屋顶。示意路线：从南门向西北经英才大道可达文体区（不用于实地导航；公开卫星未单独确认西门落点）。", List.of("红体馆", "弘德体育馆", "体育馆", "篮球馆", "球馆")),
         new NavTarget("east-swimming", "游泳馆", "文体场馆", "紧邻红体馆东南侧，英才大道南侧。从南门向西北方向文体区步行可达。", List.of("游泳馆", "游泳池")),
         new NavTarget("east-sports", "西侧体育场", "文体场馆", "包含标准田径场与成组球场。从南门向西经英才大道抵达体育区。", List.of("西侧体育场", "体育场", "操场", "田径场", "足球场", "跑道")),
         new NavTarget("east-admin", "行政楼", "综合办公", "位于人文大道中轴北端、文华餐厅东侧、学术报告厅西侧，为全校行政办公枢纽。", List.of("行政楼", "行政管理中心", "办公楼", "校办")),
@@ -267,13 +267,13 @@ public class AgentTools {
         new NavTarget("east-medical", "医学院、药学院组团", "学院楼宇", "位于南部人文大道东侧、邻外环东路，包含药学院与医学院教学区。", List.of("医学院", "药学院", "医学楼")),
         new NavTarget("east-clinic", "医务室", "医疗服务", "校园基础医疗健康服务点，位于校区服务保障区。", List.of("医务室", "校医院", "卫生所", "看病", "校医")),
         new NavTarget("east-affairs", "学生综合事务服务中心", "综合服务", "位于外环东路侧，提供一站式学生综合事务办理。", List.of("学生综合事务服务中心", "综合事务服务中心", "学生事务中心", "事务中心")),
-        new NavTarget("east-water", "东侧水系", "校园水系", "东校区纵向景观水系，沿岸设滨水步道与绿化景观。", List.of("东侧水系", "水系", "景观湖", "湖边", "东湖")),
+        new NavTarget("east-water", "东侧水系", "校园水系", "东校区纵向景观水系（公开文本常称秋月塘），沿岸设滨水步道与绿化景观。", List.of("东侧水系", "秋月塘", "水系", "景观湖", "湖边", "东湖")),
         new NavTarget("east-gate", "东门", "出入口", "校园东侧出入口，邻近万福路。", List.of("东门", "东大门", "万福路门")),
         new NavTarget("south-gate", "南门", "出入口", "学院路北侧校园主入口，人文大道南起点。", List.of("南门", "正门", "主校门", "南大门", "大门", "学校大门")),
         new NavTarget("north-gate", "北门", "出入口", "外环北路北侧校园出入口。", List.of("北门", "北大门")),
-        new NavTarget("east-h8", "H8", "教学科研", "位于外环北路南侧、书华楼西北侧。", List.of("H8", "H8楼", "H8主楼", "H8副楼")),
-        new NavTarget("east-h1", "H1", "综合服务", "位于体育场东侧、信科楼组团西侧。", List.of("H1", "H1楼")),
-        new NavTarget("east-h2", "H2", "综合服务", "位于H1南侧、文华餐厅西北侧。", List.of("H2", "H2楼"))
+        new NavTarget("east-h8", "H8", "学生公寓", "东校区学生公寓，位于外环北路南侧、书华楼西北侧。示意路线：从南门向北经中环路可达北侧生活区（不用于实地导航）。", List.of("H8", "H8楼", "H8主楼", "H8副楼")),
+        new NavTarget("east-h1", "H1", "学生公寓", "东校区学生公寓，位于体育场东侧、信科楼组团西侧（分布图位置点，楼体轮廓待对应）。示意导览不用于实地导航。", List.of("H1", "H1楼")),
+        new NavTarget("east-h2", "H2", "学生公寓", "东校区学生公寓，位于H1南侧、文华餐厅西北侧（分布图位置点，楼体轮廓待对应）。示意导览不用于实地导航。", List.of("H2", "H2楼"))
     );
     private NavTarget resolveNavTarget(String text) {
         if(text==null || text.isBlank()) return null;
@@ -293,7 +293,7 @@ public class AgentTools {
         }
         String path="/campus/explore?navigate="+target.id();
         Fact fact=new Fact("nav:"+target.id(),target.name()+"（"+target.category()+"）",target.guide(),path);
-        String msg=String.format("已规划从【%s】前往【%s】的路线建议。点击查看 3D 校园全景漫游与步行高亮导航。",from,target.name());
+        String msg=String.format("已给出从【%s】前往【%s】的示意导览。点击查看 3D 校园全景与高亮漫游（场景不用于实地导航，距离未实测）。",from,target.name());
         return result("campus_navigation","OK",msg,1,List.of(fact),List.of(),path);
     }
     public ToolResult failure(String name,ApiException ex) {

@@ -42,8 +42,9 @@ class AgentNavigationTest {
         RepairService repairs = mock(RepairService.class);
         HousingService housing = mock(HousingService.class);
         HousingTransferService transfers = mock(HousingTransferService.class);
+        cn.zzuit.campus.portal.TaskAggregationService taskAggregator = mock(cn.zzuit.campus.portal.TaskAggregationService.class);
 
-        tools = new AgentTools(identities, guides, teaching, leaves, certificates, notices, repairs, housing, transfers);
+        tools = new AgentTools(identities, guides, teaching, leaves, certificates, notices, repairs, housing, transfers, taskAggregator);
         student = new CampusPrincipal(101L, "20260001", "secret", true, List.of("STUDENT"), List.of("agent:query", "portal:read"), 1L);
         when(identities.permissions(101L)).thenReturn(List.of("agent:query", "portal:read"));
     }

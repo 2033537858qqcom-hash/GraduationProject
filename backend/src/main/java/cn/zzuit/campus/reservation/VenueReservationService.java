@@ -830,6 +830,8 @@ public class VenueReservationService {
     private ReservationItem mapItem(java.sql.ResultSet res) throws java.sql.SQLException {
         return new ReservationItem(
             res.getLong("id"),
+            res.getLong("applicant_id"),
+            res.getString("applicant_name"),
             res.getString("request_key"),
             res.getLong("venue_id"),
             res.getString("venue_name"),

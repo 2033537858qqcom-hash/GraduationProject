@@ -22,8 +22,13 @@ const repairConfiguration = computed(() => currentUser.value?.permissions.includ
 const repairResponsibilities = computed(() => currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work'))
 const housingConfiguration = computed(() => currentUser.value?.permissions.includes('housing:configure'))
 const housingDesk = computed(() => currentUser.value?.permissions.includes('housing:assign'))
-const workspace = computed(() => foundation.value ? '管理员首页' : counselor.value ? '辅导员首页' : affairs.value ? '学生事务首页' : currentUser.value?.permissions.includes('teaching:manage') ? '教师首页' : currentUser.value?.permissions.includes('academic:manage') ? '教务首页' : currentUser.value?.permissions.includes('repair:dispatch') ? '后勤首页' : currentUser.value?.permissions.includes('repair:work') ? '维修首页' : housingDesk.value ? '宿管首页' : '岗位首页')
-const identity = computed(() => foundation.value ? '管理员入口' : student.value ? '学生入口' : counselor.value ? '辅导员入口' : affairs.value ? '学生事务入口' : currentUser.value?.permissions.includes('teaching:manage') ? '教师入口' : currentUser.value?.permissions.includes('academic:manage') ? '教务入口' : currentUser.value?.permissions.includes('repair:dispatch') ? '后勤入口' : currentUser.value?.permissions.includes('repair:work') ? '维修入口' : housingDesk.value ? '宿管入口' : '岗位入口')
+const hasStaffCapabilities = computed(() => currentUser.value?.permissions.some(p => 
+  ['teaching:manage', 'academic:manage', 'leave:review', 'certificate:review', 'reservation:review',
+   'housing:review', 'housing:assign', 'housing:configure', 'repair:dispatch', 'repair:work',
+   'repair:configure', 'foundation:manage', 'content:edit', 'content:review'].includes(p)
+))
+const workspace = computed(() => foundation.value ? '管理员工作台' : counselor.value ? '辅导员工作台' : affairs.value ? '学生事务工作台' : currentUser.value?.permissions.includes('teaching:manage') ? '教师工作台' : currentUser.value?.permissions.includes('academic:manage') ? '教务工作台' : currentUser.value?.permissions.includes('repair:dispatch') ? '后勤工作台' : currentUser.value?.permissions.includes('repair:work') ? '维修工作台' : housingDesk.value ? '宿管工作台' : '岗位工作台')
+const identity = computed(() => (student.value && hasStaffCapabilities.value) ? '多岗位协同' : foundation.value ? '管理员入口' : student.value ? '学生入口' : counselor.value ? '辅导员入口' : affairs.value ? '学生事务入口' : currentUser.value?.permissions.includes('teaching:manage') ? '教师入口' : currentUser.value?.permissions.includes('academic:manage') ? '教务入口' : currentUser.value?.permissions.includes('repair:dispatch') ? '后勤入口' : currentUser.value?.permissions.includes('repair:work') ? '维修入口' : housingDesk.value ? '宿管入口' : '岗位入口')
 async function leave() {
   leaving.value = true
   error.value = ''
@@ -56,6 +61,9 @@ async function leave() {
             :class="{ selected: route.path.startsWith('/housing/mine') || route.path.startsWith('/housing/transfer') }"
           >
             <BedDouble :size="16" aria-hidden="true" />我的住宿与调宿
+          </RouterLink>
+          <RouterLink v-if="hasStaffCapabilities" to="/workbench" :class="{ selected: route.path.startsWith('/workbench') }">
+            <House :size="16" aria-hidden="true" />岗位工作台
           </RouterLink>
         </template>
         <RouterLink v-else to="/workbench" exact-active-class="selected"><House :size="16" aria-hidden="true" />{{ workspace }}</RouterLink>

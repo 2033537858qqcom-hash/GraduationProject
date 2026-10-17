@@ -28,6 +28,8 @@ public class ReservationDtos {
 
     public record ReservationItem(
         long id,
+        long applicantId,
+        String applicantName,
         String requestKey,
         long venueId,
         String venueName,

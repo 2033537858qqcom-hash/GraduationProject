@@ -1,12 +1,10 @@
 package cn.zzuit.campus.portal;
 
-import cn.zzuit.campus.common.ApiException;
 import cn.zzuit.campus.identity.CampusPrincipal;
 import cn.zzuit.campus.identity.IdentityService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -18,13 +16,22 @@ public class PortalController {
     private final cn.zzuit.campus.leave.LeaveService leaves;
     private final cn.zzuit.campus.certificate.CertificateService certificates;
     private final cn.zzuit.campus.notice.NoticeService messages;
-    public PortalController(JdbcClient jdbc, IdentityService identities,cn.zzuit.campus.leave.LeaveService leaves,
-        cn.zzuit.campus.certificate.CertificateService certificates,cn.zzuit.campus.notice.NoticeService messages) {
+    private final TaskAggregationService taskAggregator;
+
+    public PortalController(
+        JdbcClient jdbc,
+        IdentityService identities,
+        cn.zzuit.campus.leave.LeaveService leaves,
+        cn.zzuit.campus.certificate.CertificateService certificates,
+        cn.zzuit.campus.notice.NoticeService messages,
+        TaskAggregationService taskAggregator
+    ) {
         this.jdbc = jdbc;
         this.identities = identities;
         this.leaves = leaves;
         this.certificates = certificates;
         this.messages = messages;
+        this.taskAggregator = taskAggregator;
     }
 
     @GetMapping("/api/portal/overview")
@@ -53,17 +60,31 @@ public class PortalController {
 
     @GetMapping("/api/workbench/overview")
     Map<String, Object> workbench(@AuthenticationPrincipal CampusPrincipal user) {
-        return Map.of("profile", identities.profile(user.id()), "tasks", List.of(),
-            "leavePending",identities.permissions(user.id()).contains("leave:review") ? leaves.list(user,"review","SUBMITTED",1,1).total() : 0,
-            "certificatePending",identities.permissions(user.id()).contains("certificate:review") ? certificates.list(user,"review","SUBMITTED",1,1).total() : 0,
-            "message", identities.permissions(user.id()).contains("foundation:manage") ? "可维护校园账号、组织目录和岗位分配，查询修改记录。"
-                : identities.permissions(user.id()).contains("leave:review") ? "可进入班级请假处理，核对所负责行政班的当前待办。"
-                : identities.permissions(user.id()).contains("certificate:review") ? "可进入学院证明申请处理，核对所属学院资料并生成演示证明。"
-                : identities.permissions(user.id()).contains("teaching:manage") ? "可进入我的教学，查看授课安排并维护本人教学班资料与通知。"
-                : identities.permissions(user.id()).contains("academic:manage") ? "可进入教务信息维护，管理本学院教学关系并发布学习信息。"
-                : identities.permissions(user.id()).contains("housing:assign") ? "可进入住宿办理，在负责楼栋登记初始入住和退宿。"
-                : identities.permissions(user.id()).contains("housing:configure") ? "可维护宿舍楼栋、房间、床位和楼栋负责人。"
-                : "当前已建立身份与岗位入口，业务处理任务将在对应模块接入。");
+        var profile = identities.profile(user.id());
+        var permissions = identities.permissions(user.id());
+        var taskSummary = taskAggregator.aggregate(user);
+        var workspaces = taskAggregator.resolveWorkspaces(profile, permissions);
+
+        return Map.of(
+            "profile", profile,
+            "workspaces", workspaces,
+            "tasks", taskSummary.tasks().stream().limit(8).toList(),
+            "totalPending", taskSummary.totalPending(),
+            "taskCounts", taskSummary.domainCounts(),
+            "leavePending", taskSummary.domainCounts().getOrDefault("leave", 0L),
+            "certificatePending", taskSummary.domainCounts().getOrDefault("certificate", 0L),
+            "message", taskSummary.totalPending() > 0
+                ? "当前共有 " + taskSummary.totalPending() + " 项业务待办需要处理，请及时审批办理。"
+                : "当前没有未处理的待办业务，可从下方进入对应工作空间与服务目录。"
+        );
+    }
+
+    @GetMapping("/api/workbench/tasks")
+    TaskAggregationService.TaskSummary tasks(
+        @AuthenticationPrincipal CampusPrincipal user,
+        @RequestParam(required = false) String domain
+    ) {
+        return taskAggregator.aggregate(user, domain);
     }
 
     public record Lesson(long id, String courseName, String teacherName, String classroom,

@@ -34,10 +34,11 @@ public class AgentTools {
     private final RepairService repairs;
     private final HousingService housing;
     private final HousingTransferService transfers;
+    private final cn.zzuit.campus.portal.TaskAggregationService taskAggregator;
     private final JsonMapper json=JsonMapper.builder().build();
     private static final List<String> REPAIR_STATUSES=List.of("ALL","DRAFT","SUBMITTED","RETURNED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","COMPLETED","REJECTED","WITHDRAWN","CANCELLED");
-    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers) {
-        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;
+    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers,cn.zzuit.campus.portal.TaskAggregationService taskAggregator) {
+        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;this.taskAggregator=taskAggregator;
     }
     private static final Map<String,String> TITLES=Map.ofEntries(Map.entry("search_guides","查找办理指南"),Map.entry("my_timetable","查看本人课表"),Map.entry("my_grades","查看本人已发布成绩"),
         Map.entry("my_exams","查看本人已发布考试"),Map.entry("my_affairs","查看本人办事进度"),Map.entry("my_notice_summary","查看本人未读消息"),Map.entry("my_review_pending","查看岗位待办"),
@@ -50,7 +51,7 @@ public class AgentTools {
         if(p.contains("learning:read") || p.contains("teaching:manage")) names.add("my_timetable");
         if(p.contains("learning:read")) names.addAll(List.of("my_grades","my_exams"));
         if(p.contains("portal:read")) names.add("my_affairs");
-        if(p.contains("leave:review") || p.contains("certificate:review")) names.add("my_review_pending");
+        if(p.stream().anyMatch(x->List.of("leave:review","certificate:review","reservation:review","housing:review","housing:assign","repair:dispatch","repair:work","content:review").contains(x))) names.add("my_review_pending");
         if(p.stream().anyMatch(x->List.of("leave:apply","leave:review","certificate:apply","certificate:review").contains(x))) names.add("application_status");
         if(p.contains("repair:apply")) names.add("my_repairs");
         if(p.contains("repair:dispatch")) names.add("repair_dispatch_queue");
@@ -236,11 +237,39 @@ public class AgentTools {
         return result("my_notice_summary","OK","本人共 "+page.total()+" 条消息，其中未读 "+page.unreadCount()+" 条。",page.unreadCount(),List.of(),List.of(),path);
     }
     private ToolResult pending(CampusPrincipal user) {
-        var p=identities.permissions(user.id()); var items=new ArrayList<Fact>(); long total=0;
-        if(p.contains("leave:review")) { long count=leaves.list(user,"review","SUBMITTED",1,1).total(); total+=count; items.add(new Fact("review:leave","班级请假待办",count+" 条 · 当前负责行政班","/student-affairs/leave")); }
-        if(p.contains("certificate:review")) { long count=certificates.list(user,"review","SUBMITTED",1,1).total(); total+=count; items.add(new Fact("review:certificate","学院证明待办",count+" 条 · 当前授权学院","/student-affairs/certificates")); }
-        if(items.isEmpty()) throw new ApiException(HttpStatus.FORBIDDEN,"TOOL_NOT_ALLOWED","当前岗位没有请假或证明处理范围");
-        return result("my_review_pending","OK","当前待审核 "+total+" 条；退回或结束的记录不继续计入待办。",total,items,List.of(),null);
+        var summary = taskAggregator.aggregate(user);
+        var items = new ArrayList<Fact>();
+        for (var entry : summary.domainCounts().entrySet()) {
+            if (entry.getValue() > 0) {
+                String name = switch (entry.getKey()) {
+                    case "leave" -> "班级请假";
+                    case "certificate" -> "学院证明";
+                    case "reservation" -> "场地借用";
+                    case "housingReview" -> "调宿初审";
+                    case "housingAssign" -> "床位分配";
+                    case "repairDispatch" -> "报修分诊";
+                    case "repairWork" -> "维修任务";
+                    case "content" -> "官网审核";
+                    default -> entry.getKey();
+                };
+                String path = switch (entry.getKey()) {
+                    case "leave" -> "/student-affairs/leave";
+                    case "certificate" -> "/student-affairs/certificates";
+                    case "reservation" -> "/student-affairs/reservations";
+                    case "housingReview" -> "/student-affairs/housing";
+                    case "housingAssign" -> "/housing/assignments";
+                    case "repairDispatch" -> "/logistics/repairs/dispatch";
+                    case "repairWork" -> "/logistics/repairs/tasks";
+                    case "content" -> "/admin/content";
+                    default -> "/workbench";
+                };
+                items.add(new Fact("review:" + entry.getKey(), name + "待办", entry.getValue() + " 条待处理", path));
+            }
+        }
+        if (summary.totalPending() == 0 && items.isEmpty()) {
+            return result("my_review_pending", "OK", "当前没有任何待处理的审核或业务待办。", 0, List.of(), List.of(), "/workbench");
+        }
+        return result("my_review_pending", "OK", "当前共有 " + summary.totalPending() + " 项待处理业务；退回或已结束的不计入待办。", summary.totalPending(), items, List.of(), "/workbench");
     }
     private record NavTarget(String id, String name, String category, String guide, List<String> aliases) {}
     private static final List<NavTarget> NAV_TARGETS = List.of(

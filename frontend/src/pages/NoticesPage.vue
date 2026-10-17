@@ -40,8 +40,88 @@ onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load(
 </script>
 <template>
   <div>
-<div class="page-heading-row"><div><span class="portal-context">个人消息</span><h1>消息通知</h1><p class="muted">阅读发给你的消息，查看对应申请的办理进度。</p></div><button class="button compact" :disabled="loading || reading !== null" @click="load"><RefreshCw :size="15" />刷新消息</button></div><p v-if="error" class="alert" role="alert">{{ error }}</p><p class="notice-summary"><Bell :size="18" /><strong>未读 {{ list.unreadCount }} 条</strong><span>当前筛选共 {{ list.total }} 条</span></p>
-    <form class="foundation-filters leave-filters" @submit.prevent="search"><label>阅读状态<BaseSelect v-model="filter" :options="readFilterOptions" :disabled="reading !== null" /></label><button class="button compact" :disabled="loading || reading !== null">查询</button></form>
-    <section class="portal-panel" aria-label="个人消息列表"><p v-if="loading" role="status">正在读取个人消息…</p><p v-else-if="!list.items.length" class="empty-state">当前筛选下没有消息。</p><article v-for="notice in loading ? [] : list.items" :key="notice.id" class="notice-row"><div class="notice-heading"><h3>{{ notice.title }}</h3><span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span></div><p>{{ notice.body }}</p><div class="notice-actions"><time>{{ notice.createdAt.slice(0,16).replace('T',' ') }}</time><button v-if="safeAffairDestination(notice.targetPath)" class="text-button" :disabled="reading !== null" @click="mark(notice, true)">查看对应申请<ArrowUpRight :size="14" /></button><button v-if="!notice.read" class="text-button" :disabled="reading !== null" @click="mark(notice)"><Check :size="14" />标为已读</button></div></article><div class="pagination"><span>第 {{ list.page }} 页</span><button class="button compact" :disabled="loading || reading !== null || list.page <= 1" @click="page(list.page - 1)">上一页</button><button class="button compact" :disabled="loading || reading !== null || list.page * list.pageSize >= list.total" @click="page(list.page + 1)">下一页</button></div></section><p class="data-note">仅查询当前账号的消息。历史普通消息保留原文；有业务来源且当前仍有权限的消息提供申请入口。</p>
+    <div class="page-heading-row">
+      <div>
+        <span class="portal-context">个人消息</span>
+        <h1>消息通知</h1>
+        <p class="muted">阅读发给你的消息，查看对应申请的办理进度。</p>
+      </div>
+      <button class="button compact" :disabled="loading || reading !== null" @click="load">
+        <RefreshCw :size="15" />刷新消息
+      </button>
+    </div>
+
+    <p v-if="error" class="alert" role="alert">{{ error }}</p>
+
+    <p class="notice-summary">
+      <Bell :size="18" />
+      <strong>未读 {{ list.unreadCount }} 条</strong>
+      <span>当前筛选共 {{ list.total }} 条</span>
+    </p>
+
+    <form class="foundation-filters leave-filters" @submit.prevent="search">
+      <label>
+        阅读状态
+        <BaseSelect
+          v-model="filter"
+          :options="readFilterOptions"
+          :disabled="reading !== null"
+          compact
+          @change="search"
+        />
+      </label>
+      <button class="button compact" :disabled="loading || reading !== null">查询</button>
+    </form>
+
+    <section class="portal-panel" aria-label="个人消息列表">
+      <p v-if="loading" role="status">正在读取个人消息…</p>
+      <p v-else-if="!list.items.length" class="empty-state">当前筛选下没有消息。</p>
+      <article v-for="notice in loading ? [] : list.items" :key="notice.id" class="notice-row">
+        <div class="notice-heading">
+          <h3>{{ notice.title }}</h3>
+          <span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span>
+        </div>
+        <p>{{ notice.body }}</p>
+        <div class="notice-actions">
+          <time>{{ notice.createdAt.slice(0, 16).replace('T', ' ') }}</time>
+          <button
+            v-if="safeAffairDestination(notice.targetPath)"
+            class="text-button"
+            :disabled="reading !== null"
+            @click="mark(notice, true)"
+          >
+            查看对应申请<ArrowUpRight :size="14" />
+          </button>
+          <button
+            v-if="!notice.read"
+            class="text-button"
+            :disabled="reading !== null"
+            @click="mark(notice)"
+          >
+            <Check :size="14" />标为已读
+          </button>
+        </div>
+      </article>
+
+      <div class="pagination">
+        <span>第 {{ list.page }} 页</span>
+        <button
+          class="button compact"
+          :disabled="loading || reading !== null || list.page <= 1"
+          @click="page(list.page - 1)"
+        >
+          上一页
+        </button>
+        <button
+          class="button compact"
+          :disabled="loading || reading !== null || list.page * list.pageSize >= list.total"
+          @click="page(list.page + 1)"
+        >
+          下一页
+        </button>
+      </div>
+    </section>
+
+    <p class="data-note">仅查询当前账号的消息。历史普通消息保留原文；有业务来源且当前仍有权限的消息提供申请入口。</p>
   </div>
 </template>

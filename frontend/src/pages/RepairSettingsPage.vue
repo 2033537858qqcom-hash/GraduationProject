@@ -7,6 +7,7 @@ import { currentUser } from '../stores/auth'
 import { repairCapabilities, repairKinds, repairPeopleForCapability, repairProvenance, repairSourceIds } from '../repairSettings'
 import type { RepairAudit, RepairCatalog, RepairLocation, RepairScope } from '../repairSettings'
 import type { Paged } from '../foundation'
+import BaseSelect from '../components/BaseSelect.vue'
 const root = '/admin/repair-settings'
 const catalog = ref<RepairCatalog | null>(null)
 const locations = ref<Paged<RepairLocation>>({ items: [], total: 0, page: 1, pageSize: 20 })
@@ -27,6 +28,65 @@ const sourceRooms = computed(() => catalog.value?.rooms.filter(room => room.camp
 const sourceDormRooms = computed(() => catalog.value?.dormRooms.filter(room => room.campusId === Number(form.campusId) && (room.available || room.id === Number(form.dormRoomId))) ?? [])
 const sourceBuildings = computed(() => catalog.value?.buildings.filter(building => building.campusId === Number(form.campusId)) ?? [])
 const people = computed(() => repairPeopleForCapability(catalog.value?.people ?? [], form.capability))
+const campusOptions = computed(() => [
+  { value: '', label: '请选择校区' },
+  ...(catalog.value?.campuses.map(c => ({ value: String(c.id), label: c.name })) ?? []),
+])
+const kindOptions = computed(() => [
+  ...Object.entries(repairKinds).map(([kind, name]) => ({ value: kind, label: name })),
+])
+const sourceRoomOptions = computed(() => [
+  { value: '', label: '选择本校区已完善的教室' },
+  ...sourceRooms.value.map(room => ({
+    value: String(room.id),
+    label: `${room.name} · ${room.buildingName} ${room.roomNumber}${room.available ? '' : '（目前不可用）'}`,
+  })),
+])
+const sourceBuildingOptions = computed(() => [
+  { value: '', label: form.kind === 'BUILDING_COMMON' ? '选择本校区已建档楼栋' : '暂不关联楼栋' },
+  ...sourceBuildings.value.map(b => ({
+    value: String(b.id),
+    label: `${b.name}${b.verificationStatus === 'VERIFIED' ? '' : '（资料待核验）'}`,
+  })),
+])
+const sourceDormRoomOptions = computed(() => [
+  { value: '', label: '选择本校区已建档的宿舍房间' },
+  ...sourceDormRooms.value.map(room => ({
+    value: String(room.id),
+    label: `${room.buildingName} · ${room.floorLabel} · ${room.name}${room.provenance === 'DEMO' ? ' · 演示' : ''}${room.available ? '' : '（目前不可用）'}`,
+  })),
+])
+const provenanceOptions = [
+  { value: 'DEMO', label: '演示地点' },
+  { value: 'CONFIGURED', label: '管理员配置' },
+]
+const capabilityOptions = [
+  { value: 'DISPATCH', label: '后勤分诊与派单' },
+  { value: 'WORK', label: '维修处理' },
+]
+const peopleOptions = computed(() => [
+  { value: '', label: '选择具备该岗位的启用人员' },
+  ...people.value.map(person => ({
+    value: String(person.id),
+    label: `${person.name} · ${person.departmentName}`,
+  })),
+  ...(form.userId && !people.value.some(p => p.id === Number(form.userId))
+    ? [{ value: form.userId, label: '原人员当前没有有效岗位，请重新选择', disabled: true }]
+    : []),
+])
+const categoryOptions = computed(() => [
+  ...(catalog.value?.categories.map(c => ({ value: c.code, label: c.name })) ?? []),
+])
+const scopeLocationOptions = computed(() => [
+  { value: '', label: '该校区全部开放地点' },
+  ...scopeLocations.value.map(item => ({
+    value: String(item.id),
+    label: `${item.name}${item.available ? '' : '（目前不可用）'}`,
+  })),
+  ...(form.locationId && !scopeLocations.value.some(item => item.id === Number(form.locationId))
+    ? [{ value: form.locationId, label: selectedLocationName.value || '已选择的地点' }]
+    : []),
+])
 function finishDiscard(answer: boolean) { discardDialog.value?.close(); resolveDiscard?.(answer); resolveDiscard = null }
 async function allowLeave() {
   if (!currentUser.value) return true
@@ -144,23 +204,23 @@ onBeforeRouteLeave(allowLeave); onBeforeRouteUpdate(allowLeave)
     </template>
     <section v-if="editing" class="portal-panel repair-editor">
 <h2 id="repair-editor-heading">{{ selectedId ? '编辑' : '添加' }}{{ tab === 'LOCATION' ? '报修地点' : '人员负责范围' }}</h2><form class="editor-form repair-editor-form" @submit.prevent="save">
-      <label>负责校区<select v-model="form.campusId" required :disabled="busy || (tab === 'LOCATION' && selectedId !== null)"><option value="">请选择校区</option><option v-for="campus in catalog?.campuses" :key="campus.id" :value="String(campus.id)">{{ campus.name }}</option></select></label>
+      <label>负责校区<BaseSelect v-model="form.campusId" :options="campusOptions" :disabled="busy || (tab === 'LOCATION' && selectedId !== null)" /></label>
       <template v-if="tab === 'LOCATION'">
-        <label>地点类型<select v-model="form.kind" :disabled="busy || selectedId !== null"><option v-for="(name, kind) in repairKinds" :key="kind" :value="kind">{{ name }}</option></select></label>
+        <label>地点类型<BaseSelect v-model="form.kind" :options="kindOptions" :disabled="busy || selectedId !== null" /></label>
         <label>地点编号<input v-model="form.code" required maxlength="64" pattern="[A-Za-z0-9_-]+" :disabled="busy || selectedId !== null" placeholder="例如 PUBLIC-EAST-01" /></label><label>地点名称<input v-model="form.name" required maxlength="100" :disabled="busy" placeholder="填写便于识别的地点名称" /></label>
-        <label v-if="form.kind === 'CLASSROOM'">关联教室<select v-model="form.classroomResourceId" required :disabled="busy || selectedId !== null"><option value="">选择本校区已完善的教室</option><option v-for="room in sourceRooms" :key="room.id" :value="String(room.id)">{{ room.name }} · {{ room.buildingName }} {{ room.roomNumber }}{{ room.available ? '' : '（目前不可用）' }}</option></select></label>
-        <label v-if="['CLASSROOM', 'BUILDING_COMMON'].includes(form.kind)">{{ form.kind === 'BUILDING_COMMON' ? '关联楼栋' : '关联楼栋（可选）' }}<select v-model="form.buildingId" :required="form.kind === 'BUILDING_COMMON'" :disabled="busy || selectedId !== null"><option value="">{{ form.kind === 'BUILDING_COMMON' ? '选择本校区已建档楼栋' : '暂不关联楼栋' }}</option><option v-for="building in sourceBuildings" :key="building.id" :value="String(building.id)">{{ building.name }}{{ building.verificationStatus === 'VERIFIED' ? '' : '（资料待核验）' }}</option></select></label>
+        <label v-if="form.kind === 'CLASSROOM'">关联教室<BaseSelect v-model="form.classroomResourceId" :options="sourceRoomOptions" :disabled="busy || selectedId !== null" /></label>
+        <label v-if="['CLASSROOM', 'BUILDING_COMMON'].includes(form.kind)">{{ form.kind === 'BUILDING_COMMON' ? '关联楼栋' : '关联楼栋（可选）' }}<BaseSelect v-model="form.buildingId" :options="sourceBuildingOptions" :disabled="busy || selectedId !== null" /></label>
         <p v-if="form.kind === 'BUILDING_COMMON' && !sourceBuildings.length" class="muted repair-form-wide">当前校区没有已建档楼栋，可先关联教室或配置校园公共区域。</p>
-        <label v-if="form.kind === 'DORM_ROOM'">关联宿舍房间<select v-model="form.dormRoomId" required :disabled="busy || selectedId !== null"><option value="">选择本校区已建档的宿舍房间</option><option v-for="room in sourceDormRooms" :key="room.id" :value="String(room.id)">{{ room.buildingName }} · {{ room.floorLabel }} · {{ room.name }}{{ room.provenance === 'DEMO' ? ' · 演示' : '' }}{{ room.available ? '' : '（目前不可用）' }}</option></select></label>
+        <label v-if="form.kind === 'DORM_ROOM'">关联宿舍房间<BaseSelect v-model="form.dormRoomId" :options="sourceDormRoomOptions" :disabled="busy || selectedId !== null" /></label>
         <p v-if="form.kind === 'DORM_ROOM'" class="muted repair-form-wide">仅当前入住该房间的学生可选择此地点。{{ sourceDormRooms.length ? '变更入住后，旧工单保留历史并停止维修办理。' : '暂无可用房间，请先在住宿资源配置中建档。' }}来源选择最多显示前 1000 条已建档房间。</p>
-        <label>资料标记<select v-model="form.provenance" :disabled="busy"><option value="DEMO">演示地点</option><option value="CONFIGURED">管理员配置</option></select></label><label class="repair-form-wide">位置提示<textarea v-model="form.detailHint" maxlength="300" rows="2" :disabled="busy" placeholder="例如出入口、楼层或明显标识" /></label>
+        <label>资料标记<BaseSelect v-model="form.provenance" :options="provenanceOptions" :disabled="busy" /></label><label class="repair-form-wide">位置提示<textarea v-model="form.detailHint" maxlength="300" rows="2" :disabled="busy" placeholder="例如出入口、楼层或明显标识" /></label>
       </template>
       <template v-else>
-        <label>岗位职责<select v-model="form.capability" :disabled="busy"><option value="DISPATCH">后勤分诊与派单</option><option value="WORK">维修处理</option></select></label>
-        <label>负责人员<select v-model="form.userId" required :disabled="busy"><option value="">选择具备该岗位的启用人员</option><option v-for="person in people" :key="person.id" :value="String(person.id)">{{ person.name }} · {{ person.departmentName }}</option><option v-if="form.userId && !people.some(p => p.id === Number(form.userId))" :value="form.userId" disabled>原人员当前没有有效岗位，请重新选择</option></select></label>
-        <label>故障类别<select v-model="form.category" :disabled="busy"><option v-for="category in catalog?.categories" :key="category.code" :value="category.code">{{ category.name }}</option></select></label>
+        <label>岗位职责<BaseSelect v-model="form.capability" :options="capabilityOptions" :disabled="busy" /></label>
+        <label>负责人员<BaseSelect v-model="form.userId" :options="peopleOptions" :disabled="busy" /></label>
+        <label>故障类别<BaseSelect v-model="form.category" :options="categoryOptions" :disabled="busy" /></label>
         <label class="repair-form-wide">查找具体地点<input v-model="scopeSearch" maxlength="100" :disabled="busy" placeholder="按地点名称或编号搜索，可留空" /><button class="text-button" type="button" :disabled="busy || scopeLoading" @click="loadScopeLocations">搜索地点</button></label>
-        <label class="repair-form-wide">具体地点（可选）<select v-model="form.locationId" :disabled="busy || scopeLoading" @change="selectedLocationName = scopeLocations.find(item => item.id === Number(form.locationId))?.name ?? ''"><option value="">该校区全部开放地点</option><option v-for="item in scopeLocations" :key="item.id" :value="String(item.id)">{{ item.name }}{{ item.available ? '' : '（目前不可用）' }}</option><option v-if="form.locationId && !scopeLocations.some(item => item.id === Number(form.locationId))" :value="form.locationId">{{ selectedLocationName || '已选择的地点' }}</option></select><small v-if="scopeTotal > 100">共找到 {{ scopeTotal }} 个地点，当前显示前 100 个，请输入名称缩小范围。</small></label>
+        <label class="repair-form-wide">具体地点（可选）<BaseSelect v-model="form.locationId" :options="scopeLocationOptions" :disabled="busy || scopeLoading" @change="selectedLocationName = scopeLocations.find(item => item.id === Number(form.locationId))?.name ?? ''" /><small v-if="scopeTotal > 100">共找到 {{ scopeTotal }} 个地点，当前显示前 100 个，请输入名称缩小范围。</small></label>
       </template>
       <label class="repair-form-wide">配置原因<textarea v-model="form.reason" required maxlength="200" rows="2" :disabled="busy" /></label><div class="form-actions repair-form-wide"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存配置' }}</button><button class="button compact" type="button" :disabled="busy" @click="refresh">取消编辑</button></div>
     </form>

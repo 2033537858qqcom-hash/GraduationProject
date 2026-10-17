@@ -7,6 +7,11 @@ import type { AssistantRepairPreview, RepairPlace, RepairPreviewFields } from '.
 import type { AssistantTaskView } from '../lib/assistantSessions'
 import { useAssistantDraft } from '../lib/useAssistantDraft'
 import { repairCategories, repairStatuses } from '../repairs'
+import BaseSelect from './BaseSelect.vue'
+const categoryOptions = [
+  { value: '', label: '请选择类别' },
+  ...Object.entries(repairCategories).map(([key, label]) => ({ value: key, label })),
+]
 
 const props = defineProps<{ active: boolean; mode: 'LOCAL' | 'DEEPSEEK'; modelReady: boolean; sessionId: number | null; resumeTaskId: number | null }>()
 const emit = defineEmits<{ saving: [value: boolean]; working: [value: boolean]; updated: [value: AssistantTaskView] }>()
@@ -17,6 +22,23 @@ const { fields, preview, saved, record, question, latest, consent, confirmed, bu
 defineExpose({ allowLeave })
 const places = ref<RepairPlace[]>([]), campuses = ref<{ id: number; name: string }[]>([]), campusId = ref(''), placeNote = ref('')
 const visiblePlaces = computed(() => places.value.filter(item => !campusId.value || String(item.campusId) === campusId.value))
+const campusOptions = computed(() => [
+  { value: '', label: '请选择校区' },
+  ...campuses.value.map(campus => ({ value: String(campus.id), label: campus.name })),
+])
+const locationOptions = computed(() => [
+  { value: '', label: '请选择开放地点' },
+  ...(fields.locationId && !visiblePlaces.value.some(item => item.id === fields.locationId)
+    ? [{ value: String(fields.locationId), label: `${preview.value?.locationName || '当前选择'}（当前选择）` }]
+    : []),
+  ...visiblePlaces.value.map(place => ({ value: String(place.id), label: place.name })),
+])
+const selectedLocationId = computed({
+  get: () => fields.locationId ? String(fields.locationId) : '',
+  set: (val: string | number) => {
+    fields.locationId = val ? Number(val) : null
+  },
+})
 async function loadPlaces() {
   try {
     const catalog = await api<{ campuses: { id: number; name: string }[] }>('/repairs/catalog')
@@ -29,13 +51,10 @@ async function loadPlaces() {
     else if (!campusId.value) campusId.value = String(catalog.campuses[0]?.id ?? '')
   } catch (cause) { placeNote.value = errorMessage(cause) }
 }
-function changeCampus(event: Event) {
-  campusId.value = (event.target as HTMLSelectElement).value
-  if (fields.locationId && !places.value.some(item => item.id === fields.locationId && String(item.campusId) === campusId.value)) fields.locationId = null
-}
-function pickLocation(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
-  fields.locationId = value ? Number(value) : null
+function onCampusChange() {
+  if (fields.locationId && !places.value.some(item => item.id === fields.locationId && String(item.campusId) === campusId.value)) {
+    fields.locationId = null
+  }
 }
 watch(() => props.active, active => { if (active) void loadPlaces() }, { immediate: true })
 watch(() => fields.locationId, id => { const selected = places.value.find(item => item.id === id); if (selected) campusId.value = String(selected.campusId) })
@@ -55,10 +74,10 @@ watch(() => fields.locationId, id => { const selected = places.value.find(item =
         <ul v-if="checked && preview?.issues.length" class="assistant-draft-issues"><li v-for="issue in preview.issues" :key="issue">{{ issue }}</li></ul>
         <form @submit.prevent="prepare(false)">
           <fieldset :disabled="busy || saving || uncertain">
-            <label>故障类别<select v-model="fields.category"><option value="">请选择类别</option><option v-for="(label, key) in repairCategories" :key="key" :value="key">{{ label }}</option></select></label>
+            <label>故障类别<BaseSelect v-model="fields.category" :options="categoryOptions" /></label>
             <label>故障标题<input v-model="fields.title" type="text" maxlength="100" placeholder="用简短标题说明故障" /></label>
             <label>故障现象<textarea v-model="fields.description" rows="2" maxlength="2000" placeholder="只保留实际看到的现象" /></label>
-            <div class="assistant-draft-grid"><label>所在校区<select :value="campusId" @change="changeCampus"><option value="">请选择校区</option><option v-for="campus in campuses" :key="campus.id" :value="String(campus.id)">{{ campus.name }}</option></select></label><label>报修地点<select :value="fields.locationId ? String(fields.locationId) : ''" @change="pickLocation"><option value="">请选择开放地点</option><option v-if="fields.locationId && !visiblePlaces.some(item => item.id === fields.locationId)" :value="String(fields.locationId)">{{ preview?.locationName || '当前选择' }}（当前选择）</option><option v-for="place in visiblePlaces" :key="place.id" :value="String(place.id)">{{ place.name }}</option></select></label></div>
+            <div class="assistant-draft-grid"><label>所在校区<BaseSelect v-model="campusId" :options="campusOptions" @change="onCampusChange" /></label><label>报修地点<BaseSelect v-model="selectedLocationId" :options="locationOptions" /></label></div>
             <label>具体位置<input v-model="fields.locationDetail" type="text" maxlength="300" placeholder="可选，例如楼层或方位，不由模型猜测" /></label>
             <label>联系手机或邮箱<input v-model="fields.contact" type="text" maxlength="80" placeholder="仅在本地表单填写" autocomplete="off" /></label>
             <label>方便联系的时间<input v-model="fields.contactWindow" type="text" maxlength="100" placeholder="可选，仅在本地填写" /></label>

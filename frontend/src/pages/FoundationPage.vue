@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { Building2, History, Plus, Search, ShieldCheck, Users } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
+import BaseSelect from '../components/BaseSelect.vue'
 import { currentUser } from '../stores/auth'
 import type { FoundationAudit, FoundationCatalog, FoundationClass, FoundationDepartment, FoundationMajor, ManagedAccount, Paged } from '../foundation'
 
@@ -37,6 +38,54 @@ const stateCandidate = ref<ManagedAccount | null>(null), stateReason = ref('')
 let resolveConfirmation: ((accept: boolean) => void) | null = null
 const actionNames: Record<string, string> = { USER_CREATE: '新建账号', USER_UPDATE: '修改账号与岗位', USER_ENABLE: '启用账号', USER_DISABLE: '停用账号', DEPARTMENT_CREATE: '新建学院或部门', DEPARTMENT_UPDATE: '修改学院或部门', MAJOR_CREATE: '新建专业', MAJOR_UPDATE: '修改专业', CLASS_GROUP_CREATE: '新建行政班', CLASS_GROUP_UPDATE: '修改行政班', LOCATION_CREATE: '新增报修地点', LOCATION_UPDATE: '修改报修地点', LOCATION_ENABLE: '开放报修地点', LOCATION_DISABLE: '停用报修地点', SCOPE_CREATE: '新增后勤负责范围', SCOPE_UPDATE: '修改后勤负责范围', SCOPE_ENABLE: '启用后勤负责范围', SCOPE_DISABLE: '停用后勤负责范围' }
 const typeNames: Record<string, string> = { USER: '账号', DEPARTMENT: '学院与部门', MAJOR: '专业', CLASS_GROUP: '行政班', REPAIR_LOCATION: '报修地点', REPAIR_SCOPE: '后勤负责范围' }
+const filterRoleOptions = computed(() => [
+  { value: '', label: '全部身份' },
+  ...(catalog.value?.roles.map(r => ({ value: r.code, label: r.name })) ?? []),
+])
+const filterDepartmentOptions = computed(() => [
+  { value: '', label: '全部组织' },
+  ...(catalog.value?.departments.map(d => ({ value: String(d.id), label: d.name })) ?? []),
+])
+const filterEnabledOptions = [
+  { value: '', label: '全部状态' },
+  { value: 'true', label: '启用' },
+  { value: 'false', label: '停用' },
+]
+const formCampusOptions = computed(() => [
+  ...(catalog.value?.campuses.map(c => ({ value: c.id, label: c.name })) ?? []),
+])
+const formDepartmentOptions = computed(() => [
+  { value: 0, label: '请选择组织', disabled: true },
+  ...departments.value.map(d => ({ value: d.id, label: d.name })),
+])
+const formClassGroupOptions = computed(() => [
+  { value: 0, label: '请选择行政班', disabled: true },
+  ...availableClasses.value.map(g => ({ value: g.id, label: g.name })),
+])
+const orgKindOptions = [
+  { value: 'COLLEGE', label: '学院' },
+  { value: 'ADMIN', label: '管理部门' },
+]
+const orgParentOptions = computed(() => {
+  const list = [{ value: 0, label: '请选择', disabled: true }]
+  if (orgType.value === 'majors') {
+    return [
+      ...list,
+      ...(catalog.value?.departments.filter(d => d.kind === 'COLLEGE').map(d => ({ value: d.id, label: d.name })) ?? []),
+    ]
+  }
+  return [
+    ...list,
+    ...(catalog.value?.majors.map(m => ({
+      value: m.id,
+      label: `${m.name} · ${catalog.value?.departments.find(d => d.id === m.departmentId)?.name ?? ''}`,
+    })) ?? []),
+  ]
+})
+const auditTypeOptions = computed(() => [
+  { value: '', label: '全部记录' },
+  ...Object.entries(typeNames).map(([key, name]) => ({ value: key, label: name })),
+])
 function roleName(code: string) { return catalog.value?.roles.find(role => role.code === code)?.name ?? code }
 function organizationParent(row: FoundationDepartment | FoundationMajor | FoundationClass) {
   if ('departmentId' in row) return catalog.value?.departments.find(d => d.id === row.departmentId)?.name ?? '未设置学院'
@@ -178,7 +227,7 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
     <template v-else-if="catalog && tab === 'accounts'">
       <section class="portal-panel">
         <div class="section-heading"><div><h2>校园人员账号</h2><p class="muted">共 {{ accounts.total }} 个符合条件的账号</p></div><button class="button primary compact" :disabled="busy" @click="openAccount(null)"><Plus :size="15" />新建账号</button></div>
-        <form class="foundation-filters" @submit.prevent="searchAccounts"><label class="filter-search">搜索人员<input v-model="filters.q" maxlength="100" placeholder="姓名、账号或学工号" /></label><label>身份与岗位<select v-model="filters.role"><option value="">全部身份</option><option v-for="r in catalog.roles" :key="r.code" :value="r.code">{{ r.name }}</option></select></label><label>所属组织<select v-model="filters.departmentId"><option value="">全部组织</option><option v-for="d in catalog.departments" :key="d.id" :value="String(d.id)">{{ d.name }}</option></select></label><label>账号状态<select v-model="filters.enabled"><option value="">全部状态</option><option value="true">启用</option><option value="false">停用</option></select></label><button class="button compact" :disabled="busy"><Search :size="15" />查询</button></form>
+        <form class="foundation-filters" @submit.prevent="searchAccounts"><label class="filter-search">搜索人员<input v-model="filters.q" maxlength="100" placeholder="姓名、账号或学工号" /></label><label>身份与岗位<BaseSelect v-model="filters.role" :options="filterRoleOptions" /></label><label>所属组织<BaseSelect v-model="filters.departmentId" :options="filterDepartmentOptions" /></label><label>账号状态<BaseSelect v-model="filters.enabled" :options="filterEnabledOptions" /></label><button class="button compact" :disabled="busy"><Search :size="15" />查询</button></form>
         <div v-if="accounts.items.length" class="table-scroll"><table class="campus-table foundation-table"><thead><tr><th>人员</th><th>组织与行政班</th><th>身份与岗位</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="a in accounts.items" :key="a.id"><td><strong>{{ a.fullName }}</strong><small>账号 {{ a.username }}</small><small>学工号 {{ a.identityNumber }}</small></td><td>{{ a.departmentName ?? '未设置' }}<small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small></td><td><span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span></td><td><span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span></td><td><div class="foundation-row-actions"><button class="text-button" :disabled="busy" @click="openAccount(a)">编辑账号</button><button class="text-button" :disabled="busy || accountOpen || a.id === currentUser?.id" :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined" @click="changeState(a)">{{ a.enabled ? '停用' : '启用' }}</button><button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button></div></td></tr></tbody></table></div>
         <p v-else class="empty-state">没有符合条件的账号，请调整搜索或筛选条件。</p>
       </section>
@@ -186,9 +235,9 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
         <div class="section-heading"><div><span class="eyebrow">{{ selected ? selected.username : '管理员建档' }}</span><h2 id="account-form-heading">{{ selected ? '编辑人员账号' : '新建校园账号' }}</h2><p class="muted">身份与组织由管理员维护。角色或归属变更后，该人员需要重新登录。</p></div></div>
         <form class="editor-form" @submit.prevent="saveAccount">
 <fieldset :disabled="busy" class="foundation-fields">
-          <div class="form-grid"><label v-if="!selected">登录账号<input v-model="form.username" required pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" maxlength="64" autocomplete="off" /></label><label>姓名<input v-model="form.fullName" required maxlength="100" /></label><label>学号 / 工号<input v-model="form.identityNumber" required maxlength="64" /></label><label>所属校区<select v-model="form.campusId" required><option v-for="c in catalog.campuses" :key="c.id" :value="c.id">{{ c.name }}</option></select></label></div>
+          <div class="form-grid"><label v-if="!selected">登录账号<input v-model="form.username" required pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}" maxlength="64" autocomplete="off" /></label><label>姓名<input v-model="form.fullName" required maxlength="100" /></label><label>学号 / 工号<input v-model="form.identityNumber" required maxlength="64" /></label><label>所属校区<BaseSelect v-model="form.campusId" :options="formCampusOptions" /></label></div>
           <fieldset class="role-choices"><legend><ShieldCheck :size="15" />身份与岗位</legend><label v-for="r in catalog.roles" :key="r.code" class="role-choice"><input v-model="form.roles" type="checkbox" :value="r.code" :disabled="selected?.id === currentUser?.id && r.code === 'ADMIN'" /><span><strong>{{ r.name }}</strong><small>{{ r.scope }}</small></span></label></fieldset>
-          <div class="form-grid"><label>所属学院 / 部门<select v-model="form.departmentId" required><option :value="0" disabled>请选择组织</option><option v-for="d in departments" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><label v-if="student">所属行政班<select v-model="form.classGroupId" required><option :value="0" disabled>请选择行政班</option><option v-for="g in availableClasses" :key="g.id" :value="g.id">{{ g.name }}</option></select><small class="muted">仅显示所选学院下的行政班</small></label></div>
+          <div class="form-grid"><label>所属学院 / 部门<BaseSelect v-model="form.departmentId" :options="formDepartmentOptions" /></label><label v-if="student">所属行政班<BaseSelect v-model="form.classGroupId" :options="formClassGroupOptions" /><small class="muted">仅显示所选学院下的行政班</small></label></div>
           <label v-if="!selected">初始密码<input v-model="form.initialPassword" type="password" required minlength="10" maxlength="72" autocomplete="new-password" /><small class="muted">至少十位，包含字母和数字，最多 72 个 UTF-8 字节；仅用于首次建档，不在页面或记录中回显。</small></label>
           <label v-else>变更原因<textarea v-model="form.reason" required maxlength="200" rows="2" placeholder="说明人员资料、归属或岗位调整的原因" /></label>
         </fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : selected ? '保存修改' : '创建账号' }}</button><button type="button" class="text-button" :disabled="busy" @click="closeForms">取消编辑</button></div>
@@ -202,11 +251,11 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
         <nav class="organization-tabs" aria-label="组织目录类型"><button v-for="item in [{ key: 'departments', label: '学院与部门' }, { key: 'majors', label: '专业' }, { key: 'class-groups', label: '行政班' }]" :key="item.key" class="button compact" :class="{ chosen: orgType === item.key }" :disabled="busy" @click="navigate('organization', { org: item.key })">{{ item.label }}</button></nav>
         <div v-if="organizationRows.length" class="table-scroll"><table class="campus-table foundation-table"><thead><tr><th>{{ orgLabel }}名称</th><th>{{ orgType === 'departments' ? '组织类型' : '所属' + (orgType === 'majors' ? '学院' : '专业') }}</th><th>操作</th></tr></thead><tbody><tr v-for="row in organizationRows" :key="row.id"><td>{{ row.name }}</td><td>{{ organizationParent(row) }}</td><td><div class="foundation-row-actions"><button class="text-button" :disabled="busy" @click="openOrganization(row)">编辑</button><button class="text-button" :disabled="busy" @click="showAudit(orgType === 'departments' ? 'DEPARTMENT' : orgType === 'majors' ? 'MAJOR' : 'CLASS_GROUP', row.id)">修改记录</button></div></td></tr></tbody></table></div><p v-else class="empty-state">尚未维护{{ orgLabel }}，可从上方新建。</p>
       </section>
-      <section v-if="orgOpen" class="portal-panel foundation-editor"><h2 id="organization-form-heading">{{ orgId ? '编辑' : '新建' }}{{ orgType === 'departments' ? '学院或部门' : orgLabel }}</h2><p class="muted">已有人员或班级关联时，所属关系的调整会先进行校验。</p><form class="editor-form" @submit.prevent="saveOrganization"><fieldset :disabled="busy" class="foundation-fields"><label>名称<input v-model="organization.name" required maxlength="100" /></label><label v-if="orgType === 'departments'">组织类型<select v-model="organization.kind"><option value="COLLEGE">学院</option><option value="ADMIN">管理部门</option></select></label><label v-else>所属{{ orgType === 'majors' ? '学院' : '专业' }}<select v-model="organization.parentId" required><option :value="0" disabled>请选择</option><template v-if="orgType === 'majors'"><option v-for="d in catalog.departments.filter(d => d.kind === 'COLLEGE')" :key="d.id" :value="d.id">{{ d.name }}</option></template><template v-else><option v-for="m in catalog.majors" :key="m.id" :value="m.id">{{ m.name }} · {{ catalog.departments.find(d => d.id === m.departmentId)?.name }}</option></template></select></label></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存组织信息' }}</button><button type="button" class="text-button" :disabled="busy" @click="closeForms">取消编辑</button></div></form></section>
+      <section v-if="orgOpen" class="portal-panel foundation-editor"><h2 id="organization-form-heading">{{ orgId ? '编辑' : '新建' }}{{ orgType === 'departments' ? '学院或部门' : orgLabel }}</h2><p class="muted">已有人员或班级关联时，所属关系的调整会先进行校验。</p><form class="editor-form" @submit.prevent="saveOrganization"><fieldset :disabled="busy" class="foundation-fields"><label>名称<input v-model="organization.name" required maxlength="100" /></label><label v-if="orgType === 'departments'">组织类型<BaseSelect v-model="organization.kind" :options="orgKindOptions" /></label><label v-else>所属{{ orgType === 'majors' ? '学院' : '专业' }}<BaseSelect v-model="organization.parentId" :options="orgParentOptions" /></label></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存组织信息' }}</button><button type="button" class="text-button" :disabled="busy" @click="closeForms">取消编辑</button></div></form></section>
     </template>
     <section v-else-if="catalog && tab === 'audit'" class="portal-panel">
       <div class="section-heading"><div><h2>人员与组织修改记录</h2><p class="muted">保留操作人员、变更前后信息和原因；共 {{ audits.total }} 条记录。</p></div></div>
-      <form class="foundation-filters audit-filters" @submit.prevent="navigate('audit', { entityType: auditType, page: 1 })"><label>记录类型<select v-model="auditType"><option value="">全部记录</option><option v-for="(name, key) in typeNames" :key="key" :value="key">{{ name }}</option></select></label><button class="button compact">查询</button><RouterLink v-if="route.query.entityId" :to="{ path: root, query: { tab: 'audit' } }" class="text-button">查看全部修改记录</RouterLink></form>
+      <form class="foundation-filters audit-filters" @submit.prevent="navigate('audit', { entityType: auditType, page: 1 })"><label>记录类型<BaseSelect v-model="auditType" :options="auditTypeOptions" /></label><button class="button compact">查询</button><RouterLink v-if="route.query.entityId" :to="{ path: root, query: { tab: 'audit' } }" class="text-button">查看全部修改记录</RouterLink></form>
       <p v-if="!audits.items.length" class="empty-state">当前没有对应的修改记录。</p><article v-for="record in audits.items" :key="record.id" class="foundation-audit"><div class="notice-heading"><h3>{{ actionNames[record.action] ?? '管理操作' }}</h3><span class="status-label">{{ typeNames[record.entityType] }}</span></div><p class="preserve-lines">{{ record.summary }}</p><p class="muted">原因：{{ record.reason }}</p><small>{{ record.actorName }} · {{ record.createdAt.slice(0, 16).replace('T', ' ') }}</small></article>
     </section>
     <div v-if="!loading && catalog && tab !== 'organization'" class="foundation-pagination"><span>第 {{ shownPage.page }} / {{ totalPages }} 页</span><div><button class="button compact" :disabled="busy || shownPage.page <= 1" @click="changePage(shownPage.page - 1)">上一页</button><button class="button compact" :disabled="busy || shownPage.page >= totalPages" @click="changePage(shownPage.page + 1)">下一页</button></div></div>

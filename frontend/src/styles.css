@@ -490,7 +490,8 @@ svg { flex-shrink: 0; }
 .term-picker .picker-label { font-weight: 500; color: #374151; font-size: 13px; }
 .term-picker select { font-size: 12px; padding: 8px 10px; }
 .learning-tabs { display: flex; gap: 26px; align-items: center; border-bottom: 1px solid var(--line); margin-bottom: 25px; overflow-x: auto; }
-.learning-tabs > a, .learning-tabs > button { display: flex; align-items: center; gap: 7px; padding: 13px 1px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.learning-tabs > a, .learning-tabs > button { display: flex; align-items: center; gap: 7px; padding: 13px 1px; border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; white-space: nowrap; font-size: 13px; color: var(--muted); cursor: pointer; transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1); }
+.learning-tabs > a:active, .learning-tabs > button:active { transform: scale(0.96); }
 .learning-tabs .selected { border-bottom-color: var(--brand); color: var(--brand); }
 .learning-grid { display: grid; grid-template-columns: 265px minmax(0,1fr); gap: 24px; align-items: start; }
 .course-directory { background: #fff; border: 1px solid var(--line); }

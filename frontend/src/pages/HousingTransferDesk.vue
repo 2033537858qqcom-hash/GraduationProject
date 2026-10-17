@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { api, errorMessage } from '../lib/api'
+import BaseSelect from '../components/BaseSelect.vue'
 import { bedCanAssign, housingRequestKey, housingWhen, transferStatus, type DormBed, type DormScope, type HousingPage, type HousingResponsibilities, type HousingTransfer } from '../housing'
 const emit = defineEmits<{ changed: [] }>()
 const route = useRoute()
@@ -18,6 +19,11 @@ const error = ref('')
 const success = ref('')
 const busy = ref(false)
 const loading = ref(true)
+const scopeOptions = computed(() => scopes.value.map(scope => ({ value: String(scope.buildingId), label: scope.buildingName })))
+const bedOptions = computed(() => {
+  if (!beds.value.length) return [{ value: '', label: '当前楼栋没有空闲床位' }]
+  return beds.value.map(bed => ({ value: String(bed.id), label: `${bed.roomName} · ${bed.label}` }))
+})
 let key = housingRequestKey(), sequence = 0
 async function load() {
   const stamp = ++sequence
@@ -69,7 +75,7 @@ onBeforeUnmount(() => { sequence++ })
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
     <p v-if="loading" role="status">正在读取调宿安排…</p>
     <template v-else>
-      <label v-if="scopes.length">用于预留的楼栋<select v-model="buildingId" :disabled="busy" @change="refresh"><option v-for="scope in scopes" :key="scope.buildingId" :value="String(scope.buildingId)">{{ scope.buildingName }}</option></select></label>
+      <label v-if="scopes.length">用于预留的楼栋<BaseSelect v-model="buildingId" :options="scopeOptions" :disabled="busy" @change="refresh" /></label>
       <p class="muted">待安排 {{ waiting.length }} 份，负责楼栋待入住 {{ reserved.length }} 份。预留后 72 小时内确认入住，到期释放预留并保留原床位。</p>
       <p v-if="!items.length && !error" class="empty-state">当前没有需要处理的调宿申请。</p>
       <article v-for="item in items" :id="'assigned-transfer-' + item.id" :key="item.id" class="portal-panel repair-config-card" :aria-label="'调宿申请 #' + item.id">
@@ -78,7 +84,7 @@ onBeforeUnmount(() => { sequence++ })
         <p>原住宿 {{ item.sourcePlace }}</p><p class="muted">意向 {{ item.preferredArea }} · {{ item.reason }}</p>
         <p v-if="item.targetPlace">安排床位 {{ item.targetPlace }}</p>
         <p v-if="item.reserveUntil && item.status === 'AWAITING_CHECKIN'" class="muted">请于 {{ housingWhen(item.reserveUntil) }} 前入住{{ item.cancelRequested ? ' · 学生请求取消' : '' }}</p>
-        <template v-if="item.allowedActions.includes('reserve')"><label>空闲床位<select v-model="bedId" :disabled="busy"><option v-if="!beds.length" value="">当前楼栋没有空闲床位</option><option v-for="bed in beds" :key="bed.id" :value="String(bed.id)">{{ bed.roomName }} · {{ bed.label }}</option></select></label><button class="button compact" type="button" :disabled="busy || !bedId" @click="reserve(item)">预留 72 小时</button></template>
+        <template v-if="item.allowedActions.includes('reserve')"><label>空闲床位<BaseSelect v-model="bedId" :options="bedOptions" :disabled="busy" /></label><button class="button compact" type="button" :disabled="busy || !bedId" @click="reserve(item)">预留 72 小时</button></template>
         <div v-if="item.status === 'AWAITING_CHECKIN'" class="repair-card-actions"><button v-if="item.allowedActions.includes('check-in')" class="text-button" type="button" :disabled="busy || item.cancelRequested" @click="post(item, 'check-in')">确认入住</button><button v-if="item.allowedActions.includes('release')" class="text-button" type="button" :disabled="busy" @click="post(item, 'release')">退回待安排</button><button v-if="item.allowedActions.includes('accept-cancel')" class="text-button" type="button" :disabled="busy" @click="post(item, 'cancel')">同意取消</button><button v-if="item.allowedActions.includes('keep')" class="text-button" type="button" :disabled="busy" @click="post(item, 'keep')">不同意取消</button></div>
       </article>
       <label v-if="items.some(item => item.allowedActions.length)" class="repair-editor">处理说明<textarea v-model="comment" maxlength="200" rows="2" :disabled="busy"></textarea></label>

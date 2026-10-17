@@ -10,6 +10,7 @@ import AssistantLeaveDraft from './AssistantLeaveDraft.vue'
 import AssistantCertificateDraft from './AssistantCertificateDraft.vue'
 import AssistantRepairDraft from './AssistantRepairDraft.vue'
 import AssistantHousingDraft from './AssistantHousingDraft.vue'
+import BaseSelect from './BaseSelect.vue'
 import { latestAssistantTask, mergeAssistantTurns, restoredTurnLabel } from '../lib/assistantSessions'
 import type { AssistantSession, AssistantSessionDetail, AssistantTurn, AssistantTaskSummary, AssistantTaskView, AssistantQueryResult } from '../lib/assistantSessions'
 import type { AssistantContext } from '../lib/assistant'
@@ -19,6 +20,10 @@ const open = ref(false), hint = ref(true), loading = ref(false), busy = ref(fals
 const contextEnabled = ref(true), consent = ref(false), mode = ref<'LOCAL' | 'DEEPSEEK'>('LOCAL')
 const capabilities = ref<AssistantCapabilities | null>(null)
 const task = ref<'QUERY' | 'LEAVE' | 'CERTIFICATE' | 'REPAIR' | 'HOUSING' | 'HISTORY'>('QUERY'), savingDraft = ref(false), preparingDraft = ref(false)
+const modeOptions = computed(() => [
+  { value: 'LOCAL', label: task.value !== 'QUERY' ? '本地填写' : '本地查询' },
+  { value: 'DEEPSEEK', label: `DeepSeek${capabilities.value?.deepseekReady ? '' : ' · 未连接'}`, disabled: !capabilities.value?.deepseekReady },
+])
 const session = ref<AssistantSessionDetail | null>(null), sessionLoading = ref(false)
 const sessionList = ref<{ items: AssistantSession[]; total: number; page: number; pageSize: number }>({ items: [], total: 0, page: 1, pageSize: 10 })
 const turns = ref<AssistantTurn[]>([]), requeryContext = ref<AssistantContext | null>(null)
@@ -178,7 +183,7 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
       <header class="assistant-head"><div><strong>AI 对话</strong><small>{{ task === 'HISTORY' ? '恢复本人对话与已核对的进度' : task !== 'QUERY' ? '整理资料，确认后保存本人草稿' : '查询当前账号可见的信息' }}</small></div><button class="assistant-icon" aria-label="收起 AI 对话" :disabled="savingDraft" @click="close"><ChevronDown :size="19" /></button></header>
       <div class="assistant-session-bar"><span>{{ session?.session.title ?? '正在恢复本人对话' }}</span><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="listSessions()">历史对话</button><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="newSession">新对话</button></div>
       <nav v-if="canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing" class="assistant-tasks" aria-label="AI 服务方式"><button :aria-pressed="task === 'QUERY'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'QUERY'">查询信息</button><button v-if="canPrepareLeave" :aria-pressed="task === 'LEAVE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'LEAVE'">准备请假</button><button v-if="canPrepareCertificate" :aria-pressed="task === 'CERTIFICATE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'CERTIFICATE'">准备证明</button><button v-if="canPrepareRepair" :aria-pressed="task === 'REPAIR'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'REPAIR'">准备报修</button><button v-if="canPrepareHousing" :aria-pressed="task === 'HOUSING'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'HOUSING'">准备调宿</button></nav>
-      <div v-if="task !== 'HISTORY'" class="assistant-mode"><label>回答方式<select v-model="mode" :disabled="busy || loading || preparingDraft || savingDraft" aria-label="回答方式"><option value="LOCAL">{{ task !== 'QUERY' ? '本地填写' : '本地查询' }}</option><option value="DEEPSEEK" :disabled="!capabilities?.deepseekReady">DeepSeek{{ capabilities?.deepseekReady ? '' : ' · 未连接' }}</option></select></label><span>{{ busy || preparingDraft ? '正在处理' : mode === 'LOCAL' ? task !== 'QUERY' ? '表单核对' : '关键词识别' : '自然语言识别' }}</span></div>
+      <div v-if="task !== 'HISTORY'" class="assistant-mode"><label>回答方式<BaseSelect v-model="mode" :options="modeOptions" compact :disabled="busy || loading || preparingDraft || savingDraft" aria-label="回答方式" /></label><span>{{ busy || preparingDraft ? '正在处理' : mode === 'LOCAL' ? task !== 'QUERY' ? '表单核对' : '关键词识别' : '自然语言识别' }}</span></div>
       <p v-if="loading" class="assistant-status" role="status">正在读取可用查询…</p>
       <p v-if="sessionLoading" class="assistant-status" role="status">正在恢复对话记录…</p>
       <AssistantLeaveDraft v-if="canPrepareLeave" v-show="task === 'LEAVE'" ref="leaveDraft" :active="open && task === 'LEAVE' && !sessionLoading" :mode="mode" :model-ready="!!capabilities?.deepseekReady" :session-id="session?.session.id ?? null" :resume-task-id="resumeTaskId('LEAVE')" @updated="taskUpdated" @saving="savingDraft = $event" @working="preparingDraft = $event" />

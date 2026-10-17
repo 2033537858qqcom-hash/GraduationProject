@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
 import { ArrowUpRight, Check, FilePlus2, History, RefreshCw, Send } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
+import BaseSelect from '../components/BaseSelect.vue'
 import { contentActions } from '../lib/contentWorkflow'
 import { currentUser } from '../stores/auth'
 import type { ContentHistory, ContentRevision, ManagedContent } from '../types'
@@ -15,6 +16,25 @@ const editable = computed(() => !!currentUser.value?.permissions.includes('conte
 const actions = computed(() => selection.value ? contentActions(selection.value, currentUser.value) : null)
 const statusNames: Record<string, string> = { DRAFT: '草稿', IN_REVIEW: '待审核', PUBLISHED: '已发布', REJECTED: '已驳回', WITHDRAWN: '已撤下' }
 const actionNames: Record<string, string> = { CREATED: '创建草稿', UPDATED: '保存工作稿', SUBMITTED: '送交审核', RECALLED: '撤回送审', REJECTED: '审核驳回', REVISION_STARTED: '开始更正', PUBLISHED: '审核发布', UNPUBLISHED: '撤下公开内容', BASELINE: '迁移前版本' }
+const filterStatusOptions = computed(() => [
+  { value: '', label: '全部状态' },
+  ...Object.entries(statusNames).map(([key, name]) => ({ value: key, label: name })),
+])
+const filterCategoryOptions = [
+  { value: '', label: '全部栏目' },
+  { value: 'about', label: '学校概况' },
+  { value: 'news', label: '校园新闻' },
+  { value: 'notice', label: '通知公告' },
+]
+const formCategoryOptions = [
+  { value: 'notice', label: '通知公告' },
+  { value: 'news', label: '校园新闻' },
+  { value: 'about', label: '学校概况' },
+]
+const formSourceTypeOptions = [
+  { value: 'DEMO', label: '演示内容' },
+  { value: 'PUBLIC_SOURCE', label: '学校公开资料' },
+]
 const filters = reactive({ q: '', status: '', category: '' })
 const filtered = computed(() => items.value.filter(item => (!filters.status || item.status === filters.status) && (!filters.category || item.category === filters.category) && (item.title + ' ' + item.slug).toLowerCase().includes(filters.q.toLowerCase().trim())))
 const view = computed(() => route.query.view === 'history' ? 'history' : route.query.view === 'live' ? 'live' : 'work')
@@ -153,8 +173,8 @@ onBeforeUnmount(() => { sequence++; historySequence++; finishConfirmation(false)
     <p v-if="error" class="alert" role="alert">{{ error }}</p><p v-if="success" class="success-message" role="status">{{ success }}</p>
     <form class="content-filters foundation-filters" @submit.prevent="filterItems">
       <label class="filter-search">搜索内容<input v-model="filters.q" maxlength="160" placeholder="标题或内容标识" /></label>
-      <label>稿件状态<select v-model="filters.status"><option value="">全部状态</option><option v-for="(name, key) in statusNames" :key="key" :value="key">{{ name }}</option></select></label>
-      <label>所属栏目<select v-model="filters.category"><option value="">全部栏目</option><option value="about">学校概况</option><option value="news">校园新闻</option><option value="notice">通知公告</option></select></label><button class="button compact" :disabled="busy">查询</button>
+      <label>稿件状态<BaseSelect v-model="filters.status" :options="filterStatusOptions" /></label>
+      <label>所属栏目<BaseSelect v-model="filters.category" :options="filterCategoryOptions" /></label><button class="button compact" :disabled="busy">查询</button>
     </form>
     <div class="content-manager-grid">
       <section class="portal-panel content-list" aria-label="内容目录">
@@ -170,9 +190,9 @@ onBeforeUnmount(() => { sequence++; historySequence++; finishConfirmation(false)
           <p v-if="selection?.reviewReason" class="content-review-note">最近处理意见：{{ selection.reviewReason }}</p>
           <fieldset class="foundation-fields" :disabled="busy">
 <label>标题<input v-model="form.title" maxlength="160" required /></label>
-            <div class="form-grid"><label>栏目<select v-model="form.category"><option value="notice">通知公告</option><option value="news">校园新闻</option><option value="about">学校概况</option></select></label><label>内容标识<input v-model="form.slug" pattern="[a-z0-9][a-z0-9-]{1,79}" maxlength="80" :readonly="!!selection?.live" placeholder="如 campus-notice" required /><small v-if="selection?.live" class="muted">公开链接固定，标题和正文可通过更正稿修改。</small></label></div>
+            <div class="form-grid"><label>栏目<BaseSelect v-model="form.category" :options="formCategoryOptions" /></label><label>内容标识<input v-model="form.slug" pattern="[a-z0-9][a-z0-9-]{1,79}" maxlength="80" :readonly="!!selection?.live" placeholder="如 campus-notice" required /><small v-if="selection?.live" class="muted">公开链接固定，标题和正文可通过更正稿修改。</small></label></div>
             <label>摘要<textarea v-model="form.summary" rows="2" maxlength="400" required /></label><label>正文<textarea v-model="form.body" rows="8" maxlength="20000" required /></label>
-            <div class="form-grid"><label>资料类型<select v-model="form.sourceType"><option value="DEMO">演示内容</option><option value="PUBLIC_SOURCE">学校公开资料</option></select></label><label>来源链接<input v-model="form.sourceUrl" type="url" maxlength="1000" :required="form.sourceType === 'PUBLIC_SOURCE'" placeholder="https://" /></label></div>
+            <div class="form-grid"><label>资料类型<BaseSelect v-model="form.sourceType" :options="formSourceTypeOptions" /></label><label>来源链接<input v-model="form.sourceUrl" type="url" maxlength="1000" :required="form.sourceType === 'PUBLIC_SOURCE'" placeholder="https://" /></label></div>
           </fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存草稿' }}</button><button type="button" class="button compact" :disabled="busy" @click="cancelEdit">取消编辑</button></div>
         </form>
         <template v-else-if="selection">

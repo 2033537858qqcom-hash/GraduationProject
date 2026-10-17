@@ -5,7 +5,12 @@ import type { LeavePreviewFields, AssistantLeavePreview } from '../lib/assistant
 import type { AssistantTaskView } from '../lib/assistantSessions'
 import { useAssistantDraft } from '../lib/useAssistantDraft'
 import { leaveTypes, leaveStatuses } from '../leave'
+import BaseSelect from './BaseSelect.vue'
 const statusNames: Record<string, string> = leaveStatuses
+const reasonTypeOptions = [
+  { value: '', label: '请选择类型' },
+  ...Object.entries(leaveTypes).map(([key, label]) => ({ value: key, label })),
+]
 
 const props = defineProps<{ active: boolean; mode: 'LOCAL' | 'DEEPSEEK'; modelReady: boolean; sessionId: number | null; resumeTaskId: number | null }>()
 const emit = defineEmits<{ saving: [value: boolean]; working: [value: boolean]; updated: [value: AssistantTaskView] }>()
@@ -30,7 +35,7 @@ defineExpose({ allowLeave })
         <ul v-if="checked && preview?.issues.length" class="assistant-draft-issues"><li v-for="issue in preview.issues" :key="issue">{{ issue }}</li></ul>
         <form @submit.prevent="prepare(false)">
           <fieldset :disabled="busy || saving || uncertain">
-            <label>请假类型<select v-model="fields.reasonType"><option value="">请选择类型</option><option v-for="(label, key) in leaveTypes" :key="key" :value="key">{{ label }}</option></select></label>
+            <label>请假类型<BaseSelect v-model="fields.reasonType" :options="reasonTypeOptions" /></label>
             <div class="assistant-draft-grid"><label>开始日期<input v-model="fields.startDate" type="date" /></label><label>开始时间<input v-model="fields.startTime" type="time" /></label><label>结束日期<input v-model="fields.endDate" type="date" /></label><label>结束时间<input v-model="fields.endTime" type="time" /></label></div>
             <label>请假事由<textarea v-model="fields.reason" rows="2" maxlength="2000" placeholder="说明实际事由，确认模型提取的文字" /></label>
             <label>联系手机或邮箱<input v-model="fields.contact" type="text" maxlength="80" placeholder="仅在本地表单填写" autocomplete="off" /></label>

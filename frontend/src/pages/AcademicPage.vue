@@ -4,6 +4,7 @@ import { BookOpen, FileText, CalendarDays, Settings2, Download, Upload } from '@
 import { api, errorMessage } from '../lib/api'
 import { roomOption } from '../resources'
 import type { AcademicCatalog, AcademicGrade, AcademicExam, TeachingDetail } from '../types'
+import BaseSelect from '../components/BaseSelect.vue'
 
 const catalog = ref<AcademicCatalog | null>(null)
 const selected = ref(0)
@@ -25,6 +26,51 @@ watch(() => lessonForm.campusId, () => { lessonForm.roomId = 0 })
 watch(() => examForm.campusId, () => { if (!catalog.value?.rooms.some(room => room.id === examForm.roomId && room.campusId === examForm.campusId)) examForm.roomId = 0 })
 const memberId = ref(0)
 const instructorId = ref(0)
+const classPickerOptions = computed(() => [
+  ...(catalog.value?.classes.map(c => ({ value: c.id, label: `${c.name} · ${c.courseName}` })) ?? []),
+])
+const instructorOptions = computed(() => [
+  { value: 0, label: '选择本学院教师' },
+  ...(catalog.value?.teachers.map(p => ({ value: p.id, label: `${p.fullName} · ${p.identityNumber}` })) ?? []),
+])
+const memberOptions = computed(() => [
+  { value: 0, label: '选择本学院学生' },
+  ...(catalog.value?.students.map(p => ({ value: p.id, label: `${p.fullName} · ${p.identityNumber}` })) ?? []),
+])
+const lessonTeacherOptions = computed(() => [
+  ...(detail.value?.instructors.map(p => ({ value: p.id, label: p.fullName })) ?? []),
+])
+const campusOptions = computed(() => [
+  ...(catalog.value?.campuses.map(c => ({ value: c.id, label: c.name })) ?? []),
+])
+const lessonRoomOptions = computed(() => [
+  { value: 0, label: '请选择可安排的教室', disabled: true },
+  ...lessonRooms.value.map(room => {
+    const insufficient = (room.teachingCapacity ?? 0) < (detail.value?.info.memberCount ?? 0)
+    return {
+      value: room.id,
+      label: `${roomOption(room)}${insufficient ? ' · 容量不足' : ''}`,
+      disabled: insufficient,
+    }
+  }),
+])
+const examRoomOptions = computed(() => [
+  { value: 0, label: '请选择足够考试容量的教室', disabled: true },
+  ...examRooms.value.map(room => {
+    const insufficient = (room.examCapacity ?? 0) < (detail.value?.info.memberCount ?? 0)
+    return {
+      value: room.id,
+      label: `${roomOption(room, true)}${room.schedulable && insufficient ? ' · 容量不足' : ''}`,
+      disabled: !room.schedulable || insufficient,
+    }
+  }),
+])
+const termOptions = computed(() => [
+  ...(catalog.value?.terms.map(t => ({ value: t.id, label: t.name })) ?? []),
+])
+const courseOptions = computed(() => [
+  ...(catalog.value?.courses.map(c => ({ value: c.id, label: `${c.code} · ${c.name}` })) ?? []),
+])
 const gradeText = ref('')
 const validatedRows = ref<{ studentId: number; score: number; version: number }[] | null>(null)
 const classTerm = computed(() => catalog.value?.terms.find(t => t.id === detail.value?.info.termId))
@@ -126,17 +172,17 @@ onMounted(load)
     <div class="learning-heading"><div><span class="eyebrow">ACADEMIC SERVICES</span><h1>教务信息维护</h1><p class="muted">维护本学院教学关系，核对并发布教学信息</p></div><button class="button compact" :disabled="busy || loading" @click="load">刷新数据</button></div>
     <nav class="learning-tabs" aria-label="教务维护栏目"><button :class="{ selected: tab === 'classes' }" :disabled="busy" @click="tab = 'classes'"><BookOpen :size="16" />教学班</button><button :class="{ selected: tab === 'grades' }" :disabled="busy" @click="tab = 'grades'"><FileText :size="16" />成绩维护</button><button :class="{ selected: tab === 'exams' }" :disabled="busy" @click="tab = 'exams'"><CalendarDays :size="16" />考试安排</button><button :class="{ selected: tab === 'foundation' }" :disabled="busy" @click="tab = 'foundation'"><Settings2 :size="16" />基础目录</button></nav>
     <p v-if="error" class="alert" role="alert">{{ error }}</p><p v-if="success" class="success-message" role="status">{{ success }}</p>
-    <label v-if="catalog && tab !== 'foundation'" class="class-picker">当前教学班<select v-model="selected" :disabled="busy || loading" @change="gradeText = ''; loadDetail()"><option v-for="c in catalog.classes" :key="c.id" :value="c.id">{{ c.name }} · {{ c.courseName }}</option></select></label>
+    <label v-if="catalog && tab !== 'foundation'" class="class-picker">当前教学班<BaseSelect v-model="selected" :options="classPickerOptions" :disabled="busy || loading" @change="gradeText = ''; loadDetail()" /></label>
     <p v-if="loading" class="loading-state" role="status">正在读取教务信息…</p>
     <p v-else-if="!detail && tab !== 'foundation'" class="empty-state">暂无教学班，可在基础目录中建立。</p>
     <template v-if="!loading && detail && catalog">
       <section v-if="tab === 'classes'" class="portal-panel">
         <div class="section-heading"><div><h2>{{ detail.info.name }}</h2><p class="muted">{{ detail.info.departmentName }} · {{ detail.info.courseName }} · {{ classTerm?.name }}</p></div></div>
         <h3 class="subsection-heading">任课教师</h3><div class="people-list"><div v-for="p in detail.instructors" :key="p.id"><span>{{ p.fullName }} <small>{{ p.identityNumber }}</small></span><button class="text-button" :disabled="busy" @click="relation(p.id, 'instructors', false)">停用关系</button></div></div>
-        <form class="relation-form" @submit.prevent="relation(instructorId, 'instructors', true)"><label>教师<select v-model="instructorId" :disabled="busy"><option :value="0">选择本学院教师</option><option v-for="p in catalog.teachers" :key="p.id" :value="p.id">{{ p.fullName }} · {{ p.identityNumber }}</option></select></label><button class="button compact" :disabled="busy || !instructorId">添加 / 恢复关联</button></form>
+        <form class="relation-form" @submit.prevent="relation(instructorId, 'instructors', true)"><label>教师<BaseSelect v-model="instructorId" :options="instructorOptions" :disabled="busy" /></label><button class="button compact" :disabled="busy || !instructorId">添加 / 恢复关联</button></form>
         <h3 class="subsection-heading">教学班成员 · {{ detail.members.length }} 人</h3><div class="table-scroll"><table class="campus-table"><thead><tr><th>姓名</th><th>学号</th><th>行政班</th><th>操作</th></tr></thead><tbody><tr v-for="p in detail.members" :key="p.id"><td>{{ p.fullName }}</td><td>{{ p.identityNumber }}</td><td>{{ p.className }}</td><td><button class="text-button" :disabled="busy" @click="relation(p.id, 'members', false)">停用关系</button></td></tr></tbody></table></div>
-        <form class="relation-form" @submit.prevent="relation(memberId, 'members', true)"><label>学生<select v-model="memberId" :disabled="busy"><option :value="0">选择本学院学生</option><option v-for="p in catalog.students" :key="p.id" :value="p.id">{{ p.fullName }} · {{ p.identityNumber }}</option></select></label><button class="button compact" :disabled="busy || !memberId">添加 / 恢复关联</button></form>
-<details class="academic-section"><summary>添加一次课程安排</summary><form class="learning-form" @submit.prevent="addLesson"><fieldset class="form-grid" :disabled="busy"><label>授课教师<select v-model="lessonForm.teacherId" required><option v-for="p in detail.instructors" :key="p.id" :value="p.id">{{ p.fullName }}</option></select></label><label>校区<select v-model="lessonForm.campusId"><option v-for="c in catalog.campuses" :key="c.id" :value="c.id">{{ c.name }}</option></select></label><label>上课教室<select v-model="lessonForm.roomId" required><option :value="0" disabled>请选择可安排的教室</option><option v-for="room in lessonRooms" :key="room.id" :value="room.id" :disabled="(room.teachingCapacity ?? 0) < detail.info.memberCount">{{ roomOption(room) }}{{ (room.teachingCapacity ?? 0) < detail.info.memberCount ? ' · 容量不足' : '' }}</option></select><small class="muted">当前教学班 {{ detail.info.memberCount }} 人；教室目录由管理员维护。</small></label><label>开始时间<input v-model="lessonForm.startsAt" type="datetime-local" required /></label><label>结束时间<input v-model="lessonForm.endsAt" type="datetime-local" required /></label></fieldset><p v-if="!lessonRooms.length" class="content-context-note">该校区没有可安排的教室，请管理员补录资料或启用资源后刷新。</p><div class="form-actions"><button class="button primary compact" :disabled="busy || !detail.instructors.length || !lessonForm.roomId">保存课程安排</button><span class="muted">保存时校验教师、学生、资源容量及教室占用</span></div></form></details>
+        <form class="relation-form" @submit.prevent="relation(memberId, 'members', true)"><label>学生<BaseSelect v-model="memberId" :options="memberOptions" :disabled="busy" /></label><button class="button compact" :disabled="busy || !memberId">添加 / 恢复关联</button></form>
+<details class="academic-section"><summary>添加一次课程安排</summary><form class="learning-form" @submit.prevent="addLesson"><fieldset class="form-grid" :disabled="busy"><label>授课教师<BaseSelect v-model="lessonForm.teacherId" :options="lessonTeacherOptions" /></label><label>校区<BaseSelect v-model="lessonForm.campusId" :options="campusOptions" /></label><label>上课教室<BaseSelect v-model="lessonForm.roomId" :options="lessonRoomOptions" /><small class="muted">当前教学班 {{ detail.info.memberCount }} 人；教室目录由管理员维护。</small></label><label>开始时间<input v-model="lessonForm.startsAt" type="datetime-local" required /></label><label>结束时间<input v-model="lessonForm.endsAt" type="datetime-local" required /></label></fieldset><p v-if="!lessonRooms.length" class="content-context-note">该校区没有可安排的教室，请管理员补录资料或启用资源后刷新。</p><div class="form-actions"><button class="button primary compact" :disabled="busy || !detail.instructors.length || !lessonForm.roomId">保存课程安排</button><span class="muted">保存时校验教师、学生、资源容量及教室占用</span></div></form></details>
       </section>
       <section v-if="tab === 'grades'" class="portal-panel">
 <div class="section-heading"><div><h2>成绩导入与发布</h2><p class="muted">{{ detail.info.name }} · {{ detail.members.length }} 名有效学生</p></div><button class="text-button" :disabled="busy" @click="template"><Download :size="14" />下载模板</button></div>
@@ -146,14 +192,14 @@ onMounted(load)
       </section>
       <section v-if="tab === 'exams'" class="portal-panel">
 <div class="section-heading"><div><h2>考试安排</h2><p class="muted">{{ detail.info.name }} · {{ classTerm?.name }}</p></div><span v-if="detail.exams[0]" class="status-label">{{ detail.exams[0].status === 'DRAFT' ? '草稿' : '已发布' }}</span></div>
-<form class="learning-form" @submit.prevent="saveExam"><fieldset class="form-grid" :disabled="busy"><label>校区<select v-model="examForm.campusId"><option v-for="c in catalog.campuses" :key="c.id" :value="c.id">{{ c.name }}</option></select></label><label>考试教室<select v-model="examForm.roomId" required><option :value="0" disabled>请选择足够考试容量的教室</option><option v-for="room in examRooms" :key="room.id" :value="room.id" :disabled="!room.schedulable || (room.examCapacity ?? 0) < detail.info.memberCount">{{ roomOption(room, true) }}{{ room.schedulable && (room.examCapacity ?? 0) < detail.info.memberCount ? ' · 容量不足' : '' }}</option></select><small class="muted">当前教学班 {{ detail.info.memberCount }} 人，使用考试容量校验。</small></label><label>开始时间<input v-model="examForm.startsAt" type="datetime-local" required /></label><label>结束时间<input v-model="examForm.endsAt" type="datetime-local" required /></label></fieldset><p v-if="examRoom && !examRoom.schedulable" class="content-context-note">当前考场已停用或资料待补录。请选择可安排的资源，或请管理员核对后补录。</p><p class="muted">修改后保存为草稿。核对并发布后，学生查询与消息同步更新；发布时再次校验资源状态、人数和占用。</p><div class="form-actions"><button class="button compact" :disabled="busy || !examRoom?.schedulable">保存草稿</button><button v-if="detail.exams[0]" class="button primary compact" type="button" :disabled="busy" @click="examState(detail.exams[0])">{{ detail.exams[0].status === 'DRAFT' ? '发布已保存的安排' : '撤下已发布的安排' }}</button></div></form>
+<form class="learning-form" @submit.prevent="saveExam"><fieldset class="form-grid" :disabled="busy"><label>校区<BaseSelect v-model="examForm.campusId" :options="campusOptions" /></label><label>考试教室<BaseSelect v-model="examForm.roomId" :options="examRoomOptions" /><small class="muted">当前教学班 {{ detail.info.memberCount }} 人，使用考试容量校验。</small></label><label>开始时间<input v-model="examForm.startsAt" type="datetime-local" required /></label><label>结束时间<input v-model="examForm.endsAt" type="datetime-local" required /></label></fieldset><p v-if="examRoom && !examRoom.schedulable" class="content-context-note">当前考场已停用或资料待补录。请选择可安排的资源，或请管理员核对后补录。</p><p class="muted">修改后保存为草稿。核对并发布后，学生查询与消息同步更新；发布时再次校验资源状态、人数和占用。</p><div class="form-actions"><button class="button compact" :disabled="busy || !examRoom?.schedulable">保存草稿</button><button v-if="detail.exams[0]" class="button primary compact" type="button" :disabled="busy" @click="examState(detail.exams[0])">{{ detail.exams[0].status === 'DRAFT' ? '发布已保存的安排' : '撤下已发布的安排' }}</button></div></form>
       </section>
     </template>
     <section v-if="catalog && tab === 'foundation'" class="portal-panel">
       <h2>教学基础目录</h2><p class="muted">学期与课程使用统一目录，教学班及人员关系限定在你的学院。</p>
       <details class="academic-section"><summary>建立学期</summary><form class="learning-form" @submit.prevent="createTerm"><fieldset class="form-grid" :disabled="busy"><label>学期名称<input v-model="termForm.name" required maxlength="100" /></label><label>开始日期<input v-model="termForm.startsOn" type="date" required /></label><label>结束日期<input v-model="termForm.endsOn" type="date" required /></label></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">建立学期</button></div></form></details>
       <details class="academic-section"><summary>建立课程</summary><form class="learning-form" @submit.prevent="createCourse"><fieldset class="form-grid" :disabled="busy"><label>课程编码<input v-model="courseForm.code" required maxlength="40" pattern="[A-Za-z0-9_-]+" placeholder="如 DEMO-WEB" /></label><label>课程名称<input v-model="courseForm.name" required maxlength="100" /></label><label>学分<input v-model.number="courseForm.credits" type="number" min="0.1" max="30" step="0.1" required /></label></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">建立课程</button></div></form></details>
-      <details class="academic-section" open><summary>建立教学班与人员关系</summary><form class="learning-form" @submit.prevent="createClass"><fieldset :disabled="busy"><div class="form-grid"><label>学期<select v-model="classForm.termId" required><option v-for="t in catalog.terms" :key="t.id" :value="t.id">{{ t.name }}</option></select></label><label>课程<select v-model="classForm.courseId" required><option v-for="c in catalog.courses" :key="c.id" :value="c.id">{{ c.code }} · {{ c.name }}</option></select></label><label>教学班名称<input v-model="classForm.name" required maxlength="100" /></label></div><div class="form-grid"><div><h3>授课教师</h3><label v-for="p in catalog.teachers" :key="p.id" class="checkbox-label"><input v-model="classForm.teacherIds" type="checkbox" :value="p.id" />{{ p.fullName }} · {{ p.identityNumber }}</label></div><div><h3>教学班学生</h3><label v-for="p in catalog.students" :key="p.id" class="checkbox-label"><input v-model="classForm.studentIds" type="checkbox" :value="p.id" />{{ p.fullName }} · {{ p.identityNumber }}</label></div></div></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy || !classForm.teacherIds.length || !classForm.studentIds.length">建立教学班</button><span class="muted">不改变学生的行政班归属</span></div></form></details>
+      <details class="academic-section" open><summary>建立教学班与人员关系</summary><form class="learning-form" @submit.prevent="createClass"><fieldset :disabled="busy"><div class="form-grid"><label>学期<BaseSelect v-model="classForm.termId" :options="termOptions" /></label><label>课程<BaseSelect v-model="classForm.courseId" :options="courseOptions" /></label><label>教学班名称<input v-model="classForm.name" required maxlength="100" /></label></div><div class="form-grid"><div><h3>授课教师</h3><label v-for="p in catalog.teachers" :key="p.id" class="checkbox-label"><input v-model="classForm.teacherIds" type="checkbox" :value="p.id" />{{ p.fullName }} · {{ p.identityNumber }}</label></div><div><h3>教学班学生</h3><label v-for="p in catalog.students" :key="p.id" class="checkbox-label"><input v-model="classForm.studentIds" type="checkbox" :value="p.id" />{{ p.fullName }} · {{ p.identityNumber }}</label></div></div></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy || !classForm.teacherIds.length || !classForm.studentIds.length">建立教学班</button><span class="muted">不改变学生的行政班归属</span></div></form></details>
     </section>
     <p class="data-note">当前记录为毕业设计演示。系统管理员、普通教师与服务人员不自动拥有教务维护权限。</p>
   </div>

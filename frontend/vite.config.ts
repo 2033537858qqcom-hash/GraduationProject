@@ -14,5 +14,19 @@ export default defineConfig(({ mode }) => {
     plugins: [vue(), amapProxyGuard(mapSecret)],
     server: { port: 5173, strictPort: true, proxy, fs: { allow: ['..'] } },
     preview: { proxy },
+    build: {
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/three')) {
+              return 'three-vendor'
+            }
+            if (id.includes('node_modules/@lucide/vue')) {
+              return 'lucide-vendor'
+            }
+          },
+        },
+      },
+    },
   }
 })

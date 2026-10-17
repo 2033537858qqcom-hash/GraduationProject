@@ -596,3 +596,68 @@ svg { flex-shrink: 0; }
 @media (prefers-reduced-transparency: reduce) {
   .school-navigation { background: #244b78; backdrop-filter: none; }
 }
+
+.certificate-actions-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.verify-link-btn { background: #fff; border: 1px solid #c0d1e3; color: var(--brand) !important; text-decoration: none; }
+.verify-link-btn:hover { background: #eef4fa; border-color: var(--brand); }
+
+@media print {
+  .no-print,
+  .portal-header,
+  .portal-nav,
+  .portal-footer,
+  .learning-tabs,
+  .term-picker,
+  .week-controls,
+  .data-note,
+  .public-header,
+  .public-footer,
+  .school-navigation,
+  .mobile-menu {
+    display: none !important;
+  }
+  body, .portal-shell, .portal-main {
+    background: #fff !important;
+    padding: 0 !important;
+    min-height: auto !important;
+  }
+  .portal-panel {
+    border: none !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+  .week-scroll {
+    overflow: visible !important;
+  }
+  .week-grid {
+    display: grid !important;
+    grid-template-columns: repeat(7, 1fr) !important;
+    gap: 4px !important;
+  }
+  .week-day {
+    border: 1px solid #444 !important;
+    min-height: auto !important;
+    break-inside: avoid;
+  }
+  .week-day-heading {
+    background: #eef3f8 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    border-bottom: 1px solid #444 !important;
+    color: #000 !important;
+    font-weight: bold;
+    padding: 4px !important;
+  }
+  .week-lesson {
+    border: 1px solid #888 !important;
+    background: #fff !important;
+    color: #000 !important;
+    break-inside: avoid;
+    margin-bottom: 4px;
+    padding: 4px;
+  }
+  .week-lesson strong, .week-lesson span, .week-lesson small {
+    color: #000 !important;
+  }
+}
+

@@ -23,4 +23,7 @@ public final class CertificateModels {
         String studentName,String identityNumber,String departmentName,String majorName,String className,
         String campusName,String purpose,String deliveryMethod,LocalDateTime createdAt) {}
     public record Result(String name,byte[] bytes) {}
+    public record Verification(boolean valid,String documentNumber,String studentName,String identityNumber,
+        String departmentName,String majorName,String className,String campusName,
+        LocalDateTime issuedAt,String message) {}
 }

@@ -11,6 +11,7 @@ export const router = createRouter({
         { path: '', component: () => import('./pages/PublicHome.vue'), meta: { title: '学校官网' } },
         { path: 'content/:slug', component: () => import('./pages/ContentPage.vue'), meta: { title: '校园信息' } },
         { path: 'campus/explore', component: () => import('./pages/CampusExplore.vue'), meta: { title: '校园探索' } },
+        { path: 'verify/certificate', component: () => import('./pages/CertificateVerifyPage.vue'), meta: { title: '在校证明防伪验真' } },
       ],
     },
     { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { title: '校园服务登录' } },

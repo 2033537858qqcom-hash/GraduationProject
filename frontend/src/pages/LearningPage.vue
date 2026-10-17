@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
-import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Bell, ArrowUpRight, ClipboardList, GraduationCap } from '@lucide/vue'
+import { BookOpen, CalendarDays, ChevronLeft, ChevronRight, Download, FileText, Bell, ArrowUpRight, ClipboardList, GraduationCap, Printer } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { currentUser } from '../stores/auth'
 import { readTeachingDraft, writeTeachingDraft } from '../lib/teachingDrafts'
@@ -62,6 +62,7 @@ function addDays(value: string, n: number) {
 function monday(value: string) { return value ? addDays(value, -((new Date(value + 'T12:00:00').getDay() + 6) % 7)) : '' }
 function displayDate(value: string) { return value.slice(0, 10).replaceAll('-', '/') }
 function dayLessons(day: string) { return lessons.value.filter(l => l.startsAt.slice(0, 10) === day) }
+function printTimetable() { window.print() }
 async function selectClass(id: number) {
   if (id === detail.value?.info.id) return
   await router.replace({ path: base.value, query: { class: id } })
@@ -295,8 +296,8 @@ onBeforeUnmount(() => { persistDraft(); finishConfirmation(false); detailSequenc
         </section>
       </div>
     </template>
-    <section v-else-if="tab === 'timetable'" class="portal-panel">
-      <div class="section-heading schedule-heading"><div><h2>每周{{ teacher ? '授课' : '课程' }}安排</h2><p class="muted">{{ displayDate(weekStart) }} — {{ displayDate(addDays(weekStart, 6)) }}</p></div><div class="week-controls"><button class="button compact" :disabled="weekStart <= termMonday" @click="weekStart = addDays(weekStart, -7)"><ChevronLeft :size="16" aria-hidden="true" />上一周</button><button class="button compact" :disabled="weekStart >= lastMonday" @click="weekStart = addDays(weekStart, 7)">下一周<ChevronRight :size="16" aria-hidden="true" /></button></div></div>
+    <section v-else-if="tab === 'timetable'" class="portal-panel timetable-print-card">
+      <div class="section-heading schedule-heading"><div><h2>每周{{ teacher ? '授课' : '课程' }}安排</h2><p class="muted">{{ displayDate(weekStart) }} — {{ displayDate(addDays(weekStart, 6)) }} · {{ term?.name ?? '' }}</p></div><div class="week-controls"><button class="button compact no-print" :disabled="weekStart <= termMonday" @click="weekStart = addDays(weekStart, -7)"><ChevronLeft :size="16" aria-hidden="true" />上一周</button><button class="button compact no-print" :disabled="weekStart >= lastMonday" @click="weekStart = addDays(weekStart, 7)">下一周<ChevronRight :size="16" aria-hidden="true" /></button><button class="button compact no-print" @click="printTimetable"><Printer :size="15" />打印课表</button></div></div>
       <div class="week-scroll"><div class="week-grid"><div v-for="(day, n) in days" :key="day" class="week-day"><div class="week-day-heading">{{ ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][n] }}<small>{{ day.slice(5).replace('-', '/') }}</small></div><article v-for="l in dayLessons(day)" :key="l.id" class="week-lesson"><small>{{ l.startsAt.slice(11, 16) }}—{{ l.endsAt.slice(11, 16) }}</small><strong>{{ l.courseName }}</strong><span>{{ l.classroom }}</span><span>{{ l.campusName }}</span><span>{{ teacher ? l.className : l.teacherName }}</span></article><p v-if="!dayLessons(day).length" class="day-empty">无课程</p></div></div></div>
     </section>
     <section v-else-if="tab === 'grades'" class="portal-panel"><div class="section-heading"><div><span class="eyebrow">ACADEMIC RECORD</span><h2>已发布成绩</h2></div><span class="muted">{{ grades.length }} 门课程</span></div><p v-if="!grades.length" class="empty-state">本学期暂无已发布的本人成绩。</p><div v-else class="table-scroll"><table class="campus-table"><thead><tr><th>课程</th><th>学分</th><th>成绩</th><th>更新时间</th></tr></thead><tbody><tr v-for="g in grades" :key="g.id"><td>{{ g.courseName }}</td><td>{{ g.credits }}</td><td class="score-cell">{{ g.score }}</td><td>{{ displayDate(g.updatedAt) }}</td></tr></tbody></table></div></section>

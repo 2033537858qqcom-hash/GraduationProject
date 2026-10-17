@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { FileCheck2, History, Plus, RefreshCw, Download } from '@lucide/vue'
+import { FileCheck2, History, Plus, RefreshCw, Download, ShieldCheck } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { useEditProtection } from '../composables/useEditProtection'
 import { certificateStatuses, certificateActions } from '../certificates'
@@ -119,7 +119,20 @@ onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load(
       <template v-if="historyView"><p class="muted">保存、补交和处理均保留当时的资料，共 {{ history.total }} 条。</p><div class="leave-history"><article v-for="record in history.items" :key="record.id"><div class="section-heading"><h3>{{ certificateActions[record.action] }} · V{{ record.version }}</h3><span class="status-label">{{ certificateStatuses[record.status] }}</span></div><p>{{ record.comment }}</p><small>{{ record.actorName }} · {{ time(record.createdAt) }}</small><details><summary>查看当时登记资料与用途</summary><p>{{ record.studentName }} · {{ record.identityNumber }}</p><p>{{ record.departmentName }} / {{ record.majorName }} / {{ record.className }} / {{ record.campusName }}</p><p class="preserve-lines">{{ record.purpose }}</p></details></article></div><div class="pagination"><span>第 {{ history.page }} 页</span><button class="button compact" :disabled="busy || loading || history.page <= 1" @click="page(history.page - 1, true)">上一页</button><button class="button compact" :disabled="busy || loading || history.page * history.pageSize >= history.total" @click="page(history.page + 1, true)">下一页</button></div></template>
       <template v-else>
 <dl class="resource-facts"><div><dt>姓名 / 学号</dt><dd>{{ selected.identity.studentName }} / {{ selected.identity.identityNumber }}</dd></div><div><dt>学院 / 专业</dt><dd>{{ selected.identity.departmentName }} / {{ selected.identity.majorName }}</dd></div><div><dt>行政班 / 校区</dt><dd>{{ selected.identity.className }} / {{ selected.identity.campusName }}</dd></div><div><dt>领取方式</dt><dd>线上下载 PDF</dd></div><div class="leave-wide"><dt>申请用途</dt><dd class="preserve-lines">{{ selected.purpose }}</dd></div><div class="leave-wide"><dt>最近处理意见</dt><dd class="preserve-lines">{{ selected.processingComment ?? '尚无处理意见' }}</dd></div></dl>
-        <div v-if="selected.status === 'COMPLETED'" class="certificate-result"><FileCheck2 :size="24" /><div><h3>证明已生成，可下载</h3><p>{{ selected.documentNumber }} · {{ selected.issuedAt ? time(selected.issuedAt) : '' }}</p><small>结果保留生成时的资料，不随之后的账号修改而变化。</small></div><a class="button primary compact" :href="`/api/certificates/${mode}/${selected.id}/result`"><Download :size="15" />下载演示证明</a></div>
+        <div v-if="selected.status === 'COMPLETED'" class="certificate-result">
+          <FileCheck2 :size="24" />
+          <div>
+            <h3>证明已生成，可下载</h3>
+            <p>{{ selected.documentNumber }} · {{ selected.issuedAt ? time(selected.issuedAt) : '' }}</p>
+            <small>结果保留生成时的资料，不随之后的账号修改而变化。</small>
+          </div>
+          <div class="form-actions certificate-actions-group">
+            <a class="button primary compact" :href="`/api/certificates/${mode}/${selected.id}/result`"><Download :size="15" />下载演示证明</a>
+            <RouterLink v-if="selected.documentNumber" class="button compact verify-link-btn" :to="`/verify/certificate?number=${encodeURIComponent(selected.documentNumber)}`" target="_blank">
+              <ShieldCheck :size="15" />查验真伪备案
+            </RouterLink>
+          </div>
+        </div>
         <div v-if="!review" class="form-actions"><button v-if="editable" class="button compact" :disabled="busy || loading" @click="edit(selected)">修改申请资料</button><button v-if="editable" class="button primary compact" :disabled="busy || loading || !eligibility?.canSubmit" @click="transition('submit')">{{ selected.status === 'RETURNED' ? '补交后重新提交' : '提交审核' }}</button><button v-if="['DRAFT','SUBMITTED','RETURNED'].includes(selected.status)" class="text-button" :disabled="busy || loading" @click="transition('withdraw')">撤回申请</button></div>
         <div v-if="review && selected.status === 'SUBMITTED'" class="leave-review-form"><label>处理意见<textarea v-model="reviewComment" maxlength="1000" rows="3" :disabled="busy" placeholder="填写核对结果；退回时说明需要补充的内容" /></label><div class="form-actions"><button class="button primary compact" :disabled="busy || loading || !reviewComment.trim()" @click="decide('APPROVE')">已核对，生成证明</button><button class="button compact" :disabled="busy || loading || !reviewComment.trim()" @click="decide('RETURN')">退回补交</button><button class="button compact" :disabled="busy || loading || !reviewComment.trim()" @click="decide('REJECT')">拒绝申请</button></div></div>
         <p v-if="['COMPLETED','REJECTED','WITHDRAWN'].includes(selected.status)" class="muted">该记录已关闭，资料与历史保留。需要重新办理时请新建申请。</p>

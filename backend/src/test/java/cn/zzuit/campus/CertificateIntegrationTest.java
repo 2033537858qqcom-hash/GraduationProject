@@ -202,6 +202,22 @@ class CertificateIntegrationTest {
         assertThat(student.tree("/api/notices").path("total").asLong()).isEqualTo(before);
         assertThat(jdbc.sql("SELECT COUNT(*) FROM certificate_result WHERE request_id=:id").param("id",requestId).query(Long.class).single()).isZero();
     }
+    @Test void publicVerificationAuthenticatesCompletedCertificate() throws Exception {
+        var f=fixture(); var student=login(f.student());
+        var completed=ok(decide(login(f.reviewer()),ok(submit(student,create(student,"验真测试"))),"APPROVE","核准验真"));
+        String documentNumber=completed.path("documentNumber").asText();
+        assertThat(documentNumber).startsWith("DEMO-");
+
+        var anon=new Browser();
+        var validVerify=anon.tree("/api/public/certificates/verify?number="+documentNumber);
+        assertThat(validVerify.path("valid").asBoolean()).isTrue();
+        assertThat(validVerify.path("documentNumber").asText()).isEqualTo(documentNumber);
+        assertThat(validVerify.path("studentName").asText()).contains("*");
+        assertThat(validVerify.path("departmentName").asText()).isNotEmpty();
+
+        var invalidVerify=anon.tree("/api/public/certificates/verify?number=INVALID-12345");
+        assertThat(invalidVerify.path("valid").asBoolean()).isFalse();
+    }
     private record Fixture(long department,long group,String student,String reviewer) {}
     private Fixture fixture() {
         String key="证明测试-"+UUID.randomUUID(); jdbc.sql("INSERT INTO department(name,kind) VALUES(:n,'COLLEGE')").param("n",key).update(); long department=jdbc.sql("SELECT id FROM department WHERE name=:n").param("n",key).query(Long.class).single();

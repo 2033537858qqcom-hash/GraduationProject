@@ -133,4 +133,31 @@ public class ReservationDtos {
         int page,
         int pageSize
     ) {}
+
+    public record VenueManagerItem(
+        long userId,
+        String username,
+        String fullName,
+        String departmentName,
+        String identityNumber
+    ) {}
+
+    public record VenueManagementItem(
+        long id,
+        String code,
+        String name,
+        String category,
+        String placeId,
+        String buildingName,
+        String locationDetail,
+        Integer capacity,
+        String availableEquipment,
+        String rules,
+        boolean enabled,
+        List<VenueManagerItem> managers
+    ) {}
+
+    public record AssignManagerCommand(
+        long userId
+    ) {}
 }

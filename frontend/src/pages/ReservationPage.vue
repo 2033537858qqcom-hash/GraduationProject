@@ -8,12 +8,19 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Edit3,
   MapPin,
   Plus,
   Printer,
   RefreshCw,
   Search,
+  Settings,
+  ShieldAlert,
+  ShieldCheck,
+  ToggleLeft,
+  ToggleRight,
   Undo2,
+  UserCheck,
   Users,
   X,
   XCircle,
@@ -29,18 +36,26 @@ import {
   type ReservationItem,
   type TimeSlot,
   type VenueSummary,
+  type VenueManagementItem,
+  type VenueManagerItem,
+  type VenueUpdateCommand,
   activityTypes,
+  addVenueManager,
   cancelReservation,
   checkConflict,
   getDetail,
+  getReviewerCandidates,
   getVenueSchedule,
   listMine,
   listReview,
   listVenues,
+  listVenuesForManagement,
+  removeVenueManager,
   reservationStatuses,
   reviewReservation,
   saveDraft,
   submitReservation,
+  updateVenue,
   withdrawReservation,
 } from '../reservations'
 
@@ -51,12 +66,30 @@ const router = useRouter()
 const reviewMode = computed(() => route.path.startsWith('/student-affairs'))
 const canApply = computed(() => currentUser.value?.permissions.includes('reservation:apply'))
 const canReview = computed(() => currentUser.value?.permissions.includes('reservation:review'))
+const canManage = computed(() => currentUser.value?.permissions.includes('reservation:manage'))
 
-// Active Tab: 'venues' (browse), 'mine' (student applications), 'review' (staff approvals)
-const activeTab = ref<'venues' | 'mine' | 'review'>(reviewMode.value ? 'review' : 'venues')
+// Active Tab: 'venues' (browse), 'mine' (student applications), 'review' (staff approvals), 'manage' (venue management)
+const activeTab = ref<'venues' | 'mine' | 'review' | 'manage'>(
+  reviewMode.value ? 'review' : (route.query.tab === 'manage' && canManage.value) ? 'manage' : 'venues'
+)
 
 // Data states
 const venues = ref<VenueSummary[]>([])
+const managedVenues = ref<VenueManagementItem[]>([])
+const reviewerCandidates = ref<VenueManagerItem[]>([])
+const manageKeyword = ref('')
+const showVenueEditModal = ref(false)
+const editingVenue = ref<VenueManagementItem | null>(null)
+const venueEditForm = reactive<VenueUpdateCommand>({
+  name: '',
+  capacity: 0,
+  availableEquipment: '',
+  rules: '',
+  enabled: true,
+})
+const showManagerModal = ref(false)
+const managingVenue = ref<VenueManagementItem | null>(null)
+const selectedCandidateId = ref<string>('')
 const reservations = ref<ReservationItem[]>([])
 const selectedReservation = ref<ReservationDetail | null>(null)
 const totalItems = ref(0)
@@ -447,8 +480,140 @@ async function handleReview(action: 'APPROVE' | 'RETURN' | 'REJECT') {
   }
 }
 
+// Management Methods
+const filteredManagedVenues = computed(() => {
+  const kw = manageKeyword.value.trim().toLowerCase()
+  if (!kw) return managedVenues.value
+  return managedVenues.value.filter(v =>
+    v.name.toLowerCase().includes(kw) ||
+    v.code.toLowerCase().includes(kw) ||
+    (v.buildingName && v.buildingName.toLowerCase().includes(kw)) ||
+    (v.locationDetail && v.locationDetail.toLowerCase().includes(kw))
+  )
+})
+
+const candidateOptions = computed(() => {
+  if (!managingVenue.value) return []
+  const currentIds = new Set(managingVenue.value.managers.map(m => m.userId))
+  return reviewerCandidates.value
+    .filter(c => !currentIds.has(c.userId))
+    .map(c => ({
+      value: String(c.userId),
+      label: `${c.fullName} (${c.username} · ${c.departmentName})`,
+    }))
+})
+
+async function loadManagementData() {
+  loading.value = true
+  error.value = ''
+  try {
+    const [venueList, candidates] = await Promise.all([
+      listVenuesForManagement(),
+      getReviewerCandidates(),
+    ])
+    managedVenues.value = venueList
+    reviewerCandidates.value = candidates
+  } catch (cause) {
+    error.value = errorMessage(cause)
+  } finally {
+    loading.value = false
+  }
+}
+
+function openVenueEdit(venue: VenueManagementItem) {
+  editingVenue.value = venue
+  venueEditForm.name = venue.name
+  venueEditForm.capacity = venue.capacity ?? 0
+  venueEditForm.availableEquipment = venue.availableEquipment ?? ''
+  venueEditForm.rules = venue.rules ?? ''
+  venueEditForm.enabled = venue.enabled
+  showVenueEditModal.value = true
+}
+
+async function saveVenueEdit() {
+  if (!editingVenue.value) return
+  busy.value = true
+  error.value = ''
+  success.value = ''
+  try {
+    await updateVenue(editingVenue.value.id, {
+      name: venueEditForm.name?.trim(),
+      capacity: Number(venueEditForm.capacity),
+      availableEquipment: venueEditForm.availableEquipment?.trim(),
+      rules: venueEditForm.rules?.trim(),
+      enabled: venueEditForm.enabled,
+    })
+    showVenueEditModal.value = false
+    success.value = `场地【${editingVenue.value.name}】配置已成功保存！`
+    await loadManagementData()
+  } catch (cause) {
+    error.value = errorMessage(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function toggleVenueEnabled(venue: VenueManagementItem) {
+  busy.value = true
+  error.value = ''
+  success.value = ''
+  const nextState = !venue.enabled
+  try {
+    await updateVenue(venue.id, { enabled: nextState })
+    venue.enabled = nextState
+    success.value = `已${nextState ? '开启' : '暂停'}【${venue.name}】的借用对外开放。`
+  } catch (cause) {
+    error.value = errorMessage(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
+function openManagerModal(venue: VenueManagementItem) {
+  managingVenue.value = venue
+  selectedCandidateId.value = ''
+  showManagerModal.value = true
+}
+
+async function handleAddManager() {
+  if (!managingVenue.value || !selectedCandidateId.value) return
+  const uid = Number(selectedCandidateId.value)
+  busy.value = true
+  error.value = ''
+  success.value = ''
+  try {
+    await addVenueManager(managingVenue.value.id, uid)
+    success.value = '已成功指定责任审批人！'
+    await loadManagementData()
+    managingVenue.value = managedVenues.value.find(v => v.id === managingVenue.value?.id) || null
+    selectedCandidateId.value = ''
+  } catch (cause) {
+    error.value = errorMessage(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function handleRemoveManager(userId: number) {
+  if (!managingVenue.value) return
+  if (!await ask(`确认解除该负责人的审批指派？`, 'decision')) return
+  busy.value = true
+  error.value = ''
+  success.value = ''
+  try {
+    await removeVenueManager(managingVenue.value.id, userId)
+    success.value = '已解除责任审批人关联。'
+    await loadManagementData()
+    managingVenue.value = managedVenues.value.find(v => v.id === managingVenue.value?.id) || null
+  } catch (cause) {
+    error.value = errorMessage(cause)
+  } finally {
+    busy.value = false
+  }
+}
+
 // Switch tabs
-async function switchTab(tab: 'venues' | 'mine' | 'review') {
+async function switchTab(tab: 'venues' | 'mine' | 'review' | 'manage') {
   if (!await allowLeave()) return
   activeTab.value = tab
   selectedReservation.value = null
@@ -456,6 +621,7 @@ async function switchTab(tab: 'venues' | 'mine' | 'review') {
   filterStatus.value = tab === 'review' ? 'SUBMITTED' : ''
   await router.replace({ query: { ...route.query, tab } })
   if (tab === 'venues') await loadVenues()
+  else if (tab === 'manage') await loadManagementData()
   else await loadReservations()
 }
 
@@ -469,6 +635,8 @@ onMounted(async () => {
   if (reviewMode.value) {
     activeTab.value = 'review'
     filterStatus.value = 'SUBMITTED'
+  } else if (route.query.tab === 'manage' && canManage.value) {
+    activeTab.value = 'manage'
   } else if (route.query.tab === 'mine') {
     activeTab.value = 'mine'
   } else if (route.query.venue) {
@@ -476,7 +644,9 @@ onMounted(async () => {
   }
 
   await loadVenues()
-  if (activeTab.value !== 'venues') {
+  if (activeTab.value === 'manage') {
+    await loadManagementData()
+  } else if (activeTab.value !== 'venues') {
     await loadReservations()
   }
 
@@ -485,7 +655,7 @@ onMounted(async () => {
     const id = Number(route.query.id)
     if (id > 0) {
       await chooseReservation(id)
-      if (!reviewMode.value) activeTab.value = 'mine'
+      if (!reviewMode.value && activeTab.value !== 'manage') activeTab.value = 'mine'
     }
   }
 })
@@ -530,7 +700,7 @@ watch(() => route.query.venue, () => {
           <Plus :size="15" />
           新建借用申请
         </button>
-        <button class="button compact" :disabled="busy || loading" @click="activeTab === 'venues' ? loadVenues() : loadReservations()">
+        <button class="button compact" :disabled="busy || loading" @click="activeTab === 'venues' ? loadVenues() : activeTab === 'manage' ? loadManagementData() : loadReservations()">
           <RefreshCw :size="15" />
           刷新数据
         </button>
@@ -554,6 +724,10 @@ watch(() => route.query.venue, () => {
       <button v-if="reviewMode || canReview" :class="{ active: activeTab === 'review' }" @click="switchTab('review')">
         <Clock :size="15" />
         借用审批待办
+      </button>
+      <button v-if="canManage" :class="{ active: activeTab === 'manage' }" @click="switchTab('manage')">
+        <Settings :size="15" />
+        场地资源配置
       </button>
     </nav>
 
@@ -626,8 +800,108 @@ watch(() => route.query.venue, () => {
       </div>
     </section>
 
+    <!-- ==================== TAB 4: VENUE MANAGEMENT (RESOURCE MANAGERS) ==================== -->
+    <section v-else-if="activeTab === 'manage'" class="portal-panel venue-manage-section" aria-label="场地资源配置">
+      <div class="foundation-filters venue-filters">
+        <div class="manage-header-desc">
+          <p class="muted">
+            管理全校公共场地与设备的开放状态、容纳人数、配套设施、使用守则及<strong>指定责任审批人</strong>。
+            提交借用时将仅路由给本场地配置的责任人，防止审批无序扩散。
+          </p>
+        </div>
+        <div class="search-input-group">
+          <Search :size="15" class="search-icon" />
+          <input v-model="manageKeyword" placeholder="搜索场地名称、编号或所在位置" />
+        </div>
+      </div>
+
+      <p v-if="loading" class="loading-state" role="status">正在读取场地资源配置与责任人信息…</p>
+      <p v-else-if="!filteredManagedVenues.length" class="empty-state">没有符合搜索条件的场地资源。</p>
+
+      <div v-else class="venue-cards-grid manage-cards-grid">
+        <article v-for="venue in filteredManagedVenues" :key="venue.id" class="venue-card manage-card" :class="{ disabled: !venue.enabled }">
+          <div class="venue-card-header">
+            <div class="badge-group">
+              <span class="venue-category-badge" :class="venue.category.toLowerCase()">
+                {{ venue.category === 'VENUE' ? '场地空间' : '器材设备' }}
+              </span>
+              <span class="venue-status-tag" :class="venue.enabled ? 'enabled' : 'disabled'">
+                {{ venue.enabled ? '对外开放中' : '暂停借用' }}
+              </span>
+            </div>
+            <span class="venue-code">{{ venue.code }}</span>
+          </div>
+
+          <h3 class="venue-title">{{ venue.name }}</h3>
+
+          <div class="venue-meta">
+            <span class="meta-item">
+              <MapPin :size="14" />
+              {{ venue.buildingName || '校园公共区' }} · {{ venue.locationDetail }}
+            </span>
+            <span v-if="venue.capacity" class="meta-item">
+              <Users :size="14" />
+              容纳人数：约 {{ venue.capacity }} 人
+            </span>
+          </div>
+
+          <div v-if="venue.availableEquipment" class="venue-equipment-box">
+            <span class="box-label">包含配套：</span>
+            <p>{{ venue.availableEquipment }}</p>
+          </div>
+
+          <div v-if="venue.rules" class="venue-rules-box">
+            <span class="box-label">借用守则：</span>
+            <p>{{ venue.rules }}</p>
+          </div>
+
+          <!-- Managers Box -->
+          <div class="venue-managers-box">
+            <div class="managers-box-header">
+              <span class="box-label">
+                <ShieldCheck :size="14" />
+                责任审批人员 ({{ venue.managers.length }})
+              </span>
+              <button class="text-button compact" :disabled="busy" @click="openManagerModal(venue)">
+                <UserCheck :size="14" />
+                配置人员
+              </button>
+            </div>
+            <div v-if="!venue.managers.length" class="no-manager-alert">
+              <ShieldAlert :size="14" />
+              <span>尚未指定审批人！未配置审批人前学生无法提交借用申请。</span>
+            </div>
+            <div v-else class="manager-tags-list">
+              <span v-for="m in venue.managers" :key="m.userId" class="manager-tag">
+                <strong>{{ m.fullName }}</strong>
+                <small>({{ m.departmentName }})</small>
+              </span>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="venue-card-actions manage-actions">
+            <button class="button compact" :disabled="busy" @click="openVenueEdit(venue)">
+              <Edit3 :size="14" />
+              编辑配置
+            </button>
+            <button
+              class="button compact"
+              :class="{ 'warning-btn': venue.enabled }"
+              :disabled="busy"
+              @click="toggleVenueEnabled(venue)"
+            >
+              <ToggleRight v-if="venue.enabled" :size="15" />
+              <ToggleLeft v-else :size="15" />
+              {{ venue.enabled ? '暂停开放' : '恢复开放' }}
+            </button>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <!-- ==================== TAB 2 & 3: RESERVATIONS LIST (MINE / REVIEW) ==================== -->
-    <section v-if="activeTab !== 'venues'" class="portal-panel reservation-list-section" aria-label="借用记录列表">
+    <section v-else class="portal-panel reservation-list-section" aria-label="借用记录列表">
       <div class="foundation-filters">
         <label>
           申请状态
@@ -1095,6 +1369,126 @@ watch(() => route.query.venue, () => {
           </button>
           <button class="button compact" @click="showScheduleModal = false">
             关闭
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODAL: EDIT VENUE CONFIGURATION ==================== -->
+    <div v-if="showVenueEditModal && editingVenue" class="modal-overlay" @click.self="showVenueEditModal = false">
+      <div class="modal-card venue-edit-modal" role="dialog" aria-labelledby="venue-edit-title">
+        <div class="modal-header">
+          <h2 id="venue-edit-title">
+            <Edit3 :size="18" />
+            修改场地资源配置 · {{ editingVenue.name }}
+          </h2>
+          <button class="close-icon-btn" @click="showVenueEditModal = false">
+            <X :size="18" />
+          </button>
+        </div>
+
+        <form class="booking-form" @submit.prevent="saveVenueEdit">
+          <div class="form-grid-two">
+            <label>
+              场地/设备名称
+              <input v-model="venueEditForm.name" required maxlength="100" />
+            </label>
+            <label>
+              容纳人数（人）
+              <input v-model.number="venueEditForm.capacity" type="number" min="1" max="10000" />
+            </label>
+          </div>
+
+          <label>
+            可用配套设备与技术规格
+            <input v-model="venueEditForm.availableEquipment" maxlength="500" placeholder="例如：投影仪、无线麦克风*2、调音台" />
+          </label>
+
+          <label>
+            <div class="label-heading-row">
+              <span>借用守则与场地公约</span>
+              <small class="muted">最多 1000 字</small>
+            </div>
+            <textarea v-model="venueEditForm.rules" rows="3" maxlength="1000" placeholder="填写使用要求、保洁守则、禁止携带外卖等约定" />
+          </label>
+
+          <label class="checkbox-label" style="display: flex; align-items: center; gap: 8px; margin-top: 8px; cursor: pointer;">
+            <input type="checkbox" v-model="venueEditForm.enabled" />
+            <span>开启该场地/设备的对外预约开放（取消勾选将暂停开放）</span>
+          </label>
+
+          <div class="form-actions modal-actions" style="margin-top: 18px;">
+            <button type="submit" class="button primary compact" :disabled="busy">
+              保存配置
+            </button>
+            <button type="button" class="button compact" @click="showVenueEditModal = false">
+              取消
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ==================== MODAL: MANAGE VENUE REVIEWERS ==================== -->
+    <div v-if="showManagerModal && managingVenue" class="modal-overlay" @click.self="showManagerModal = false">
+      <div class="modal-card manager-modal-card" role="dialog" aria-labelledby="manager-modal-title">
+        <div class="modal-header">
+          <h2 id="manager-modal-title">
+            <ShieldCheck :size="18" />
+            配置责任审批人 · {{ managingVenue.name }}
+          </h2>
+          <button class="close-icon-btn" @click="showManagerModal = false">
+            <X :size="18" />
+          </button>
+        </div>
+
+        <div class="modal-body-content" style="display: flex; flex-direction: column; gap: 16px;">
+          <p class="muted" style="font-size: 13px; line-height: 1.6;">
+            借用申请提交时，系统将精准根据责任审批人名单通知并路由任务。至少应配置 1 位责任审批人，否则学生无法完成提交。
+          </p>
+
+          <!-- Current Assigned Reviewers -->
+          <div class="assigned-managers-list">
+            <h4 style="font-size: 14px; margin-bottom: 8px; font-weight: 600;">已指定责任审批人 ({{ managingVenue.managers.length }})</h4>
+            <div v-if="!managingVenue.managers.length" class="empty-state" style="padding: 16px; background: #fff1f2; border: 1px dashed #f43f5e; border-radius: 6px;">
+              <span style="color: #e11d48; font-size: 13px;">目前尚未指定任何审批责任人！未配置责任人前该场地无法受理申请。</span>
+            </div>
+            <ul v-else class="manager-item-list" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+              <li v-for="m in managingVenue.managers" :key="m.userId" class="manager-row-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">
+                <div style="display: flex; flex-direction: column; gap: 2px;">
+                  <strong style="font-size: 14px; color: #1e293b;">{{ m.fullName }}</strong>
+                  <span style="font-size: 12px; color: #64748b;">账号：{{ m.username }} · 部门：{{ m.departmentName }} · 工号：{{ m.identityNumber }}</span>
+                </div>
+                <button class="text-button" style="color: #ef4444;" :disabled="busy" @click="handleRemoveManager(m.userId)">
+                  解除指定
+                </button>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Add Reviewer -->
+          <div class="add-manager-box" style="padding: 14px; background: #f1f5f9; border-radius: 6px; display: flex; flex-direction: column; gap: 10px;">
+            <h4 style="font-size: 13px; font-weight: 600; color: #334155;">添加新的责任审批人</h4>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <div style="flex: 1;">
+                <BaseSelect
+                  v-model="selectedCandidateId"
+                  :options="[
+                    { value: '', label: '从具备借用审批权限的人员中选择…' },
+                    ...candidateOptions
+                  ]"
+                />
+              </div>
+              <button class="button primary compact" :disabled="!selectedCandidateId || busy" @click="handleAddManager">
+                添加指定
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="margin-top: 16px;">
+          <button class="button compact" @click="showManagerModal = false">
+            完成并关闭
           </button>
         </div>
       </div>
@@ -1685,5 +2079,100 @@ watch(() => route.query.venue, () => {
   .search-input-group input {
     min-width: 160px;
   }
+}
+
+/* Venue Management Tab Styles */
+.manage-header-desc {
+  flex: 1;
+  min-width: 280px;
+}
+.manage-header-desc p {
+  font-size: 13px;
+  line-height: 1.6;
+}
+.badge-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.venue-status-tag {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.venue-status-tag.enabled {
+  background: #dcfce7;
+  color: #15803d;
+}
+.venue-status-tag.disabled {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+.manage-card.disabled {
+  opacity: 0.85;
+  background: #fafafa;
+}
+.venue-managers-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.managers-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.no-manager-alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #b91c1c;
+  font-size: 12px;
+  background: #fef2f2;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.manager-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.manager-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 3px 8px;
+  border-radius: 4px;
+}
+.manager-tag small {
+  color: #4f46e5;
+  font-size: 11px;
+}
+.manage-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.warning-btn {
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+  background: #fffbeb !important;
+}
+.warning-btn:hover {
+  background: #fef3c7 !important;
+}
+.venue-edit-modal {
+  max-width: 580px;
+}
+.manager-modal-card {
+  max-width: 640px;
 }
 </style>

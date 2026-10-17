@@ -58,9 +58,28 @@ public class RepairService {
             .query((s,n)->new Completion(s.getInt("result_round"),s.getString("technician_name"),s.getString("comment"),completionImages(s.getLong("id")),time(s,"created_at"))).list();
         var evaluation=jdbc.sql("SELECT * FROM repair_evaluation WHERE request_id=:id").param("id",r.id())
             .query((s,n)->new Evaluation(s.getInt("stars"),s.getString("comment"),time(s,"created_at"))).optional().orElse(null);
+        var assignments=jdbc.sql("""
+            SELECT a.id, a.technician_id, u.full_name technician_name, a.actor_id, act.full_name actor_name,
+                   a.comment, a.assigned_at, a.ended_at
+            FROM repair_assignment a
+            JOIN app_user u ON u.id = a.technician_id
+            JOIN app_user act ON act.id = a.actor_id
+            WHERE a.request_id = :id
+            ORDER BY a.id ASC
+            """).param("id", r.id())
+            .query((s, n) -> new AssignmentRecord(
+                s.getLong("id"),
+                s.getLong("technician_id"),
+                s.getString("technician_name"),
+                s.getLong("actor_id"),
+                s.getString("actor_name"),
+                s.getString("comment"),
+                time(s, "assigned_at"),
+                time(s, "ended_at")
+            )).list();
         return new Detail(r.id(),r.reporterName(),r.title(),r.campus(),r.campusName(),r.location(),r.locationName(),r.category(),r.priority(),r.status(),r.version(),
             r.description(),r.locationDetail(),r.contact(),r.contactWindow(),r.technician(),r.technicianName(),r.round(),r.comment(),actions(r,view,evaluation!=null),
-            images(r.id(),null,null,true),completions,evaluation,r.submitted(),r.confirmed(),r.created(),r.updated(),cancellation(r.id()),r.cancellation()!=null,overdue(r),r.locationEligible(),r.locationEligible()?"":"原入住关系已结束或住宿权限已变化，旧工单停止维修办理，历史资料继续保留。后续故障请按当前住宿重新报修。");
+            images(r.id(),null,null,true),completions,assignments,evaluation,r.submitted(),r.confirmed(),r.created(),r.updated(),cancellation(r.id()),r.cancellation()!=null,overdue(r),r.locationEligible(),r.locationEligible()?"":"原入住关系已结束或住宿权限已变化，旧工单停止维修办理，历史资料继续保留。后续故障请按当前住宿重新报修。");
     }
     private List<String> actions(Row r,String view,boolean evaluated) {
         var a=new ArrayList<String>();

@@ -164,7 +164,18 @@ public class HousingTransferService {
 
     @Transactional public List<Transfer> assignQueue(CampusPrincipal user,String queue) {
         identities.requirePermission(user,"housing:assign");lock();expireDue();
-        if("waiting".equals(queue)) return jdbc.sql(SELECT+"WHERE t.status='AWAITING_ASSIGNMENT' AND EXISTS("+effectiveBuildings()+") ORDER BY t.updated_at,t.id").param("user",user.id()).query(this::row).list().stream().map(row->view(row,"assign")).toList();
+        if("waiting".equals(queue)) return jdbc.sql(SELECT+"""
+            WHERE t.status='AWAITING_ASSIGNMENT'
+              AND EXISTS (
+                  SELECT 1 FROM dorm_manager_scope ms
+                  JOIN dorm_building mb ON mb.id=ms.building_id
+                  JOIN dorm_bed sb ON sb.id=t.source_bed_id
+                  JOIN dorm_room sr ON sr.id=sb.room_id
+                  JOIN dorm_building sbuild ON sbuild.id=sr.building_id
+                  WHERE ms.user_id=:user AND ms.enabled=TRUE AND mb.campus_id=sbuild.campus_id
+              )
+            ORDER BY t.updated_at,t.id
+            """).param("user",user.id()).query(this::row).list().stream().map(row->view(row,"assign")).toList();
         if(!"reserved".equals(queue)) bad("调宿队列无效");
         return jdbc.sql(SELECT+"WHERE t.status='AWAITING_CHECKIN' AND t.target_building_id IN ("+effectiveBuildings()+") ORDER BY t.reserve_until,t.id").param("user",user.id()).query(this::row).list().stream().map(row->view(row,"assign")).toList();
     }
@@ -298,7 +309,15 @@ public class HousingTransferService {
         var row=load(id);
         if(!List.of("AWAITING_ASSIGNMENT","AWAITING_CHECKIN","COMPLETED","CANCELLED","EXPIRED").contains(row.status())) throw missing("调宿申请不存在");
         if("AWAITING_ASSIGNMENT".equals(row.status())) {
-            if(jdbc.sql("SELECT COUNT(*) FROM ("+effectiveBuildings()+") s").param("user",user.id()).query(Long.class).single()==0) throw missing("调宿申请不存在");
+            boolean campusMatch = jdbc.sql("""
+                SELECT COUNT(*) FROM dorm_manager_scope ms
+                JOIN dorm_building mb ON mb.id=ms.building_id
+                JOIN dorm_bed sb ON sb.id=:sourceBedId
+                JOIN dorm_room sr ON sr.id=sb.room_id
+                JOIN dorm_building sbuild ON sbuild.id=sr.building_id
+                WHERE ms.user_id=:user AND ms.enabled=TRUE AND mb.campus_id=sbuild.campus_id
+                """).param("user", user.id()).param("sourceBedId", row.sourceBedId()).query(Long.class).single() > 0;
+            if (!campusMatch) throw missing("调宿申请不存在");
         } else if(row.targetBuildingId()==null || !effective(user,row.targetBuildingId())) throw missing("调宿申请不存在");
         return row;
     }

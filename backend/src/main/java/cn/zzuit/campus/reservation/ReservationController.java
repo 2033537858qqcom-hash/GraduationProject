@@ -46,6 +46,40 @@ public class ReservationController {
         return Map.of("success", true, "message", "场地资源信息已更新");
     }
 
+    @GetMapping("/venues/manage")
+    public List<VenueManagementItem> listVenuesForManagement(
+        @AuthenticationPrincipal CampusPrincipal user
+    ) {
+        return reservations.listVenuesForManagement(user);
+    }
+
+    @GetMapping("/reviewers/candidates")
+    public List<VenueManagerItem> getReviewerCandidates(
+        @AuthenticationPrincipal CampusPrincipal user
+    ) {
+        return reservations.getReviewerCandidates(user);
+    }
+
+    @PostMapping("/venues/{id}/managers")
+    public Map<String, Object> addVenueManager(
+        @AuthenticationPrincipal CampusPrincipal user,
+        @PathVariable long id,
+        @RequestBody AssignManagerCommand cmd
+    ) {
+        reservations.addVenueManager(user, id, cmd.userId());
+        return Map.of("success", true, "message", "已指定场地责任审批人");
+    }
+
+    @DeleteMapping("/venues/{id}/managers/{userId}")
+    public Map<String, Object> removeVenueManager(
+        @AuthenticationPrincipal CampusPrincipal user,
+        @PathVariable long id,
+        @PathVariable long userId
+    ) {
+        reservations.removeVenueManager(user, id, userId);
+        return Map.of("success", true, "message", "已移除场地责任审批人");
+    }
+
     @GetMapping("/venues/{id}/schedule")
     public List<TimeSlot> getVenueSchedule(
         @PathVariable long id,

@@ -142,6 +142,103 @@ public class VenueReservationService {
             .update();
     }
 
+    public List<VenueManagementItem> listVenuesForManagement(CampusPrincipal user) {
+        identities.requirePermission(user, "reservation:manage");
+        var venues = listVenues(null, null, null, false);
+        return venues.stream().map(v -> {
+            var managers = jdbc.sql("""
+                SELECT u.id, u.username, u.full_name, COALESCE(d.name, '公共服务部门') AS dept_name,
+                       u.identity_number
+                FROM venue_manager vm
+                JOIN app_user u ON u.id = vm.user_id
+                LEFT JOIN department d ON d.id = u.department_id
+                WHERE vm.venue_id = :venueId
+                ORDER BY u.id ASC
+                """)
+                .param("venueId", v.id())
+                .query((r, n) -> new VenueManagerItem(
+                    r.getLong("id"),
+                    r.getString("username"),
+                    r.getString("full_name"),
+                    r.getString("dept_name"),
+                    r.getString("identity_number")
+                )).list();
+            return new VenueManagementItem(
+                v.id(),
+                v.code(),
+                v.name(),
+                v.category(),
+                v.placeId(),
+                v.buildingName(),
+                v.locationDetail(),
+                v.capacity(),
+                v.availableEquipment(),
+                v.rules(),
+                v.enabled(),
+                managers
+            );
+        }).toList();
+    }
+
+    public List<VenueManagerItem> getReviewerCandidates(CampusPrincipal user) {
+        identities.requirePermission(user, "reservation:manage");
+        return jdbc.sql("""
+            SELECT DISTINCT u.id, u.username, u.full_name, COALESCE(d.name, '公共服务部门') AS dept_name,
+                   u.identity_number
+            FROM app_user u
+            JOIN user_role ur ON ur.user_id = u.id
+            JOIN role_permission rp ON rp.role_code = ur.role_code
+            LEFT JOIN department d ON d.id = u.department_id
+            WHERE rp.permission_code = 'reservation:review' AND u.enabled = TRUE
+            ORDER BY u.id ASC
+            """)
+            .query((r, n) -> new VenueManagerItem(
+                r.getLong("id"),
+                r.getString("username"),
+                r.getString("full_name"),
+                r.getString("dept_name"),
+                r.getString("identity_number")
+            )).list();
+    }
+
+    @Transactional
+    public void addVenueManager(CampusPrincipal user, long venueId, long managerUserId) {
+        identities.requirePermission(user, "reservation:manage");
+        lock();
+        getVenue(venueId);
+
+        var hasReview = jdbc.sql("""
+            SELECT COUNT(*) FROM app_user u
+            JOIN user_role ur ON ur.user_id = u.id
+            JOIN role_permission rp ON rp.role_code = ur.role_code
+            WHERE u.id = :uid AND rp.permission_code = 'reservation:review' AND u.enabled = TRUE
+            """)
+            .param("uid", managerUserId)
+            .query(Long.class).single() > 0;
+        if (!hasReview) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "USER_NOT_REVIEWER", "所选用户不具备借用审批权限，无法指定为审批人");
+        }
+
+        boolean exists = isVenueManager(managerUserId, venueId);
+        if (!exists) {
+            jdbc.sql("INSERT INTO venue_manager (venue_id, user_id) VALUES (:vid, :uid)")
+                .param("vid", venueId)
+                .param("uid", managerUserId)
+                .update();
+        }
+    }
+
+    @Transactional
+    public void removeVenueManager(CampusPrincipal user, long venueId, long managerUserId) {
+        identities.requirePermission(user, "reservation:manage");
+        lock();
+        getVenue(venueId);
+        jdbc.sql("DELETE FROM venue_manager WHERE venue_id = :vid AND user_id = :uid")
+            .param("vid", venueId)
+            .param("uid", managerUserId)
+            .update();
+    }
+
     // ==================== 时段占用与冲突排查 ====================
 
     public List<TimeSlot> getVenueSchedule(long venueId, LocalDate date) {

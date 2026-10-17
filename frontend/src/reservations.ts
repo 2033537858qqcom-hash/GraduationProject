@@ -228,3 +228,63 @@ export async function reviewReservation(id: number, cmd: ReviewReservationComman
     body: JSON.stringify(cmd),
   })
 }
+
+export interface VenueManagerItem {
+  userId: number
+  username: string
+  fullName: string
+  departmentName: string
+  identityNumber: string
+}
+
+export interface VenueManagementItem {
+  id: number
+  code: string
+  name: string
+  category: 'VENUE' | 'EQUIPMENT'
+  placeId: string | null
+  buildingName: string | null
+  locationDetail: string
+  capacity: number | null
+  availableEquipment: string | null
+  rules: string | null
+  enabled: boolean
+  managers: VenueManagerItem[]
+}
+
+export interface VenueUpdateCommand {
+  name?: string
+  capacity?: number
+  availableEquipment?: string
+  rules?: string
+  enabled?: boolean
+}
+
+export async function listVenuesForManagement(): Promise<VenueManagementItem[]> {
+  return api<VenueManagementItem[]>('/reservations/venues/manage')
+}
+
+export async function getReviewerCandidates(): Promise<VenueManagerItem[]> {
+  return api<VenueManagerItem[]>('/reservations/reviewers/candidates')
+}
+
+export async function updateVenue(id: number, cmd: VenueUpdateCommand): Promise<{ success: boolean; message: string }> {
+  return api<{ success: boolean; message: string }>(`/reservations/venues/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(cmd),
+  })
+}
+
+export async function addVenueManager(venueId: number, userId: number): Promise<{ success: boolean; message: string }> {
+  return api<{ success: boolean; message: string }>(`/reservations/venues/${venueId}/managers`, {
+    method: 'POST',
+    body: JSON.stringify({ userId }),
+  })
+}
+
+export async function removeVenueManager(venueId: number, userId: number): Promise<{ success: boolean; message: string }> {
+  return api<{ success: boolean; message: string }>(`/reservations/venues/${venueId}/managers/${userId}`, {
+    method: 'DELETE',
+  })
+}
+

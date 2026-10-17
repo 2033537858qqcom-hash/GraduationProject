@@ -426,6 +426,56 @@ class VenueReservationIntegrationTest {
         assertThat(preserved.path("activityTheme").asText()).isEqualTo("TASK01-无审批人配置阻断测试");
     }
 
+    @Test
+    void r05_venueManagementPermissionsAndManagerBinding() throws Exception {
+        var admin = login("admin");
+        var affairs = login("affairs1001");
+        var student = login("20260001");
+
+        // 1. 普通学生调用管理接口 -> 403
+        assertThat(student.get("/api/reservations/venues/manage").statusCode()).isEqualTo(403);
+        assertThat(student.get("/api/reservations/reviewers/candidates").statusCode()).isEqualTo(403);
+
+        // 2. 系统管理员没有 reservation:manage 权限 -> 403 (权限解耦)
+        assertThat(admin.get("/api/reservations/venues/manage").statusCode()).isEqualTo(403);
+
+        // 3. 学生事务 (STUDENT_AFFAIRS) 持有 reservation:manage 权限 -> 200
+        var manageList = ok(affairs.get("/api/reservations/venues/manage"));
+        assertThat(manageList.isArray()).isTrue();
+        assertThat(manageList.size()).isGreaterThanOrEqualTo(1);
+
+        // 4. 获取可选审批候选人 (具备 reservation:review 权限的用户)
+        var candidates = ok(affairs.get("/api/reservations/reviewers/candidates"));
+        assertThat(candidates.isArray()).isTrue();
+        assertThat(candidates.size()).isGreaterThanOrEqualTo(1);
+        long candidateId = candidates.get(0).path("userId").asLong();
+
+        // 5. 为首个场地配置管理责任人
+        long venueId = manageList.get(0).path("id").asLong();
+        var addResp = ok(affairs.send("POST", "/api/reservations/venues/" + venueId + "/managers", Map.of("userId", candidateId)));
+        assertThat(addResp.path("success").asBoolean()).isTrue();
+
+        // 6. 验证已被加入
+        var updatedList = ok(affairs.get("/api/reservations/venues/manage"));
+        var venueItem = java.util.stream.StreamSupport.stream(updatedList.spliterator(), false)
+            .filter(node -> node.path("id").asLong() == venueId)
+            .findFirst().orElseThrow();
+        var managerIds = java.util.stream.StreamSupport.stream(venueItem.path("managers").spliterator(), false)
+            .map(m -> m.path("userId").asLong())
+            .toList();
+        assertThat(managerIds).contains(candidateId);
+
+        // 7. 移除管理责任人
+        var removeResp = ok(affairs.send("DELETE", "/api/reservations/venues/" + venueId + "/managers/" + candidateId, Map.of()));
+        assertThat(removeResp.path("success").asBoolean()).isTrue();
+
+        // 8. 尝试将没有 reservation:review 权限的学生指定为审批责任人 -> 400 USER_NOT_REVIEWER
+        long studentId = jdbc.sql("SELECT id FROM app_user WHERE username = '20260001'").query(Long.class).single();
+        var invalidAdd = affairs.send("POST", "/api/reservations/venues/" + venueId + "/managers", Map.of("userId", studentId));
+        assertThat(invalidAdd.statusCode()).isEqualTo(400);
+        assertThat(invalidAdd.body()).contains("USER_NOT_REVIEWER");
+    }
+
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);
         try {

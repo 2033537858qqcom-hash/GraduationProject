@@ -58,3 +58,16 @@
 @media(max-width:760px) { .repair-statistics-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }.repair-statistics-charts { grid-template-columns:1fr; }.repair-statistics-filter label { min-width:100%; } }
 @media(max-width:1024px) { .repair-workflow-grid { grid-template-columns:minmax(220px,260px) minmax(0,1fr); gap:16px; }.repair-facts { grid-template-columns:1fr; } }
 @media(max-width:760px) { .repair-workflow-grid { grid-template-columns:1fr; }.repair-page-heading { flex-direction:column; gap:12px; }.repair-page-heading h1 { font-size:24px; }.repair-workflow-form .form-grid { grid-template-columns:1fr; }.repair-request-list { max-height:380px; overflow-y:auto; }.repair-empty-detail { padding:38px 0; }.repair-request-detail .section-heading { flex-wrap:wrap; gap:12px; }.repair-workflow .pagination { flex-wrap:wrap; }.repair-queue-note { font-size:12px; } }
+.repair-assignments-section { padding:20px 0; border-top:1px solid #e6ebf1; }
+.repair-assignments-section .section-subheading { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px; flex-wrap:wrap; gap:8px; }
+.repair-assignments-section .muted-note { font-size:12px; color:var(--muted); }
+.repair-assignment-list { display:grid; gap:12px; }
+.repair-assignment-card { padding:14px 16px; border:1px solid #e2e8f0; border-radius:6px; background:#f8fafc; font-size:13px; line-height:1.7; }
+.repair-assignment-card.current { border-left:4px solid var(--brand, #2563eb); background:#f0f7ff; }
+.repair-assignment-card .assignment-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.repair-assignment-card .assignment-index { font-weight:600; color:#334155; }
+.repair-assignment-card .assignment-badge { font-size:11px; padding:2px 8px; border-radius:4px; font-weight:500; }
+.repair-assignment-card .assignment-badge.active { background:#dbeafe; color:#1e40af; }
+.repair-assignment-card .assignment-badge.ended { background:#e2e8f0; color:#64748b; }
+.repair-assignment-card .assignment-row { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:4px; color:#475569; }
+.repair-assignment-card .assignment-comment { margin-top:8px; padding-top:6px; border-top:1px dashed #cbd5e1; color:#334155; }

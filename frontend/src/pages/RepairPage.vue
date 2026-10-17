@@ -235,6 +235,35 @@ onBeforeUnmount(() => { sequence++; locationSequence++; finish(false); window.re
             <p v-if="selected.confirmationOverdue" class="repair-overdue-note">本次维修结果已等待验收超过演示提醒时间，请核对结果后确认或反馈问题。提醒不会自动完成工单。</p>
             <dl class="repair-facts"><div><dt>报修地点</dt><dd>{{ selected.campusName }} {{ selected.locationName || '待填写' }}</dd></div><div><dt>故障类别</dt><dd>{{ repairCategories[selected.category] || '待填写' }}</dd></div><div><dt>报修人</dt><dd>{{ selected.reporterName }}</dd></div><div><dt>当前维修人员</dt><dd>{{ selected.technicianName || '尚未派单' }}</dd></div><div><dt>联系信息</dt><dd>{{ selected.contact || '待填写' }}<small>{{ selected.contactWindow }}</small></dd></div><div><dt>处理优先级</dt><dd>{{ { LOW: '低', NORMAL: '普通', HIGH: '高' }[selected.priority] }}</dd></div></dl><p v-if="selected.locationDetail" class="data-note">具体位置：{{ selected.locationDetail }}</p><div class="repair-description"><h3>故障说明</h3><p class="preserve-lines">{{ selected.description || '尚未补充' }}</p></div><p v-if="selected.processingComment" class="repair-processing-note">最近处理说明：{{ selected.processingComment }}</p>
             <div v-if="selected.images.length" class="repair-image-list"><h3>已保存图片</h3><article v-for="image in selected.images" :key="image.id"><div><span>{{ image.purpose === 'FAULT' ? '故障图片' : image.purpose === 'PROGRESS' ? '维修进展' : '结果第 ' + image.resultRound + ' 轮' }}</span><a :href="imageUrl(image)" target="_blank" rel="noopener">{{ image.name }} · 下载查看</a></div><button v-if="removable(image)" class="text-button" :disabled="busy" @click="removeImage(image)">移除当前图片</button></article></div>
+            <section v-if="selected.assignments?.length" class="repair-assignments-section">
+              <div class="section-subheading">
+                <h3>派工与改派轨迹 ({{ selected.assignments.length }})</h3>
+                <span class="muted-note">记录责任人员分配与改派流转</span>
+              </div>
+              <div class="repair-assignment-list">
+                <article v-for="(asn, idx) in selected.assignments" :key="asn.id" class="repair-assignment-card" :class="{ current: !asn.endedAt }">
+                  <div class="assignment-header">
+                    <span class="assignment-index">第 {{ idx + 1 }} 次派工</span>
+                    <span class="assignment-badge" :class="asn.endedAt ? 'ended' : 'active'">
+                      {{ asn.endedAt ? '已改派 / 历史' : '当前指派' }}
+                    </span>
+                  </div>
+                  <div class="assignment-body">
+                    <div class="assignment-row">
+                      <span><strong>维修人员：</strong>{{ asn.technicianName }}</span>
+                      <span style="margin-left: 12px"><strong>调度人员：</strong>{{ asn.actorName }}</span>
+                    </div>
+                    <div class="assignment-row">
+                      <span><strong>派单时间：</strong><small>{{ time(asn.assignedAt) }}</small></span>
+                      <span v-if="asn.endedAt" style="margin-left: 12px"><strong>改派时间：</strong><small>{{ time(asn.endedAt) }}</small></span>
+                    </div>
+                    <p class="assignment-comment" v-if="asn.comment">
+                      <strong>派工／改派说明：</strong>{{ asn.comment }}
+                    </p>
+                  </div>
+                </article>
+              </div>
+            </section>
             <section v-if="can('upload-fault') || can('upload-result')" class="repair-upload"><h3>补充图片</h3><label v-if="mode === 'work'">图片用途<BaseSelect v-model="purpose" :options="purposeOptions" :disabled="busy" /></label><label>选择 JPEG 或 PNG 图片<input ref="fileInput" type="file" accept="image/jpeg,image/png" :disabled="busy" @change="selectFile" /></label><small>单张最多 2 MB；故障最多 6 张，进展与本轮结果各最多 3 张。刷新后待上传图片须重新选择。</small><div class="repair-inline-actions"><button class="button compact" :disabled="busy || !file" @click="upload">上传并保存图片</button><button v-if="file" class="text-button" :disabled="busy" @click="clearFile">清除选择</button></div></section>
             <section v-for="completion in selected.completions" :key="completion.resultRound" class="repair-completion"><h3>第 {{ completion.resultRound }} 次维修结果</h3><small>{{ completion.technicianName }} · {{ time(completion.createdAt) }}</small><p class="preserve-lines">{{ completion.comment }}</p><a v-for="image in completion.images" :key="image.id" class="text-button" :href="imageUrl(image)" target="_blank" rel="noopener">{{ image.name }} · 下载结果图片</a></section>
             <div v-if="selected.evaluation" class="repair-completion"><h3>你的服务评价 · {{ selected.evaluation.stars }} / 5 星</h3><p>{{ selected.evaluation.comment || '未填写文字评价' }}</p></div>

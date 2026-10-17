@@ -21,10 +21,11 @@ public final class RepairModels {
     public record Image(long id,String name,String type,String purpose,int resultRound,LocalDateTime createdAt) {}
     public record Completion(int resultRound,String technicianName,String comment,List<Image> images,LocalDateTime createdAt) {}
     public record Evaluation(int stars,String comment,LocalDateTime createdAt) {}
+    public record AssignmentRecord(long id,long technicianId,String technicianName,long actorId,String actorName,String comment,LocalDateTime assignedAt,LocalDateTime endedAt) {}
     public record Detail(long id,String reporterName,String title,Long campusId,String campusName,Long locationId,String locationName,
         String category,String priority,String status,int version,String description,String locationDetail,String contact,String contactWindow,
         Long technicianId,String technicianName,int completionRound,String processingComment,List<String> allowedActions,
-        List<Image> images,List<Completion> completions,Evaluation evaluation,LocalDateTime submittedAt,LocalDateTime confirmedAt,LocalDateTime createdAt,LocalDateTime updatedAt,Cancellation cancellation,boolean cancellationPending,boolean confirmationOverdue,boolean locationEligible,String locationEligibilityMessage) {}
+        List<Image> images,List<Completion> completions,List<AssignmentRecord> assignments,Evaluation evaluation,LocalDateTime submittedAt,LocalDateTime confirmedAt,LocalDateTime createdAt,LocalDateTime updatedAt,Cancellation cancellation,boolean cancellationPending,boolean confirmationOverdue,boolean locationEligible,String locationEligibilityMessage) {}
     public record History(long id,String actorName,String action,String comment,String status,int version,String snapshot,LocalDateTime createdAt) {}
     public record Technician(long id,String name,String departmentName) {}
     public record Summary(long mineAwaitingConfirmation,long mineReturned,long dispatchPending,long workAssigned,long workInProgress,long mineCancellationPending,long dispatchCancellationPending) {}

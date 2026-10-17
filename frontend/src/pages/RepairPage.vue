@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
-import { ClipboardCheck, History, MapPin, Plus, RefreshCw, Wrench } from '@lucide/vue'
+import { AlertCircle, ClipboardCheck, History, MapPin, Plus, RefreshCw, Wrench } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { repairLocationQuery, type RepairPublicLocation } from '../repairSettings'
 import { currentUser } from '../stores/auth'
@@ -246,6 +246,18 @@ onBeforeUnmount(() => { sequence++; locationSequence++; finish(false); window.re
       </section>
     </div>
     <p class="data-note">毕业设计演示流程。办理记录随实际操作更新；取消申请由当前后勤岗位处理。</p>
-    <dialog ref="dialog" class="confirmation-dialog" @cancel.prevent="finish(false)"><h2>请核对本次操作</h2><p>{{ confirmation }}</p><div class="dialog-actions"><button ref="cancelButton" class="button compact" @click="finish(false)">取消，继续编辑</button><button class="button primary compact" @click="finish(true)">确认继续</button></div></dialog>
+    <dialog ref="dialog" class="confirmation-dialog" aria-labelledby="repair-dialog-title" @cancel.prevent="finish(false)">
+      <div class="dialog-header">
+        <div class="dialog-icon-badge">
+          <AlertCircle :size="20" />
+        </div>
+        <h2 id="repair-dialog-title">请核对本次操作</h2>
+      </div>
+      <p>{{ confirmation }}</p>
+      <div class="dialog-actions">
+        <button ref="cancelButton" type="button" class="button compact dialog-btn-cancel" @click="finish(false)">取消，继续编辑</button>
+        <button type="button" class="button primary compact dialog-btn-confirm" @click="finish(true)">确认继续</button>
+      </div>
+    </dialog>
   </div>
 </template>

@@ -25,11 +25,11 @@
 .repair-workflow h3 { font-size:15px; font-weight:500; margin:0 0 12px; }
 .repair-description, .repair-completion, .repair-operation-panel, .repair-upload { padding:20px 0; border-top:1px solid #e6ebf1; }
 .repair-processing-note { padding:12px 15px; background:#f0f4f8; line-height:1.8; font-size:13px; overflow-wrap:anywhere; }
-.repair-workflow-form label, .repair-operation-panel label, .repair-upload label { display:grid; gap:7px; margin:0 0 16px; font-size:13px; color:#344659; }
-.repair-workflow-form fieldset { border:0; padding:0; margin:18px 0; min-width:0; }.repair-workflow-form .form-grid { gap:16px; }
+.repair-workflow-form label, .repair-operation-panel label, .repair-upload label { display:flex; flex-direction:column; gap:6px; margin:0 0 16px; font-size:13px; color:#344659; }
+.repair-workflow-form fieldset { border:0; padding:0; margin:18px 0; min-width:0; }.repair-workflow-form .form-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
 .repair-workflow textarea { resize:vertical; min-height:90px; }.repair-workflow .preserve-lines { white-space:pre-wrap; overflow-wrap:anywhere; font-size:14px; line-height:1.9; }
 .repair-workflow input, .repair-workflow select, .repair-workflow textarea { min-width:0; max-width:100%; }
-.repair-location-pages { display:flex; flex-wrap:wrap; gap:12px; margin:0 0 18px; align-items:center; color:var(--muted); }
+.repair-workflow input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) { height:38px; padding:8px 12px; box-sizing:border-box; }
 .repair-image-list article { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; padding:12px 0; border-bottom:1px solid #ecf0f4; font-size:12px; }
 .repair-image-list article div { display:grid; gap:6px; min-width:0; }.repair-image-list a, .repair-completion a { overflow-wrap:anywhere; }
 .repair-completion .text-button { display:block; margin:8px 0; }.repair-completion small, .repair-upload small { color:var(--muted); font-size:12px; line-height:1.8; }

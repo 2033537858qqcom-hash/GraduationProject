@@ -51,8 +51,13 @@ async function leave() {
           <RouterLink to="/portal/notices" exact-active-class="selected"><Bell :size="16" aria-hidden="true" />消息通知</RouterLink>
           <RouterLink to="/portal/affairs" :class="{ selected: ['/portal/affairs','/portal/leave','/portal/certificates','/portal/reservations'].includes(route.path) }"><ClipboardList :size="16" aria-hidden="true" />我的办事</RouterLink>
           <RouterLink v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" exact-active-class="selected"><CalendarCheck :size="16" aria-hidden="true" />场地借用</RouterLink>
-          <RouterLink v-if="currentUser?.permissions.includes('housing:read')" to="/housing/mine" exact-active-class="selected"><BedDouble :size="16" aria-hidden="true" />我的住宿</RouterLink>
-          <RouterLink v-if="currentUser?.permissions.includes('housing:read')" to="/housing/transfer" exact-active-class="selected"><BedDouble :size="16" aria-hidden="true" />调宿申请</RouterLink>
+          <RouterLink
+            v-if="currentUser?.permissions.includes('housing:read')"
+            to="/housing/mine"
+            :class="{ selected: route.path.startsWith('/housing/mine') || route.path.startsWith('/housing/transfer') }"
+          >
+            <BedDouble :size="16" aria-hidden="true" />我的住宿与调宿
+          </RouterLink>
         </template>
         <RouterLink v-else to="/workbench" exact-active-class="selected"><House :size="16" aria-hidden="true" />{{ workspace }}</RouterLink>
         <RouterLink v-if="currentUser?.permissions.includes('teaching:manage')" to="/teaching" :class="{ selected: route.path.startsWith('/teaching') }"><BookOpen :size="16" aria-hidden="true" />教学班与资料</RouterLink>

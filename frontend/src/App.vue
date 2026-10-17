@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { clearSession, currentUser } from './stores/auth'
+import ToastContainer from './components/ToastContainer.vue'
 
 const router = useRouter()
 function expired() {
@@ -13,4 +14,7 @@ function expired() {
 onMounted(() => window.addEventListener('campus:unauthorized', expired))
 onUnmounted(() => window.removeEventListener('campus:unauthorized', expired))
 </script>
-<template><RouterView /></template>
+<template>
+  <ToastContainer />
+  <RouterView />
+</template>

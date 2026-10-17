@@ -6,7 +6,9 @@ import ServiceEntry from '../components/ServiceEntry.vue'
 import { api, errorMessage } from '../lib/api'
 import type { Overview, Notice } from '../types'
 import { safeAffairDestination } from '../lib/navigation'
+import { useToast } from '../composables/useToast'
 const route = useRoute()
+const toast = useToast()
 const overview = ref<Overview | null>(null)
 const loading = ref(true)
 const error = ref('')
@@ -42,6 +44,7 @@ async function markRead(notice: Notice) {
     await api('/notices/' + notice.id + '/read', { method: 'POST' })
     notice.read = true
     if (overview.value) overview.value.unreadCount = Math.max(0, overview.value.unreadCount - 1)
+    toast.success('已将该消息标记为已读')
   } catch (cause) { error.value = errorMessage(cause) }
   finally { reading.value = null }
 }
@@ -49,9 +52,19 @@ onMounted(load)
 </script>
 <template>
   <div>
-    <p v-if="loading" class="loading-state" role="status">正在读取你的校园信息…</p>
+    <!-- Skeleton Loading Block -->
+    <div v-if="loading" class="portal-skeleton" role="status" aria-label="正在读取你的校园信息…">
+      <div class="skeleton-box" style="height: 80px; margin-bottom: 25px; border-radius: 6px;"></div>
+      <div class="service-entry-grid" style="margin-bottom: 25px;">
+        <div v-for="n in 6" :key="n" class="skeleton-box" style="height: 96px; border-radius: 6px;"></div>
+      </div>
+      <div class="portal-content-grid">
+        <div class="skeleton-box" style="height: 280px; border-radius: 6px;"></div>
+        <div class="skeleton-box" style="height: 280px; border-radius: 6px;"></div>
+      </div>
+    </div>
     <div v-if="error" class="alert" role="alert">{{ error }} <button class="text-button" @click="load">重新加载</button></div>
-    <template v-if="overview">
+    <template v-if="overview && !loading">
       <section v-if="view === 'home'" class="student-welcome">
         <div><span class="portal-context">学生服务中心<span>{{ date }}</span></span><h1>{{ overview.profile.fullName }}，你好。</h1><p>{{ overview.profile.departmentName }} · {{ overview.profile.className }}</p></div>
         <span class="welcome-campus">{{ overview.profile.campusName }}<small>今日校园，从容开启</small></span>

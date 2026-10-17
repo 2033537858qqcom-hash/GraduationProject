@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlertCircle, CheckCircle2, Copy, Printer, Search, ShieldCheck } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
+import { useToast } from '../composables/useToast'
 
 interface VerificationResult {
   valid: boolean
@@ -64,14 +65,17 @@ function handleSearch() {
   }
 }
 
+const toast = useToast()
+
 async function copyShareLink() {
   const url = window.location.origin + '/verify/certificate?number=' + encodeURIComponent(result.value?.documentNumber ?? '')
   try {
     await navigator.clipboard.writeText(url)
     copied.value = true
+    toast.success('验真链接已复制到剪贴板，可供扫码或转发核验')
     setTimeout(() => { copied.value = false }, 2500)
   } catch {
-    // fallback
+    toast.info('请直接复制浏览器地址栏链接进行核验')
   }
 }
 

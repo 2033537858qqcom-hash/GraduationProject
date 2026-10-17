@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowUpRight, Bot, ChevronDown, RotateCw, Send, Sparkles, X } from '@lucide/vue'
 import { api, ApiError, errorMessage } from '../lib/api'
@@ -35,6 +35,13 @@ const canPrepareCertificate = computed(() => currentUser.value?.permissions.incl
 const canPrepareHousing = computed(() => currentUser.value?.permissions.includes('housing:read'))
 const canPrepareRepair = computed(() => currentUser.value?.permissions.includes('repair:apply'))
 const messages = ref<{ question: string; answer: AssistantAnswer }[]>([])
+type AutoAction = 'none' | 'peek' | 'bounce' | 'sparkle' | 'stretch'
+type ScrollMotion = 'none' | 'down' | 'up' | 'settle'
+const autoAction = ref<AutoAction>('none')
+const scrollMotion = ref<ScrollMotion>('none')
+let autoActionTimer: number | null = null, autoActionResetTimer: number | null = null
+let scrollEndTimer: number | null = null, scrollSettleTimer: number | null = null
+let lastScrollY = 0, isScrolling = false
 const input = ref<HTMLTextAreaElement | null>(null), launcher = ref<HTMLButtonElement | null>(null), history = ref<HTMLElement | null>(null)
 let request: AbortController | null = null, generation = 0, capabilityGeneration = 0, sessionGeneration = 0
 const context = computed(() => contextEnabled.value ? requeryContext.value ?? assistantContext(route.path, route.query.id) : null)
@@ -175,7 +182,84 @@ watch(() => currentUser.value?.id, () => {
 watch(mode, () => { consent.value = false; error.value = '' })
 watch(question, () => { queryKey.value = crypto.randomUUID() })
 watch(() => session.value?.session.id, () => { selectedTask.value = null })
-onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration++ })
+
+function triggerRandomAutonomousAction() {
+  if (open.value || isScrolling || busy.value || preparingDraft.value || savingDraft.value) {
+    scheduleNextAutonomousAction()
+    return
+  }
+  const actions: AutoAction[] = ['peek', 'bounce', 'sparkle', 'stretch']
+  const next = actions[Math.floor(Math.random() * actions.length)] ?? 'peek'
+  autoAction.value = next
+
+  if (autoActionResetTimer) clearTimeout(autoActionResetTimer)
+  autoActionResetTimer = window.setTimeout(() => {
+    autoAction.value = 'none'
+    scheduleNextAutonomousAction()
+  }, 1900)
+}
+
+function scheduleNextAutonomousAction() {
+  if (autoActionTimer) clearTimeout(autoActionTimer)
+  const delay = 6000 + Math.random() * 5000
+  autoActionTimer = window.setTimeout(triggerRandomAutonomousAction, delay)
+}
+
+function handleScroll() {
+  if (open.value) return
+  const currentY = window.scrollY || document.documentElement.scrollTop
+  const diff = currentY - lastScrollY
+
+  if (Math.abs(diff) > 2) {
+    isScrolling = true
+    if (autoAction.value !== 'none') autoAction.value = 'none'
+
+    scrollMotion.value = diff > 0 ? 'down' : 'up'
+
+    if (scrollEndTimer) clearTimeout(scrollEndTimer)
+    scrollEndTimer = window.setTimeout(() => {
+      isScrolling = false
+      scrollMotion.value = 'settle'
+      if (scrollSettleTimer) clearTimeout(scrollSettleTimer)
+      scrollSettleTimer = window.setTimeout(() => {
+        if (!isScrolling) scrollMotion.value = 'none'
+      }, 360)
+    }, 140)
+  }
+  lastScrollY = currentY
+}
+
+watch(open, (isOpen) => {
+  if (isOpen) {
+    autoAction.value = 'none'
+    scrollMotion.value = 'none'
+    if (autoActionTimer) clearTimeout(autoActionTimer)
+    if (autoActionResetTimer) clearTimeout(autoActionResetTimer)
+  } else {
+    scheduleNextAutonomousAction()
+  }
+})
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    lastScrollY = window.scrollY || document.documentElement.scrollTop
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    scheduleNextAutonomousAction()
+  }
+})
+
+onBeforeUnmount(() => {
+  stopWaiting()
+  capabilityGeneration++
+  sessionGeneration++
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('scroll', handleScroll)
+    if (autoActionTimer) clearTimeout(autoActionTimer)
+    if (autoActionResetTimer) clearTimeout(autoActionResetTimer)
+    if (scrollEndTimer) clearTimeout(scrollEndTimer)
+    if (scrollSettleTimer) clearTimeout(scrollSettleTimer)
+  }
+})
 </script>
 <template>
   <aside v-if="currentUser?.permissions.includes('agent:query')" class="assistant-dock" :class="{ expanded: open }">
@@ -233,14 +317,24 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
     <button
       ref="launcher"
       class="assistant-launcher"
-      :class="{ 'is-open': open, 'is-working': busy || preparingDraft || savingDraft }"
+      :class="{
+        'is-open': open,
+        'is-working': busy || preparingDraft || savingDraft,
+        [`action-${autoAction}`]: !open && autoAction !== 'none',
+        [`motion-scroll-${scrollMotion}`]: !open && scrollMotion !== 'none'
+      }"
       :data-state="avatarState"
+      :data-action="autoAction"
+      :data-motion="scrollMotion"
       :aria-expanded="open"
       :aria-label="open ? '收起 AI 对话' : '打开 AI 对话'"
       :disabled="savingDraft"
       @click="open ? close() : show()"
     >
       <span v-if="busy || preparingDraft || savingDraft" class="assistant-aura-ring" />
+      <span v-if="!open && scrollMotion === 'down'" class="assistant-surf-trail" aria-hidden="true" />
+      <span v-if="!open && scrollMotion === 'up'" class="assistant-jet-trail" aria-hidden="true" />
+      <span v-if="!open && autoAction === 'sparkle'" class="assistant-sparkle-burst" aria-hidden="true" />
       <div class="assistant-launcher-inner">
         <X v-if="open" :size="22" class="launcher-icon-close" />
         <div v-else class="launcher-icon-stack">
@@ -257,18 +351,32 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
 .assistant-session-list .assistant-task-list-heading{margin-top:24px;padding-top:16px;border-top:1px solid #e8edf3;font-size:12px}
 .assistant-dock{position:fixed;right:24px;bottom:24px;z-index:70;color:#1e293b;font-size:13px}
 .assistant-launcher{width:56px;height:56px;display:grid;place-items:center;margin-left:auto;border:1px solid rgba(255,255,255,0.28);border-radius:50%;background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 45%,#7c3aed 100%);color:#fff;box-shadow:0 10px 24px -4px rgba(37,99,235,0.45),0 4px 12px rgba(124,58,237,0.25),inset 0 1px 1px rgba(255,255,255,0.35);cursor:pointer;position:relative;transition:transform .25s cubic-bezier(0.16,1,0.3,1),box-shadow .25s cubic-bezier(0.16,1,0.3,1),background .3s ease;user-select:none;-webkit-tap-highlight-color:transparent}
-.assistant-launcher:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 14px 30px -4px rgba(37,99,235,0.55),0 6px 16px rgba(124,58,237,0.35),inset 0 1px 2px rgba(255,255,255,0.5)}
-.assistant-launcher:active{transform:translateY(0) scale(0.95);box-shadow:0 6px 16px -2px rgba(37,99,235,0.4),inset 0 1px 1px rgba(255,255,255,0.2)}
+.assistant-launcher:hover{transform:translateY(-3px) scale(1.05) rotate(-3deg);box-shadow:0 14px 30px -4px rgba(37,99,235,0.55),0 6px 16px rgba(124,58,237,0.35),inset 0 1px 2px rgba(255,255,255,0.5)}
+.assistant-launcher:active{transform:translateY(0) scale(0.94);box-shadow:0 6px 16px -2px rgba(37,99,235,0.4),inset 0 1px 1px rgba(255,255,255,0.2)}
 .assistant-launcher:focus-visible{outline:3px solid rgba(99,102,241,0.5);outline-offset:3px}
-.assistant-launcher.is-open{background:linear-gradient(135deg,#334155 0%,#1e293b 100%);border-color:rgba(255,255,255,0.15);box-shadow:0 8px 22px rgba(15,23,42,0.25)}
+.assistant-launcher.is-open{background:linear-gradient(135deg,#334155 0%,#1e293b 100%);border-color:rgba(255,255,255,0.15);box-shadow:0 8px 22px rgba(15,23,42,0.25);transform:none!important}
 .assistant-launcher.is-open:hover{background:linear-gradient(135deg,#475569 0%,#1e293b 100%)}
 .assistant-launcher-inner{display:flex;align-items:center;justify-content:center;width:100%;height:100%;position:relative;color:#fff}
 .launcher-icon-stack{position:relative;display:flex;align-items:center;justify-content:center}
-.launcher-bot-icon{color:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));animation:ai-bot-breathe 4s ease-in-out infinite}
+.launcher-bot-icon{color:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));animation:ai-bot-breathe 4s ease-in-out infinite;transition:transform .2s ease}
 .launcher-sparkle-icon{position:absolute;top:-4px;right:-5px;color:#fde047;filter:drop-shadow(0 0 5px rgba(253,224,71,0.9));animation:ai-sparkle-twinkle 2.5s ease-in-out infinite}
 .launcher-icon-close{color:#fff;transition:transform .25s cubic-bezier(0.16,1,0.3,1)}
 .assistant-launcher.is-open:hover .launcher-icon-close{transform:rotate(90deg)}
 .assistant-aura-ring{position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(124,58,237,0.65);animation:ai-aura-pulse 2s cubic-bezier(0.24,0,0.38,1) infinite;pointer-events:none}
+.assistant-launcher.motion-scroll-down{transform:translateY(8px) rotate(14deg) scale(0.96);box-shadow:0 4px 16px -2px rgba(37,99,235,0.45),inset 0 1px 1px rgba(255,255,255,0.4);transition:transform .14s cubic-bezier(0.16,1,0.3,1),box-shadow .14s cubic-bezier(0.16,1,0.3,1)}
+.assistant-launcher.motion-scroll-down .launcher-bot-icon{transform:rotate(6deg) scale(1.03)}
+.assistant-launcher.motion-scroll-up{transform:translateY(-9px) rotate(-10deg) scale(1.05);box-shadow:0 16px 32px -4px rgba(37,99,235,0.6),0 6px 18px rgba(124,58,237,0.35);transition:transform .14s cubic-bezier(0.16,1,0.3,1),box-shadow .14s cubic-bezier(0.16,1,0.3,1)}
+.assistant-launcher.motion-scroll-up .launcher-bot-icon{transform:translateY(-2px) rotate(-6deg)}
+.assistant-launcher.motion-scroll-settle{animation:ai-scroll-settle .36s cubic-bezier(0.34,1.56,0.64,1)}
+.assistant-surf-trail{position:absolute;top:-6px;width:28px;height:8px;background:radial-gradient(ellipse at center,rgba(147,197,253,0.75) 0%,rgba(147,197,253,0) 75%);border-radius:50%;filter:blur(1px);pointer-events:none;animation:surf-trail-wave .28s ease-in-out infinite alternate}
+.assistant-jet-trail{position:absolute;bottom:-8px;width:32px;height:12px;background:radial-gradient(ellipse at center,rgba(192,132,252,0.85) 0%,rgba(192,132,252,0) 75%);border-radius:50%;filter:blur(2px);pointer-events:none;animation:jet-trail-pulse .22s ease-in-out infinite alternate}
+.assistant-launcher.action-peek{animation:ai-action-peek 1.8s cubic-bezier(0.25,1,0.5,1)}
+.assistant-launcher.action-peek .launcher-bot-icon{animation:ai-bot-peek 1.8s ease-in-out}
+.assistant-launcher.action-bounce{animation:ai-action-bounce 1.5s cubic-bezier(0.28,0.84,0.42,1)}
+.assistant-launcher.action-sparkle{animation:ai-action-sparkle 1.8s ease-in-out}
+.assistant-launcher.action-sparkle .launcher-sparkle-icon{animation:ai-action-sparkle-spin 1.8s cubic-bezier(0.34,1.56,0.64,1)}
+.assistant-sparkle-burst{position:absolute;inset:-12px;border-radius:50%;background:radial-gradient(circle,rgba(253,224,71,0.45) 0%,rgba(168,85,247,0.3) 50%,transparent 72%);animation:ai-sparkle-burst-ring 1.6s ease-out;pointer-events:none}
+.assistant-launcher.action-stretch{animation:ai-action-stretch 1.8s ease-in-out}
 .assistant-panel{position:absolute;right:0;bottom:76px;width:min(366px,calc(100vw - 32px));height:min(550px,calc(100dvh - 112px));display:flex;flex-direction:column;background:#fff;border:1px solid #dce4ed;border-radius:14px;box-shadow:0 14px 48px #142d4e26;overflow:hidden;animation:assistant-appear .2s ease-out}
 .assistant-head{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf0f4}.assistant-head strong{display:block;font-size:15px}.assistant-head small{display:block;color:#7c8999;font-size:11px;margin-top:3px}.assistant-icon{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#708398;display:grid;place-items:center;cursor:pointer}.assistant-icon:hover{background:#eff4f8}
 .assistant-mode{padding:9px 16px;display:flex;align-items:center;justify-content:space-between;background:#f7f9fc;font-size:11px;color:#7a899a}.assistant-mode label{display:flex;flex-direction:row;align-items:center;gap:7px;white-space:nowrap}.assistant-mode select{max-width:144px;height:27px;min-height:0;border:1px solid #dce4ed;border-radius:5px;background:white;font-size:11px;color:#355374;padding:2px 6px}.assistant-status{padding:8px 16px;margin:0;color:#76879b}
@@ -290,6 +398,16 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
 @keyframes ai-sparkle-twinkle{0%,100%{transform:scale(1) rotate(0deg);opacity:.95}50%{transform:scale(1.2) rotate(12deg);opacity:1;filter:drop-shadow(0 0 8px rgba(253,224,71,1))}}
 @keyframes ai-aura-pulse{0%{transform:scale(0.95);opacity:.75;box-shadow:0 0 0 0 rgba(124,58,237,0.5)}70%{transform:scale(1.18);opacity:.15;box-shadow:0 0 0 10px rgba(124,58,237,0)}100%{transform:scale(1.25);opacity:0;box-shadow:0 0 0 14px rgba(124,58,237,0)}}
 @keyframes assistant-appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ai-scroll-settle{0%{transform:translateY(0) rotate(0) scale(1)}35%{transform:translateY(-5px) rotate(-3deg) scale(1.03)}65%{transform:translateY(2px) rotate(1.5deg) scale(0.98)}100%{transform:translateY(0) rotate(0) scale(1)}}
+@keyframes surf-trail-wave{0%{transform:scaleX(0.8) translateY(0);opacity:.6}100%{transform:scaleX(1.15) translateY(-2px);opacity:.95}}
+@keyframes jet-trail-pulse{0%{transform:scale(0.85);opacity:.7}100%{transform:scale(1.2);opacity:1}}
+@keyframes ai-action-peek{0%,100%{transform:translateY(0) rotate(0deg)}20%{transform:translateY(-3px) rotate(-15deg) scale(1.04)}50%{transform:translateY(-3px) rotate(14deg) scale(1.04)}75%{transform:translateY(-1px) rotate(-4deg) scale(1.01)}}
+@keyframes ai-bot-peek{0%,100%{transform:rotate(0)}20%{transform:rotate(-8deg) translateX(-2px)}50%{transform:rotate(8deg) translateX(2px)}75%{transform:rotate(-2deg)}}
+@keyframes ai-action-bounce{0%,100%{transform:translateY(0) scale(1)}18%{transform:translateY(-12px) scale(1.06,0.94)}36%{transform:translateY(0) scale(0.94,1.06)}54%{transform:translateY(-6px) scale(1.03,0.97)}72%{transform:translateY(0) scale(0.98,1.02)}}
+@keyframes ai-action-sparkle{0%,100%{filter:brightness(1)}35%{filter:brightness(1.25) drop-shadow(0 0 14px rgba(168,85,247,0.7));transform:scale(1.08)}70%{filter:brightness(1.1);transform:scale(1.03)}}
+@keyframes ai-action-sparkle-spin{0%{transform:scale(1) rotate(0deg)}35%{transform:scale(1.8) rotate(180deg);color:#fff;filter:drop-shadow(0 0 10px #fde047)}70%{transform:scale(1.25) rotate(360deg);color:#fde047}100%{transform:scale(1) rotate(360deg)}}
+@keyframes ai-sparkle-burst-ring{0%{transform:scale(0.8);opacity:0}30%{transform:scale(1.15);opacity:.9}100%{transform:scale(1.45);opacity:0}}
+@keyframes ai-action-stretch{0%,100%{transform:scale(1) translateY(0)}30%{transform:scale(1.08,0.92) translateY(3px)}60%{transform:scale(0.93,1.09) translateY(-5px)}80%{transform:scale(1.03,0.98) translateY(0)}}
 @media(max-width:600px){.assistant-dock{right:14px;bottom:14px}.assistant-launcher{width:50px;height:50px}.launcher-bot-icon{width:22px;height:22px}.assistant-panel{position:fixed;left:12px;right:12px;bottom:74px;width:auto;height:min(540px,calc(100dvh - 96px))}.assistant-hint{right:60px;font-size:11px}.assistant-head{padding:12px 14px 9px}}
-@media(prefers-reduced-motion:reduce){.launcher-bot-icon,.launcher-sparkle-icon,.assistant-aura-ring,.assistant-panel,.assistant-hint{animation:none!important}.assistant-launcher,.launcher-icon-close{transition:none}.assistant-history{scroll-behavior:auto}}
+@media(prefers-reduced-motion:reduce){.assistant-launcher,.assistant-launcher *,.launcher-bot-icon,.launcher-sparkle-icon,.assistant-aura-ring,.assistant-surf-trail,.assistant-jet-trail,.assistant-sparkle-burst,.assistant-panel,.assistant-hint{animation:none!important;transition:none!important}.assistant-history{scroll-behavior:auto}}
 </style>

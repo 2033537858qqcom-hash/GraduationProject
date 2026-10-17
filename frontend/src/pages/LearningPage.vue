@@ -8,6 +8,7 @@ import { readTeachingDraft, writeTeachingDraft } from '../lib/teachingDrafts'
 import type { TeachingDraft } from '../lib/teachingDrafts'
 import { learningLinkSelection } from '../lib/learningLink'
 import type { AcademicTerm, TeachingClass, TeachingLesson, TeachingDetail, CourseMaterial, AcademicGrade, AcademicExam } from '../types'
+import BaseSelect from '../components/BaseSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -243,7 +244,15 @@ onBeforeUnmount(() => { persistDraft(); finishConfirmation(false); detailSequenc
     </dialog>
     <div class="learning-heading">
       <div><span class="portal-context">{{ teacher ? '教师教学服务' : '学生学习服务' }}</span><h1>{{ pageTitle }}</h1><p class="muted">{{ pageDescription }}</p></div>
-      <label class="term-picker">学期<select v-model="termId" :disabled="loading || busy" @change="changeTerm"><option v-for="t in terms" :key="t.id" :value="t.id">{{ t.name }}</option></select></label>
+      <div class="term-picker">
+        <span class="picker-label">学期</span>
+        <BaseSelect
+          v-model="termId"
+          :options="terms.map(t => ({ value: t.id, label: t.name }))"
+          :disabled="loading || busy"
+          @change="changeTerm"
+        />
+      </div>
     </div>
     <nav class="learning-tabs" :aria-label="teacher ? '教学服务栏目' : '学习服务栏目'">
       <RouterLink :to="base" :class="{ selected: tab === 'courses' }"><BookOpen :size="16" aria-hidden="true" />{{ teacher ? '教学班与资料' : '课程与资料' }}</RouterLink>

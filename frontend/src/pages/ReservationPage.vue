@@ -22,6 +22,7 @@ import { currentUser } from '../stores/auth'
 import { errorMessage } from '../lib/api'
 import { useEditProtection } from '../composables/useEditProtection'
 import AffairTimeline from '../components/AffairTimeline.vue'
+import BaseSelect from '../components/BaseSelect.vue'
 import {
   type ConflictResult,
   type ReservationDetail,
@@ -630,10 +631,14 @@ watch(() => route.query.venue, () => {
       <div class="foundation-filters">
         <label>
           申请状态
-          <select v-model="filterStatus" @change="loadReservations">
-            <option value="">全部状态</option>
-            <option v-for="(label, key) in reservationStatuses" :key="key" :value="key">{{ label }}</option>
-          </select>
+          <BaseSelect
+            v-model="filterStatus"
+            :options="[
+              { value: '', label: '全部状态' },
+              ...Object.entries(reservationStatuses).map(([key, label]) => ({ value: key, label }))
+            ]"
+            @change="loadReservations"
+          />
         </label>
         <button class="button compact" :disabled="loading" @click="loadReservations">查询</button>
         <span class="muted" style="margin-left: auto;">共 {{ totalItems }} 条申请</span>
@@ -889,18 +894,25 @@ watch(() => route.query.venue, () => {
           <div class="form-grid-two">
             <label>
               目标场地 / 设备
-              <select v-model="bookingForm.venueId" required :disabled="busy">
-                <option v-for="v in venues" :key="v.id" :value="v.id">
-                  {{ v.name }} ({{ v.buildingName || '公共区' }} · {{ v.category === 'VENUE' ? `容纳${v.capacity}人` : '设备' }})
-                </option>
-              </select>
+              <BaseSelect
+                v-model="bookingForm.venueId"
+                :options="venues.map(v => ({
+                  value: v.id,
+                  label: `${v.name} (${v.buildingName || '公共区'} · ${v.category === 'VENUE' ? `容纳${v.capacity}人` : '设备'})`
+                }))"
+                :disabled="busy"
+                placeholder="请选择目标场地或设备"
+              />
             </label>
 
             <label>
               活动类型
-              <select v-model="bookingForm.activityType" required :disabled="busy">
-                <option v-for="(name, val) in activityTypes" :key="val" :value="val">{{ name }}</option>
-              </select>
+              <BaseSelect
+                v-model="bookingForm.activityType"
+                :options="Object.entries(activityTypes).map(([val, name]) => ({ value: val, label: name }))"
+                :disabled="busy"
+                placeholder="请选择活动类型"
+              />
             </label>
           </div>
 

@@ -426,8 +426,9 @@ svg { flex-shrink: 0; }
 .portal-school { display: block; width: 245px; color: var(--brand); padding-block: 10px; }
 .portal-school small { display: block; font-family: "Microsoft YaHei", sans-serif; font-size: 10px; color: var(--muted); letter-spacing: 2px; margin-top: 9px; }
 .account-controls { display: flex; align-items: center; gap: 16px; }
-.account-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 6px 4px; border: 0; background: transparent; font-size: 12px; color: #536277; white-space: nowrap; }
-.account-action:hover { color: var(--brand); }
+.account-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 6px 4px; border: 0; background: transparent; font-size: 12px; color: #536277; white-space: nowrap; transition: color 0.15s ease; }
+.account-action:hover, .account-action.router-link-active { color: var(--brand); }
+.account-action.router-link-active { font-weight: 600; }
 .account-name { color: var(--muted); margin-right: 5px; }
 .portal-nav { display: flex; gap: 34px; }
 .portal-nav a { display: inline-flex; align-items: center; gap: 7px; padding: 16px 0; font-size: 13px; color: #66768b; border-bottom: 2px solid transparent; }

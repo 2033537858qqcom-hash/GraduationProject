@@ -48,7 +48,6 @@ async function leave() {
         <template v-if="student">
           <RouterLink to="/portal" exact-active-class="selected"><House :size="16" aria-hidden="true" />学生首页</RouterLink>
           <RouterLink to="/portal/learning" :class="{ selected: route.path.startsWith('/portal/learning') }"><BookOpen :size="16" aria-hidden="true" />学习与课表</RouterLink>
-          <RouterLink to="/portal/notices" exact-active-class="selected"><Bell :size="16" aria-hidden="true" />消息通知</RouterLink>
           <RouterLink to="/portal/affairs" :class="{ selected: ['/portal/affairs','/portal/leave','/portal/certificates','/portal/reservations'].includes(route.path) }"><ClipboardList :size="16" aria-hidden="true" />我的办事</RouterLink>
           <RouterLink v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" exact-active-class="selected"><CalendarCheck :size="16" aria-hidden="true" />场地借用</RouterLink>
           <RouterLink
@@ -66,7 +65,6 @@ async function leave() {
         <RouterLink v-if="affairs" to="/student-affairs/certificates" exact-active-class="selected"><FileCheck2 :size="16" aria-hidden="true" />学院证明申请处理</RouterLink>
         <RouterLink v-if="reservationReviewer" to="/student-affairs/reservations" exact-active-class="selected"><CalendarCheck :size="16" aria-hidden="true" />借用审批</RouterLink>
         <RouterLink v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" exact-active-class="selected"><BedDouble :size="16" aria-hidden="true" />学院调宿初审</RouterLink>
-        <RouterLink v-if="!student" to="/notices" exact-active-class="selected"><Bell :size="16" aria-hidden="true" />个人消息</RouterLink>
         <RouterLink v-if="content" to="/admin/content" exact-active-class="selected"><Newspaper :size="16" aria-hidden="true" />官网内容管理</RouterLink>
         <RouterLink v-if="foundation" to="/admin/foundation" exact-active-class="selected"><Users :size="16" aria-hidden="true" />账号与组织管理</RouterLink>
         <RouterLink v-if="foundation" to="/admin/resources" exact-active-class="selected"><Building2 :size="16" aria-hidden="true" />教室资源目录</RouterLink>

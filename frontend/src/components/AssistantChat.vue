@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowUpRight, ChevronDown, RotateCw, Send, X } from '@lucide/vue'
+import { ArrowUpRight, Bot, ChevronDown, RotateCw, Send, Sparkles, X } from '@lucide/vue'
 import { api, ApiError, errorMessage } from '../lib/api'
 import { assistantContext, assistantContextLabel, assistantSuggestions, safeAssistantDestination } from '../lib/assistant'
 import type { AssistantAnswer, AssistantCapabilities } from '../lib/assistant'
@@ -225,15 +225,29 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
       <p v-if="error && task !== 'QUERY'" class="assistant-error assistant-session-error" role="alert">{{ error }}</p>
       <p v-if="!session && error" class="assistant-session-error"><button :disabled="sessionLoading" @click="restoreLatest">重试恢复对话</button></p>
     </section>
-    <div v-if="hint && !open" class="assistant-hint"><button @click="show">可以帮你查{{ hintSubject }}</button><button aria-label="关闭 AI 查询提示" @click="hint = false"><X :size="11" /></button></div>
-    <button ref="launcher" class="assistant-launcher" :data-state="avatarState" :aria-expanded="open" :aria-label="open ? '收起 AI 对话' : '打开 AI 对话'" :disabled="savingDraft" @click="open ? close() : show()">
-      <svg viewBox="0 0 64 64" aria-hidden="true" class="assistant-avatar">
-        <ellipse cx="32" cy="55" rx="14" ry="3" class="avatar-shadow" />
-        <g class="avatar-body"><path d="M22 39Q32 35 42 39L44 50Q32 57 20 50Z" fill="#e7eef7" stroke="#2b527e" stroke-width="1.5" /><path d="M26 46h12m-10 4h8" stroke="#99adc5" stroke-width="1.6" stroke-linecap="round" /><path class="avatar-arm" d="M43 41q10 2 10-5" fill="none" stroke="#2b527e" stroke-width="3" stroke-linecap="round" /><path d="M21 42q-8 4-10 0" fill="none" stroke="#2b527e" stroke-width="3" stroke-linecap="round" />
-          <g class="avatar-head"><path d="M32 12V7" stroke="#2b527e" stroke-width="2" /><circle cx="32" cy="6" r="2.5" fill="#b6cfdd" /><rect x="12" y="15" width="40" height="27" rx="12" fill="#f7fbff" stroke="#2b527e" stroke-width="1.7" /><rect x="18" y="22" width="28" height="12" rx="6" fill="#2b527e" /><g class="avatar-eyes"><circle cx="25" cy="28" r="2.2" fill="#dbeaf5" /><circle cx="39" cy="28" r="2.2" fill="#dbeaf5" /></g><path d="M28 36q4 3 8 0" fill="none" stroke="#6c89a8" stroke-width="1.5" stroke-linecap="round" /></g>
-        </g>
-      </svg>
-      <span v-if="busy" class="assistant-working-dot" />
+    <div v-if="hint && !open" class="assistant-hint">
+      <span class="assistant-hint-badge"><Sparkles :size="12" aria-hidden="true" /></span>
+      <button class="assistant-hint-btn" @click="show">可以帮你查{{ hintSubject }}</button>
+      <button class="assistant-hint-close" aria-label="关闭 AI 查询提示" @click="hint = false"><X :size="12" /></button>
+    </div>
+    <button
+      ref="launcher"
+      class="assistant-launcher"
+      :class="{ 'is-open': open, 'is-working': busy || preparingDraft || savingDraft }"
+      :data-state="avatarState"
+      :aria-expanded="open"
+      :aria-label="open ? '收起 AI 对话' : '打开 AI 对话'"
+      :disabled="savingDraft"
+      @click="open ? close() : show()"
+    >
+      <span v-if="busy || preparingDraft || savingDraft" class="assistant-aura-ring" />
+      <div class="assistant-launcher-inner">
+        <X v-if="open" :size="22" class="launcher-icon-close" />
+        <div v-else class="launcher-icon-stack">
+          <Bot :size="26" class="launcher-bot-icon" />
+          <Sparkles :size="12" class="launcher-sparkle-icon" />
+        </div>
+      </div>
     </button>
   </aside>
 </template>
@@ -241,9 +255,20 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
 .assistant-session-bar{display:flex;align-items:center;gap:8px;padding:5px 16px 9px;font-size:10px;color:#7a899a;flex-shrink:0}.assistant-session-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.assistant-session-bar button,.assistant-older,.assistant-restored button{border:0;background:transparent;color:#355a80;font:inherit;font-size:10px;padding:3px;cursor:pointer;white-space:nowrap}.assistant-session-list h2{font-size:14px;color:#355a80;margin:0 0 8px}.assistant-session-list>p{font-size:11px;line-height:1.7;color:#7a899a}.assistant-session-list>button{display:block;width:100%;border:1px solid #e2e9f0;border-radius:7px;background:#fafbfd;padding:10px;text-align:left;margin:8px 0;color:#405b76;cursor:pointer}.assistant-session-list strong,.assistant-session-list span{display:block;overflow-wrap:anywhere}.assistant-session-list strong{font-size:12px;margin-bottom:4px}.assistant-session-list span{font-size:10px;color:#8795a7}.assistant-session-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px}.assistant-session-pages button{border:1px solid #dce4ed;background:white;color:#355a80;font-size:10px;padding:4px 7px;border-radius:4px}.assistant-session-bar button:disabled,.assistant-session-list button:disabled,.assistant-restored button:disabled{opacity:.5;cursor:default}.assistant-restored{border-bottom:1px solid #edf0f4;padding:10px 0}.assistant-restored p{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;color:#405b76;margin:0 0 5px}.assistant-restored small{display:block;font-size:10px;color:#8795a7;line-height:1.6}.assistant-session-error{padding:5px 12px 9px;flex-shrink:0}.assistant-session-error button{border:0;background:none;color:#355a80;font-size:11px;cursor:pointer}
 .assistant-tasks{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 8px;flex-shrink:0}.assistant-tasks button{border:1px solid transparent;border-radius:5px;background:#f4f6f9;color:#74869b;font:inherit;font-size:11px;min-height:28px;padding:4px 9px;cursor:pointer}.assistant-tasks button[aria-pressed=true]{border-color:#cfdae7;background:#edf3f9;color:#31577f}.assistant-tasks button:disabled{opacity:.5;cursor:default}
 .assistant-session-list .assistant-task-list-heading{margin-top:24px;padding-top:16px;border-top:1px solid #e8edf3;font-size:12px}
-.assistant-dock{position:fixed;right:22px;bottom:20px;z-index:70;color:#293e55;font-size:13px}
-.assistant-launcher{width:60px;height:60px;display:grid;place-items:center;margin-left:auto;border:1px solid #d4dfec;border-radius:50%;background:#fff;box-shadow:0 6px 22px #213d5e1a;cursor:pointer;position:relative;transition:box-shadow .2s,transform .2s}
-.assistant-launcher:hover{transform:translateY(-2px);box-shadow:0 8px 26px #213d5e28}.assistant-launcher:focus-visible{outline:3px solid #8aabc9;outline-offset:3px}.assistant-avatar{width:54px;height:54px;overflow:visible}.avatar-body{animation:avatar-float 4s ease-in-out infinite;transform-origin:32px 36px}.avatar-eyes{animation:avatar-blink 6s infinite;transform-origin:32px 28px}.avatar-arm{transform-origin:43px 41px}.assistant-launcher:hover .avatar-arm,[data-state=greeting] .avatar-arm{animation:avatar-wave .65s ease-in-out 3}.assistant-launcher[data-state=working] .avatar-head{animation:avatar-think 1.2s ease-in-out infinite;transform-origin:32px 30px}.assistant-launcher[data-state=reply] .avatar-body{animation:avatar-float 3s ease-in-out infinite}.avatar-shadow{fill:#cad6e2;opacity:.6}.assistant-working-dot{position:absolute;right:3px;top:4px;width:8px;height:8px;background:#2b527e;border:2px solid white;border-radius:50%}
+.assistant-dock{position:fixed;right:24px;bottom:24px;z-index:70;color:#1e293b;font-size:13px}
+.assistant-launcher{width:56px;height:56px;display:grid;place-items:center;margin-left:auto;border:1px solid rgba(255,255,255,0.28);border-radius:50%;background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 45%,#7c3aed 100%);color:#fff;box-shadow:0 10px 24px -4px rgba(37,99,235,0.45),0 4px 12px rgba(124,58,237,0.25),inset 0 1px 1px rgba(255,255,255,0.35);cursor:pointer;position:relative;transition:transform .25s cubic-bezier(0.16,1,0.3,1),box-shadow .25s cubic-bezier(0.16,1,0.3,1),background .3s ease;user-select:none;-webkit-tap-highlight-color:transparent}
+.assistant-launcher:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 14px 30px -4px rgba(37,99,235,0.55),0 6px 16px rgba(124,58,237,0.35),inset 0 1px 2px rgba(255,255,255,0.5)}
+.assistant-launcher:active{transform:translateY(0) scale(0.95);box-shadow:0 6px 16px -2px rgba(37,99,235,0.4),inset 0 1px 1px rgba(255,255,255,0.2)}
+.assistant-launcher:focus-visible{outline:3px solid rgba(99,102,241,0.5);outline-offset:3px}
+.assistant-launcher.is-open{background:linear-gradient(135deg,#334155 0%,#1e293b 100%);border-color:rgba(255,255,255,0.15);box-shadow:0 8px 22px rgba(15,23,42,0.25)}
+.assistant-launcher.is-open:hover{background:linear-gradient(135deg,#475569 0%,#1e293b 100%)}
+.assistant-launcher-inner{display:flex;align-items:center;justify-content:center;width:100%;height:100%;position:relative;color:#fff}
+.launcher-icon-stack{position:relative;display:flex;align-items:center;justify-content:center}
+.launcher-bot-icon{color:#fff;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.2));animation:ai-bot-breathe 4s ease-in-out infinite}
+.launcher-sparkle-icon{position:absolute;top:-4px;right:-5px;color:#fde047;filter:drop-shadow(0 0 5px rgba(253,224,71,0.9));animation:ai-sparkle-twinkle 2.5s ease-in-out infinite}
+.launcher-icon-close{color:#fff;transition:transform .25s cubic-bezier(0.16,1,0.3,1)}
+.assistant-launcher.is-open:hover .launcher-icon-close{transform:rotate(90deg)}
+.assistant-aura-ring{position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(124,58,237,0.65);animation:ai-aura-pulse 2s cubic-bezier(0.24,0,0.38,1) infinite;pointer-events:none}
 .assistant-panel{position:absolute;right:0;bottom:76px;width:min(366px,calc(100vw - 32px));height:min(550px,calc(100dvh - 112px));display:flex;flex-direction:column;background:#fff;border:1px solid #dce4ed;border-radius:14px;box-shadow:0 14px 48px #142d4e26;overflow:hidden;animation:assistant-appear .2s ease-out}
 .assistant-head{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #edf0f4}.assistant-head strong{display:block;font-size:15px}.assistant-head small{display:block;color:#7c8999;font-size:11px;margin-top:3px}.assistant-icon{width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:#708398;display:grid;place-items:center;cursor:pointer}.assistant-icon:hover{background:#eff4f8}
 .assistant-mode{padding:9px 16px;display:flex;align-items:center;justify-content:space-between;background:#f7f9fc;font-size:11px;color:#7a899a}.assistant-mode label{display:flex;flex-direction:row;align-items:center;gap:7px;white-space:nowrap}.assistant-mode select{max-width:144px;height:27px;min-height:0;border:1px solid #dce4ed;border-radius:5px;background:white;font-size:11px;color:#355374;padding:2px 6px}.assistant-status{padding:8px 16px;margin:0;color:#76879b}
@@ -255,8 +280,16 @@ onBeforeUnmount(() => { stopWaiting(); capabilityGeneration++; sessionGeneration
 .assistant-prompts{padding:0 16px 8px;display:flex;gap:5px;flex-wrap:wrap}.assistant-prompts button{border:1px solid #dfe7ef;background:#fff;border-radius:14px;padding:4px 8px;font-size:10px;color:#698198;cursor:pointer}.assistant-prompts button:hover{border-color:#a4bbd1;background:#f4f8fb}.assistant-prompts button:disabled{opacity:.5;cursor:default}
 .assistant-compose{padding:10px 12px;border-top:1px solid #edf0f4;margin:0;display:block}.assistant-input-row{display:flex;gap:7px;align-items:flex-end}.assistant-input-row textarea{flex:1;width:0;min-width:0;min-height:64px;max-height:112px;resize:vertical;border:1px solid #d5dfea;border-radius:9px;background:#f8fafc;padding:9px 12px;font-size:12.5px;line-height:1.55;color:#1e293b;font-family:inherit;box-shadow:0 1px 2px rgba(15,23,42,0.04),inset 0 1px 1px rgba(15,23,42,0.02);transition:border-color .18s cubic-bezier(0.16,1,0.3,1),box-shadow .18s cubic-bezier(0.16,1,0.3,1),background-color .18s ease}.assistant-input-row textarea:focus{outline:none;background:#ffffff;border-color:#244b78;box-shadow:0 0 0 3px rgba(36,75,120,0.14)}.assistant-send{width:36px;height:36px;border:0;border-radius:9px;background:#244b78;color:white;display:grid;place-items:center;cursor:pointer;margin-bottom:2px;box-shadow:0 2px 6px rgba(36,75,120,0.22);transition:all .16s cubic-bezier(0.16,1,0.3,1)}.assistant-send:hover:not(:disabled){background:#1c3b60;box-shadow:0 4px 10px rgba(36,75,120,0.3)}.assistant-send:active:not(:disabled){transform:scale(.95)}.assistant-send:disabled{opacity:.35;cursor:default;box-shadow:none}.assistant-compose-note{display:flex;justify-content:space-between;margin-top:6px;font-size:9px;color:#929eac}.assistant-compose-note button{border:0;background:none;color:#6a829b;font-size:10px;padding:0;cursor:pointer}.assistant-consent{display:flex;flex-direction:row;gap:6px;align-items:flex-start;font-size:10px;line-height:1.6;color:#7a8899;margin-bottom:8px}.assistant-consent input{width:14px;min-height:0;height:14px;flex-shrink:0;margin-top:2px;accent-color:#244b78}
 .assistant-error{font-size:11px;color:#98684a;margin:8px 0 0;line-height:1.6}.assistant-error button{border:0;background:none;padding:0;color:#2b527e;display:inline-flex;align-items:center;gap:3px;font-size:11px;cursor:pointer}
-.assistant-hint{position:absolute;bottom:14px;right:71px;display:flex;align-items:center;white-space:nowrap;background:#fff;border:1px solid #dce4ed;border-radius:8px;box-shadow:0 4px 14px #213d5e0d;padding:2px 4px 2px 8px;animation:assistant-appear .3s}.assistant-hint button{background:transparent;border:0;padding:6px 3px;font-size:11px;color:#698198;cursor:pointer;display:inline-flex;align-items:center}
-@keyframes avatar-float{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px)}}@keyframes avatar-blink{0%,44%,48%,100%{transform:scaleY(1)}46%{transform:scaleY(.12)}}@keyframes avatar-wave{0%,100%{transform:rotate(0)}50%{transform:rotate(-22deg)}}@keyframes avatar-think{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}@keyframes assistant-appear{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:600px){.assistant-dock{right:12px;bottom:12px}.assistant-launcher{width:54px;height:54px}.assistant-avatar{width:48px;height:48px}.assistant-panel{position:fixed;left:12px;right:12px;bottom:78px;width:auto;height:min(540px,calc(100dvh - 100px))}.assistant-hint{right:64px;font-size:10px}.assistant-head{padding:12px 14px 9px}}
-@media(prefers-reduced-motion:reduce){.assistant-avatar *,.assistant-panel,.assistant-hint{animation:none!important}.assistant-launcher{transition:none}.assistant-history{scroll-behavior:auto}}
+.assistant-hint{position:absolute;bottom:12px;right:68px;display:flex;align-items:center;gap:8px;white-space:nowrap;background:rgba(255,255,255,0.92);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid rgba(226,232,240,0.9);border-radius:999px;box-shadow:0 6px 20px rgba(15,23,42,0.08),0 1px 3px rgba(15,23,42,0.04);padding:4px 6px 4px 10px;animation:assistant-appear .28s cubic-bezier(0.16,1,0.3,1)}
+.assistant-hint-badge{width:20px;height:20px;border-radius:50%;background:linear-gradient(135deg,#3b82f6 0%,#8b5cf6 100%);color:#fff;display:grid;place-items:center;flex-shrink:0;box-shadow:0 2px 6px rgba(99,102,241,0.35)}
+.assistant-hint-btn{background:transparent;border:0;padding:4px 2px;font-size:12px;font-weight:500;color:#334155;cursor:pointer;display:inline-flex;align-items:center;transition:color .15s ease}
+.assistant-hint-btn:hover{color:#1d4ed8}
+.assistant-hint-close{width:20px;height:20px;border-radius:50%;border:0;background:transparent;color:#94a3b8;display:grid;place-items:center;cursor:pointer;transition:all .15s ease;margin-left:2px}
+.assistant-hint-close:hover{background:#f1f5f9;color:#475569}
+@keyframes ai-bot-breathe{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-1.5px) scale(1.03)}}
+@keyframes ai-sparkle-twinkle{0%,100%{transform:scale(1) rotate(0deg);opacity:.95}50%{transform:scale(1.2) rotate(12deg);opacity:1;filter:drop-shadow(0 0 8px rgba(253,224,71,1))}}
+@keyframes ai-aura-pulse{0%{transform:scale(0.95);opacity:.75;box-shadow:0 0 0 0 rgba(124,58,237,0.5)}70%{transform:scale(1.18);opacity:.15;box-shadow:0 0 0 10px rgba(124,58,237,0)}100%{transform:scale(1.25);opacity:0;box-shadow:0 0 0 14px rgba(124,58,237,0)}}
+@keyframes assistant-appear{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:600px){.assistant-dock{right:14px;bottom:14px}.assistant-launcher{width:50px;height:50px}.launcher-bot-icon{width:22px;height:22px}.assistant-panel{position:fixed;left:12px;right:12px;bottom:74px;width:auto;height:min(540px,calc(100dvh - 96px))}.assistant-hint{right:60px;font-size:11px}.assistant-head{padding:12px 14px 9px}}
+@media(prefers-reduced-motion:reduce){.launcher-bot-icon,.launcher-sparkle-icon,.assistant-aura-ring,.assistant-panel,.assistant-hint{animation:none!important}.assistant-launcher,.launcher-icon-close{transition:none}.assistant-history{scroll-behavior:auto}}
 </style>

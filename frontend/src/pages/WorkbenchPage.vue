@@ -45,26 +45,26 @@ onMounted(async () => {
     <section class="portal-services" aria-labelledby="workbench-services-heading">
       <div class="service-section-heading"><h2 id="workbench-services-heading">{{ teaching ? '常用教学服务' : academic ? '常用教务服务' : '岗位服务入口' }}</h2><p>每个入口都对应你当前账号可使用的功能</p></div>
       <div class="service-entry-grid">
-        <ServiceEntry v-if="currentUser?.permissions.includes('repair:apply')" to="/repairs/mine" title="校园设施报修与进度" description="填写故障，上传图片，查询维修进度并验收评价" :icon="Wrench" />
-        <ServiceEntry v-if="currentUser?.permissions.includes('repair:dispatch')" to="/logistics/repairs/statistics" title="校园报修统计" description="按首次提交日期查看当前负责范围的类别、状态和处理时长" :icon="ChartColumn" /><ServiceEntry v-if="currentUser?.permissions.includes('repair:dispatch')" to="/logistics/repairs/dispatch" title="后勤分诊与派单" description="核对负责范围内的报修，补充资料并分配维修人员" :icon="Wrench" />
-        <ServiceEntry v-if="currentUser?.permissions.includes('repair:work')" to="/logistics/repairs/tasks" title="我的维修任务" description="接收本人任务，记录维修进展并提交结果" :icon="Wrench" />
-        <ServiceEntry v-if="foundation" to="/admin/foundation" title="账号与组织管理" description="维护人员账号、组织归属和岗位，查询修改记录" :icon="Users" />
-        <ServiceEntry v-if="foundation" to="/admin/resources" title="教室资源目录" description="维护楼栋、容量和启停状态，核对课程考试占用" :icon="Building2" />
-        <ServiceEntry v-if="foundation" to="/admin/counselors" title="辅导员负责班级" description="配置行政班负责人员，移交请假待办与材料权限" :icon="UsersRound" />
-        <ServiceEntry v-if="repairConfiguration" to="/admin/repair-settings" title="报修地点与人员范围" description="配置开放地点、后勤派单与维修人员的负责范围" :icon="Wrench" />
-        <ServiceEntry v-if="housingConfiguration" to="/admin/housing" title="宿舍资源" description="维护宿舍楼、房间、床位，并指定楼栋负责人" :icon="BedDouble" />
-        <ServiceEntry v-if="housingDesk" to="/housing/assignments" title="住宿办理" description="在负责楼栋登记初始入住和退宿" :icon="BedDouble" />
-        <ServiceEntry v-if="repairResponsibilities" to="/logistics/repair-responsibilities" title="我的后勤负责范围" description="核对本人当前负责的校区、故障类别与具体地点" :icon="Wrench" />
-        <ServiceEntry v-if="counselor" to="/student-affairs/leave" title="班级请假申请处理" description="查看负责班级的待办，核对资料并通过、拒绝或退回" :icon="ClipboardCheck" />
-        <ServiceEntry v-if="affairs" to="/student-affairs/certificates" title="学院证明申请处理" description="核对学生登记信息与用途，退回补交或生成演示证明" :icon="FileCheck2" />
-        <ServiceEntry v-if="reservationReviewer" to="/student-affairs/reservations" title="场地与设备借用审批" description="审核公共场地与器材借用申请，核对时段冲突，同意或退回" :icon="CalendarCheck" />
-        <ServiceEntry v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" title="公共场地与设备借用" description="申请报告厅、研讨室、体育馆及影音设备借用，查询审核凭证" :icon="CalendarCheck" />
-        <ServiceEntry v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" title="学院调宿初审" description="审核本学院调宿申请，通过后交给宿管安排床位" :icon="BedDouble" />
-        <ServiceEntry v-if="teaching" to="/teaching" title="教学班与课程资料" description="查看学生名单，发布课程资料与班级通知" :icon="BookOpen" />
-        <ServiceEntry v-if="teaching" to="/teaching/timetable" title="每周授课安排" description="查看本人授课时间、教学班和上课地点" :icon="CalendarDays" />
-        <ServiceEntry v-if="academic" to="/academic" title="学院教务信息维护" description="维护教学关系，导入成绩并发布考试安排" :icon="NotebookPen" />
-        <ServiceEntry v-if="content" to="/admin/content" title="官网内容管理" description="维护官网文章，按岗位权限提交或审核内容" :icon="Newspaper" />
-        <ServiceEntry to="/profile" title="个人资料与账号信息" description="查看本人学工号、所属学院和身份角色" :icon="UserRound" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('repair:apply')" to="/repairs/mine" title="校园设施报修与进度" description="填写故障，上传图片，查询维修进度并验收评价" :icon="Wrench" category="设施后勤" theme="amber" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('repair:dispatch')" to="/logistics/repairs/statistics" title="校园报修统计" description="按首次提交日期查看当前负责范围的类别、状态和处理时长" :icon="ChartColumn" category="后勤数据" theme="amber" /><ServiceEntry v-if="currentUser?.permissions.includes('repair:dispatch')" to="/logistics/repairs/dispatch" title="后勤分诊与派单" description="核对负责范围内的报修，补充资料并分配维修人员" :icon="Wrench" category="工单处理" theme="amber" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('repair:work')" to="/logistics/repairs/tasks" title="我的维修任务" description="接收本人任务，记录维修进展并提交结果" :icon="Wrench" category="工单执行" theme="amber" />
+        <ServiceEntry v-if="foundation" to="/admin/foundation" title="账号与组织管理" description="维护人员账号、组织归属和岗位，查询修改记录" :icon="Users" category="系统底座" theme="indigo" />
+        <ServiceEntry v-if="foundation" to="/admin/resources" title="教室资源目录" description="维护楼栋、容量和启停状态，核对课程考试占用" :icon="Building2" category="资源配置" theme="blue" />
+        <ServiceEntry v-if="foundation" to="/admin/counselors" title="辅导员负责班级" description="配置行政班负责人员，移交请假待办与材料权限" :icon="UsersRound" category="组织配置" theme="teal" />
+        <ServiceEntry v-if="repairConfiguration" to="/admin/repair-settings" title="报修地点与人员范围" description="配置开放地点、后勤派单与维修人员的负责范围" :icon="Wrench" category="设施配置" theme="amber" />
+        <ServiceEntry v-if="housingConfiguration" to="/admin/housing" title="宿舍资源" description="维护宿舍楼、房间、床位，并指定楼栋负责人" :icon="BedDouble" category="住宿配置" theme="teal" />
+        <ServiceEntry v-if="housingDesk" to="/housing/assignments" title="住宿办理" description="在负责楼栋登记初始入住和退宿" :icon="BedDouble" category="住宿办理" theme="emerald" />
+        <ServiceEntry v-if="repairResponsibilities" to="/logistics/repair-responsibilities" title="我的后勤负责范围" description="核对本人当前负责的校区、故障类别与具体地点" :icon="Wrench" category="岗位职责" theme="amber" />
+        <ServiceEntry v-if="counselor" to="/student-affairs/leave" title="班级请假申请处理" description="查看负责班级的待办，核对资料并通过、拒绝或退回" :icon="ClipboardCheck" category="学生事务" theme="teal" />
+        <ServiceEntry v-if="affairs" to="/student-affairs/certificates" title="学院证明申请处理" description="核对学生登记信息与用途，退回补交或生成演示证明" :icon="FileCheck2" category="学生事务" theme="indigo" />
+        <ServiceEntry v-if="reservationReviewer" to="/student-affairs/reservations" title="场地与设备借用审批" description="审核公共场地与器材借用申请，核对时段冲突，同意或退回" :icon="CalendarCheck" category="空间审批" theme="sky" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" title="公共场地与设备借用" description="申请报告厅、研讨室、体育馆及影音设备借用，查询审核凭证" :icon="CalendarCheck" category="空间借用" theme="sky" />
+        <ServiceEntry v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" title="学院调宿初审" description="审核本学院调宿申请，通过后交给宿管安排床位" :icon="BedDouble" category="住宿初审" theme="emerald" />
+        <ServiceEntry v-if="teaching" to="/teaching" title="教学班与课程资料" description="查看学生名单，发布课程资料与班级通知" :icon="BookOpen" category="教学工作" theme="blue" />
+        <ServiceEntry v-if="teaching" to="/teaching/timetable" title="每周授课安排" description="查看本人授课时间、教学班和上课地点" :icon="CalendarDays" category="教学工作" theme="purple" />
+        <ServiceEntry v-if="academic" to="/academic" title="学院教务信息维护" description="维护教学关系，导入成绩并发布考试安排" :icon="NotebookPen" category="教务管理" theme="indigo" />
+        <ServiceEntry v-if="content" to="/admin/content" title="官网内容管理" description="维护官网文章，按岗位权限提交或审核内容" :icon="Newspaper" category="校园发布" theme="coral" />
+        <ServiceEntry to="/profile" title="个人资料与账号信息" description="查看本人学工号、所属学院和身份角色" :icon="UserRound" category="个人中心" theme="slate" />
       </div>
     </section>
     <p v-if="message && !teaching && !academic && !foundation && !counselor && !affairs" class="workbench-note">{{ message }}</p>

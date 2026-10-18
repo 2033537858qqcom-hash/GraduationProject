@@ -6,10 +6,18 @@ import SchoolIdentity from '../components/SchoolIdentity.vue'
 import CulturalFrame from '../components/CulturalFrame.vue'
 import CulturalOrnament from '../components/CulturalOrnament.vue'
 import { activeChapter, chapters, requestedChapter } from '../lib/publicNavigation'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
+import { currentUser, landingPage } from '../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const expanded = ref(false)
+const schoolNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: schoolIndicatorStyle } = useSlidingIndicator(
+  schoolNavRef,
+  () => [route.path, activeChapter.value],
+  { activeSelector: 'a[aria-current="location"]' }
+)
 function navigate(event: MouseEvent, id: string) {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
   event.preventDefault()
@@ -31,17 +39,18 @@ function navigate(event: MouseEvent, id: string) {
           <SchoolIdentity />
         </RouterLink>
         <span class="school-motto">励学 · 敦行 · 明理 · 至善</span>
-        <RouterLink class="service-link" to="/login">校园服务 <ArrowUpRight :size="16" /></RouterLink>
+        <RouterLink class="service-link" :to="currentUser ? landingPage() : '/login'">{{ currentUser ? '个人门户' : '校园服务' }} <ArrowUpRight :size="16" /></RouterLink>
         <button class="icon-button mobile-menu" :aria-expanded="expanded" aria-controls="school-navigation"
           :aria-label="expanded ? '收起学校栏目' : '展开学校栏目'" @click="expanded = !expanded">
           <X v-if="expanded" :size="20" /><Menu v-else :size="20" />
         </button>
       </div>
       <nav id="school-navigation" class="school-navigation" :class="{ expanded }" aria-label="学校官网主导航">
-        <div class="page-width">
+        <div ref="schoolNavRef" class="page-width">
           <a v-for="item in chapters" :key="item.id" :href="item.id === 'home' ? '/' : '/?chapter=' + item.id"
             :aria-current="route.path === '/' && activeChapter === item.id ? 'location' : undefined"
             @click="navigate($event, item.id)">{{ item.name }}</a>
+          <div class="school-nav-indicator" :style="schoolIndicatorStyle" aria-hidden="true"></div>
         </div>
       </nav>
     </header>

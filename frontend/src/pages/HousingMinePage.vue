@@ -21,12 +21,19 @@ import {
 } from '../housing'
 import { currentUser } from '../stores/auth'
 import type { DormRepairEligibility } from '../repairSettings'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const route = useRoute()
 const router = useRouter()
 
 // 标签切换：'stay' (我的住宿与档案) | 'transfer' (调宿申请与进度)
 const activeTab = ref<'stay' | 'transfer'>('stay')
+const housingControlRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: housingPillStyle } = useSlidingIndicator(
+  housingControlRef,
+  () => activeTab.value,
+  { activeSelector: '.service-segment-btn.active' }
+)
 
 // 住宿档案数据
 const stayData = ref<HousingMine | null>(null)
@@ -285,7 +292,7 @@ onBeforeUnmount(() => {
 
     <!-- Apple 风格分段切换控制器 -->
     <div class="housing-tab-toolbar">
-      <div class="service-segmented-control" role="tablist" aria-label="住宿与调宿服务切换">
+      <div ref="housingControlRef" class="service-segmented-control" role="tablist" aria-label="住宿与调宿服务切换">
         <button
           type="button"
           role="tab"
@@ -309,6 +316,7 @@ onBeforeUnmount(() => {
           调宿申请与进度
           <span v-if="activeTransferCount" class="tab-counter-badge">{{ activeTransferCount }}</span>
         </button>
+        <div class="service-segment-pill" :style="housingPillStyle" aria-hidden="true"></div>
       </div>
     </div>
 

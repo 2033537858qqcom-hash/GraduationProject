@@ -9,13 +9,27 @@ import { currentUser } from '../stores/auth'
 import ServiceEntry from '../components/ServiceEntry.vue'
 import { useTaskQueue } from '../composables/useTaskQueue'
 import type { TaskDomain, WorkbenchOverview, WorkspaceInfo } from '../workbench'
+import { schoolMedia } from '../content/schoolMedia'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const error = ref('')
 const loading = ref(true)
 const workspaces = ref<WorkspaceInfo[]>([])
 const activeWorkspaceCode = ref(localStorage.getItem('campus_active_workspace') || '')
+const workspaceControlRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: workspacePillStyle } = useSlidingIndicator(
+  workspaceControlRef,
+  () => activeWorkspaceCode.value,
+  { activeSelector: '.service-segment-btn.active' }
+)
+const taskFilterPillsRef = ref<HTMLElement | null>(null)
 const { tasks, totalPending, taskCounts, taskFilter, currentPage, total, pageCount, complete, sourceErrors,
   loading: taskLoading, error: taskError, load: loadTasks, initialize: initializeTasks, invalidate } = useTaskQueue()
+const { indicatorStyle: taskFilterPillStyle } = useSlidingIndicator(
+  taskFilterPillsRef,
+  () => taskFilter.value,
+  { activeSelector: '.task-pill-btn.active' }
+)
 const showAllServices = ref(false)
 
 const activeWorkspace = computed(() => {
@@ -109,7 +123,8 @@ onBeforeUnmount(invalidate)
     <div v-if="workspaces.length > 1" class="workspace-switch-wrap">
       <div class="workspace-switcher-header">
         <span class="switcher-label">当前工作空间：</span>
-        <div class="service-segmented-control" role="tablist" aria-label="工作空间切换">
+        <div ref="workspaceControlRef" class="service-segmented-control" role="tablist" aria-label="工作空间切换">
+          <div class="service-segment-pill" :style="workspacePillStyle" aria-hidden="true"></div>
           <button
             v-for="ws in workspaces"
             :key="ws.code"
@@ -132,18 +147,21 @@ onBeforeUnmount(invalidate)
         <span class="portal-context">{{ activeWorkspace?.roleTitle ?? '岗位工作台' }} · {{ activeWorkspace?.name ?? '工作空间' }}</span>
         <h1>{{ currentUser?.fullName }}，你好。</h1>
         <p>
-          <span v-if="currentUser?.departmentName">{{ currentUser.departmentName }} · </span>
+          <span v-if="currentUser?.departmentName && !activeWorkspace?.scopeNote.includes(currentUser.departmentName)">{{ currentUser.departmentName }} · </span>
           <span>{{ activeWorkspace?.scopeNote }}</span>
         </p>
       </div>
-      <span v-if="currentUser?.campusName" class="welcome-campus">
-        {{ currentUser.campusName }}
-        <small>{{ activeWorkspace?.roleTitle }}</small>
-      </span>
+      <div class="workbench-pending-summary" aria-label="已读取的待办数量">
+        <span>{{ loading || taskLoading ? '正在读取' : !complete || taskError || error ? '待办待核实' : '待处理事项' }}</span>
+        <strong>{{ loading || error || taskError ? '—' : totalPending.toString().padStart(2,'0') }}</strong>
+        <small>{{ !complete ? '以成功读取的业务为准' : '当前账号全部已授权岗位' }}</small>
+      </div>
     </section>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
+    <div class="workbench-dashboard">
+    <div class="workbench-primary">
     <!-- 3. 统一待办任务中心 (R04: 跨域任务聚合) -->
     <section class="portal-panel workbench-tasks-panel" aria-labelledby="workbench-tasks-heading">
       <div class="section-heading">
@@ -158,12 +176,13 @@ onBeforeUnmount(invalidate)
           <span v-else-if="totalPending > 0" class="service-badge badge-warning">共 {{ totalPending }} 项待处理</span>
           <span v-else class="service-badge badge-success">暂无待处理事项</span>
         </div>
-        <div v-if="!loading && !error && (totalPending > 0 || sourceErrors.length)" class="task-filter-pills" role="tablist" aria-label="待办任务分类筛选">
+        <div v-if="!loading && !error && (totalPending > 0 || sourceErrors.length)" ref="taskFilterPillsRef" class="task-filter-pills" role="tablist" aria-label="待办任务分类筛选">
           <button v-for="category in taskCategories" :key="category.domain" type="button" class="task-pill-btn"
             role="tab" :aria-selected="taskFilter === category.domain" :class="{ active: taskFilter === category.domain }"
             :disabled="taskLoading" @click="loadTasks(category.domain)">
             {{ category.label }} ({{ category.count }})
           </button>
+          <div class="task-filter-pill-indicator" :style="taskFilterPillStyle" aria-hidden="true"></div>
         </div>
       </div>
       <p class="muted">汇总当前账号全部已授权岗位的待处理事项。</p>
@@ -171,14 +190,14 @@ onBeforeUnmount(invalidate)
         <p>部分待办暂时无法读取：{{ sourceErrors.map(source => source.label).join('、') }}。当前数量仅包含已读取的业务。</p>
         <button class="text-button" :disabled="taskLoading" @click="loadTasks(taskFilter, currentPage)">重新读取</button>
       </div>
-      <p v-if="loading || taskLoading" class="loading-state" role="status">正在读取待办…</p>
+      <p v-if="loading || (taskLoading && !tasks.length)" class="loading-state" role="status">正在读取待办…</p>
       <div v-else-if="taskError" class="alert" role="alert">
         {{ taskError }}
         <button class="text-button" @click="loadTasks(taskFilter, currentPage)">重试</button>
       </div>
 
       <!-- 任务列表 -->
-      <div v-else-if="!error && tasks.length > 0" class="workbench-task-grid">
+      <div v-else-if="!error && tasks.length > 0" class="workbench-task-grid" :class="{ 'is-loading': taskLoading }">
         <article
           v-for="task in tasks"
           :key="task.id"
@@ -219,11 +238,11 @@ onBeforeUnmount(invalidate)
       <div v-else-if="!error" class="workbench-tasks-empty">
         <p>{{ !complete ? '部分业务尚未读取成功，请重试后确认待办。' : '当前分类暂无待处理事项。' }}</p>
       </div>
-      <nav v-if="!loading && !taskLoading && !taskError && !error && total > 0" class="pagination" aria-label="待办分页">
+      <nav v-if="!loading && !taskError && !error && total > 0" class="pagination" aria-label="待办分页">
         <span>{{ !complete ? '已读取' : '当前分类共' }} {{ total }} 项 · 第 {{ currentPage }} / {{ pageCount }} 页</span>
         <div>
-          <button class="button compact" :disabled="currentPage <= 1" @click="loadTasks(taskFilter, currentPage - 1)">上一页</button>
-          <button class="button compact" :disabled="currentPage >= pageCount" @click="loadTasks(taskFilter, currentPage + 1)">下一页</button>
+          <button class="button compact" :disabled="currentPage <= 1 || taskLoading" @click="loadTasks(taskFilter, currentPage - 1)">上一页</button>
+          <button class="button compact" :disabled="currentPage >= pageCount || taskLoading" @click="loadTasks(taskFilter, currentPage + 1)">下一页</button>
         </div>
       </nav>
     </section>
@@ -439,6 +458,25 @@ onBeforeUnmount(invalidate)
         />
       </div>
     </section>
+    </div>
+      <aside class="workbench-scope-panel" aria-labelledby="workspace-scope-heading">
+        <div class="workspace-campus-image">
+          <img :src="schoolMedia.overview.url" :alt="schoolMedia.overview.alt" width="1920" height="810" loading="lazy" />
+          <span>郑州工业应用技术学院</span>
+        </div>
+        <div class="workspace-scope-copy">
+          <span class="eyebrow">当前工作空间</span>
+          <h2 id="workspace-scope-heading">{{ activeWorkspace?.name ?? '岗位信息' }}</h2>
+          <dl>
+            <div><dt>工作岗位</dt><dd>{{ activeWorkspace?.roleTitle ?? '—' }}</dd></div>
+            <div><dt>所属单位</dt><dd>{{ currentUser?.departmentName ?? '暂未登记' }}</dd></div>
+            <div><dt>所在校区</dt><dd>{{ currentUser?.campusName ?? '暂未登记' }}</dd></div>
+          </dl>
+          <p class="workspace-scope-note">{{ activeWorkspace?.scopeNote }}</p>
+          <RouterLink to="/profile" class="text-button">核对个人与岗位信息 <UserRound :size="14" /></RouterLink>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -472,12 +510,15 @@ onBeforeUnmount(invalidate)
   margin: 0;
 }
 .task-filter-pills {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
 .task-pill-btn {
+  position: relative;
+  z-index: 1;
   border: 1px solid #e2e8f0;
   background: #ffffff;
   color: #64748b;
@@ -486,18 +527,37 @@ onBeforeUnmount(invalidate)
   padding: 4px 10px;
   border-radius: 999px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease;
+  outline: none !important;
 }
-.task-pill-btn:hover {
+.task-pill-btn:hover:not(.active) {
   background: #f8fafc;
   color: #1e293b;
   border-color: #cbd5e1;
 }
+.task-pill-btn:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
 .task-pill-btn.active {
-  background: #244b78;
+  background: transparent !important;
   color: #ffffff;
-  border-color: #244b78;
+  border-color: transparent !important;
   font-weight: 600;
+}
+.task-filter-pill-indicator {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: #244b78;
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(36, 75, 120, 0.28);
+  transition: transform 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05),
+              width 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05);
+  will-change: transform, width;
+  z-index: 0;
 }
 .workbench-task-grid {
   display: grid;

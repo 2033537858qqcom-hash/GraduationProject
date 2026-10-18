@@ -8,19 +8,30 @@ import { leaveStatuses, leaveTypes } from '../leave'
 import type { LeaveEligibility, LeaveEvent, LeaveRequest, LeaveRevision } from '../leave'
 import type { Paged } from '../foundation'
 import BaseSelect from '../components/BaseSelect.vue'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const route = useRoute(), router = useRouter()
 const review = computed(() => route.path.startsWith('/student-affairs'))
 const mode = computed(() => review.value ? 'review' : 'mine')
 const root = computed(() => '/leave/' + mode.value)
+const status = ref(''), loading = ref(true), busy = ref(false), editing = ref(false), error = ref(''), success = ref('')
 const calendarView = computed(() => !review.value && !editing.value && route.query.tab === 'calendar')
 const historyView = computed(() => route.query.tab === 'history')
+const mainNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: mainIndicatorStyle } = useSlidingIndicator(
+  mainNavRef,
+  () => calendarView.value
+)
+const detailNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: detailIndicatorStyle } = useSlidingIndicator(
+  detailNavRef,
+  () => historyView.value
+)
 const eligibility = ref<LeaveEligibility | null>(null)
 const items = ref<Paged<LeaveRequest>>({ items: [], total: 0, page: 1, pageSize: 20 })
 const history = ref<Paged<LeaveRevision>>({ items: [], total: 0, page: 1, pageSize: 10 })
 const events = ref<LeaveEvent[]>([])
 const selected = ref<LeaveRequest | null>(null)
-const status = ref(''), loading = ref(true), busy = ref(false), editing = ref(false), error = ref(''), success = ref('')
 const file = ref<File | null>(null), fileInput = ref<HTMLInputElement | null>(null)
 const reviewComment = ref(''), month = ref(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'))
 const form = reactive({ requestKey: '', reasonType: 'PERSONAL', reason: '', contact: '', startsAt: '', endsAt: '', version: 0 })
@@ -57,8 +68,10 @@ async function load() {
     const params = new URLSearchParams({ page: String(Math.max(1, Number(route.query.page) || 1)), pageSize: '20' })
     if (status.value) params.set('status', status.value)
     const list = await api<Paged<LeaveRequest>>(root.value + '?' + params)
-    if (request !== sequence) return
-    items.value = list; selected.value = null
+    items.value = list
+    if (!route.query.id || String(selected.value?.id) !== String(route.query.id)) {
+      selected.value = null
+    }
     if (calendarView.value) { await readCalendar(); return }
     if (route.query.id) {
       const detail = await api<LeaveRequest>(root.value + '/' + String(route.query.id))
@@ -154,14 +167,22 @@ watch(() => route.fullPath, () => { void load() })
     <div class="page-heading-row"><div><span class="portal-context">{{ review ? '学生事务处理' : '学生办事' }}</span><h1>{{ review ? '班级请假处理' : '我的请假' }}</h1><p class="muted">{{ review ? '核对所负责行政班的申请，记录意见并处理待办。' : '办理本人请假，查看补交要求、处理进度与日程。' }}</p></div><div class="form-actions"><button class="button compact" :disabled="busy || loading" @click="refresh"><RefreshCw :size="15" />刷新记录</button><button v-if="!review" class="button primary compact" :disabled="busy || loading || !eligibility?.classGroupId" @click="edit()"><Plus :size="15" />新建申请</button></div></div>
     <p v-if="error" class="alert" role="alert">{{ error }}</p><p v-if="success" class="success-message" role="status">{{ success }}</p>
     <p v-if="!review && eligibility" class="content-context-note">{{ eligibility.className ?? '行政班未分配' }}<span v-if="eligibility.counselorName"> · 负责辅导员：{{ eligibility.counselorName }}</span>。{{ eligibility.message }}</p>
-    <nav v-if="!review" class="learning-tabs" aria-label="请假办理栏目"><button :class="{ selected: !calendarView }" :disabled="busy" @click="view('details')"><FileText :size="15" />申请记录</button><button :class="{ selected: calendarView }" :disabled="busy" @click="view('calendar')"><CalendarDays :size="15" />请假日程</button></nav>
+    <nav v-if="!review" ref="mainNavRef" class="learning-tabs" aria-label="请假办理栏目">
+      <button :class="{ selected: !calendarView }" :disabled="busy" @click="view('details')"><FileText :size="15" />申请记录</button>
+      <button :class="{ selected: calendarView }" :disabled="busy" @click="view('calendar')"><CalendarDays :size="15" />请假日程</button>
+      <div class="learning-tabs-indicator" :style="mainIndicatorStyle" aria-hidden="true"></div>
+    </nav>
     <section v-if="calendarView" class="portal-panel" aria-label="本人请假日程"><div class="section-heading"><h2>已通过的请假日程</h2><label>月份<input v-model="month" type="month" :disabled="loading" @change="calendarChange" /></label></div><p class="muted">仅显示该月与本人已通过请假的交集；课程和考勤不会自动改变。</p><p v-if="loading" role="status">正在读取日程…</p><p v-else-if="!events.length" class="empty-state">本月没有已通过的请假日程。</p><article v-for="event in events" :key="event.requestId" class="leave-event"><CalendarDays :size="18" /><div><strong>请假申请 #{{ event.requestId }}</strong><p>{{ time(event.startsAt) }} 至 {{ time(event.endsAt) }}</p></div><button class="text-button" :disabled="busy" @click="router.replace({ query: { ...route.query, id: String(event.requestId), tab: 'details' } })">查看申请</button></article></section>
     <template v-else>
       <form class="foundation-filters leave-filters" @submit.prevent="search"><label>申请状态<BaseSelect v-model="status" :options="[{ value: '', label: '全部记录' }, ...Object.entries(leaveStatuses).filter(([k]) => !review || k !== 'DRAFT').map(([key, label]) => ({ value: key, label }))]" compact /></label><button class="button compact" :disabled="loading || busy">查询</button><span class="muted">{{ review ? '待办来自当前申请状态，处理后自动关闭。' : '草稿未提交；待补交申请仍保留原办理记录。' }}</span></form>
-      <section class="portal-panel leave-list" aria-label="请假申请列表"><div class="section-heading"><h2><ClipboardCheck :size="17" />{{ review ? '班级申请' : '本人申请' }}</h2><span class="muted">共 {{ items.total }} 条</span></div><p v-if="loading" class="loading-state" role="status">正在读取请假记录…</p><p v-else-if="!items.items.length" class="empty-state">{{ review ? '当前筛选下没有负责班级的申请；未分配班级时也不会显示他人记录。' : '当前筛选下没有申请，可新建请假草稿。' }}</p><div v-if="items.items.length" class="table-scroll"><table class="campus-table foundation-table leave-table"><thead><tr><th>申请</th><th v-if="review">学生与行政班</th><th>请假时间</th><th>状态</th><th>最近更新</th><th>操作</th></tr></thead><tbody><tr v-for="item in items.items" :key="item.id" :class="{ 'resource-selected': item.id === selected?.id }"><td><strong>{{ leaveTypes[item.reasonType] }}申请 #{{ item.id }}</strong></td><td v-if="review">{{ item.studentName }}<small>{{ item.identityNumber }} · {{ item.className }}</small></td><td>{{ time(item.startsAt) }}<small>至 {{ time(item.endsAt) }}</small></td><td><span class="status-label">{{ leaveStatuses[item.status] }}</span></td><td>{{ time(item.updatedAt) }}</td><td><button class="text-button" :disabled="busy" @click="choose(item)">{{ review ? '查看与处理' : '查看申请' }}</button></td></tr></tbody></table></div><div class="foundation-pagination"><span>第 {{ items.page }} 页</span><div><button class="button compact" :disabled="loading || busy || items.page <= 1" @click="page(items.page - 1)">上一页</button><button class="button compact" :disabled="loading || busy || items.page * items.pageSize >= items.total" @click="page(items.page + 1)">下一页</button></div></div></section>
+      <section class="portal-panel leave-list" aria-label="请假申请列表"><div class="section-heading"><h2><ClipboardCheck :size="17" />{{ review ? '班级申请' : '本人申请' }}</h2><span class="muted">共 {{ items.total }} 条</span></div><p v-if="loading && !items.items.length" class="loading-state" role="status">正在读取请假记录…</p><p v-else-if="!loading && !items.items.length" class="empty-state">{{ review ? '当前筛选下没有负责班级的申请；未分配班级时也不会显示他人记录。' : '当前筛选下没有申请，可新建请假草稿。' }}</p><div v-if="items.items.length" class="table-scroll" :class="{ 'is-loading': loading }"><table class="campus-table foundation-table leave-table"><thead><tr><th>申请</th><th v-if="review">学生与行政班</th><th>请假时间</th><th>状态</th><th>最近更新</th><th>操作</th></tr></thead><tbody><tr v-for="item in items.items" :key="item.id" :class="{ 'resource-selected': item.id === selected?.id }"><td><strong>{{ leaveTypes[item.reasonType] }}申请 #{{ item.id }}</strong></td><td v-if="review">{{ item.studentName }}<small>{{ item.identityNumber }} · {{ item.className }}</small></td><td>{{ time(item.startsAt) }}<small>至 {{ time(item.endsAt) }}</small></td><td><span class="status-label">{{ leaveStatuses[item.status] }}</span></td><td>{{ time(item.updatedAt) }}</td><td><button class="text-button" :disabled="busy" @click="choose(item)">{{ review ? '查看与处理' : '查看申请' }}</button></td></tr></tbody></table></div><div class="foundation-pagination"><span>第 {{ items.page }} 页</span><div><button class="button compact" :disabled="loading || busy || items.page <= 1" @click="page(items.page - 1)">上一页</button><button class="button compact" :disabled="loading || busy || items.page * items.pageSize >= items.total" @click="page(items.page + 1)">下一页</button></div></div></section>
       <section v-if="editing" class="portal-panel leave-detail" aria-label="请假资料编辑"><h2 id="leave-editor-heading">{{ selected ? '修改申请资料' : '新建请假草稿' }}</h2><p class="muted">先保存资料，再上传材料及提交。演示流程单次最多 30 天，材料按辅导员处理要求补充。</p><form class="editor-form" @submit.prevent="save"><fieldset class="foundation-fields" :disabled="busy"><label>请假类型<BaseSelect v-model="form.reasonType" :options="Object.entries(leaveTypes).map(([key, label]) => ({ value: key, label }))" /></label><div class="form-grid"><label>开始时间<input v-model="form.startsAt" type="datetime-local" required /></label><label>结束时间<input v-model="form.endsAt" type="datetime-local" required /></label></div><label><div class="label-heading-row"><span>请假事由</span><small class="muted">必填 · 最多 2000 字</small></div><textarea v-model="form.reason" required maxlength="2000" rows="4" placeholder="请详细说明请假的具体事由及离返校安排，避免填写与办理无关的个人隐私信息" /></label><label>联系手机或邮箱<input v-model="form.contact" required maxlength="80" placeholder="用于办理联系，仅本人和负责辅导员可查看" /></label></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存申请资料' }}</button><button class="button compact" type="button" :disabled="busy" @click="cancelEdit">取消编辑</button></div></form></section>
       <section v-else-if="selected" class="portal-panel leave-detail" aria-label="请假申请详情">
-<div class="section-heading"><div><span class="portal-context">申请 #{{ selected.id }} · {{ selected.className }}</span><h2>{{ leaveTypes[selected.reasonType] }}申请<span v-if="review"> · {{ selected.studentName }}</span></h2></div><span class="status-label">{{ leaveStatuses[selected.status] }} · V{{ selected.version }}</span></div><nav class="learning-tabs" aria-label="申请详情栏目"><button :class="{ selected: !historyView }" :disabled="busy" @click="view('details')">申请资料</button><button :class="{ selected: historyView }" :disabled="busy" @click="view('history')"><History :size="15" />办理记录</button></nav>
+<div class="section-heading"><div><span class="portal-context">申请 #{{ selected.id }} · {{ selected.className }}</span><h2>{{ leaveTypes[selected.reasonType] }}申请<span v-if="review"> · {{ selected.studentName }}</span></h2></div><span class="status-label">{{ leaveStatuses[selected.status] }} · V{{ selected.version }}</span></div><nav ref="detailNavRef" class="learning-tabs" aria-label="申请详情栏目">
+  <button :class="{ selected: !historyView }" :disabled="busy" @click="view('details')"><FileText :size="15" />申请资料</button>
+  <button :class="{ selected: historyView }" :disabled="busy" @click="view('history')"><History :size="15" />办理记录</button>
+  <div class="learning-tabs-indicator" :style="detailIndicatorStyle" aria-hidden="true"></div>
+</nav>
         <template v-if="!historyView">
 <dl class="resource-facts"><div><dt>请假时间</dt><dd>{{ time(selected.startsAt) }} 至 {{ time(selected.endsAt) }}</dd></div><div><dt>联系方式</dt><dd>{{ selected.contact }}</dd></div><div class="leave-wide"><dt>请假事由</dt><dd class="preserve-lines">{{ selected.reason }}</dd></div><div><dt>当前材料</dt><dd><a v-if="selected.fileId" class="text-button" :href="`/api/leave/files/${selected.fileId}?view=${mode}`">下载 {{ selected.fileName }}</a><span v-else>尚无附件</span></dd></div><div><dt>最近处理意见</dt><dd class="preserve-lines">{{ selected.processingComment ?? '尚无处理意见' }}</dd></div></dl>
           <template v-if="!review && editable"><form class="leave-upload" @submit.prevent="upload"><label>补充材料（PDF / UTF-8 文本，最多 2 MB）<input ref="fileInput" type="file" accept=".pdf,.txt" :disabled="busy" @change="selectFile" /></label><button class="button compact" :disabled="busy || !file">上传材料</button><button v-if="file" class="text-button" type="button" :disabled="busy" @click="file = null; fileInput && (fileInput.value = '')">清除选择</button></form><div class="form-actions"><button class="button compact" :disabled="busy" @click="edit(selected)">修改申请资料</button><button class="button primary compact" :disabled="busy || !eligibility?.canSubmit" @click="transition('submit')">{{ selected.status === 'RETURNED' ? '补交后重新提交' : '提交审核' }}</button></div></template>

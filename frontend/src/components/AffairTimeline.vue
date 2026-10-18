@@ -28,9 +28,9 @@ onBeforeUnmount(() => { sequence++; controller?.abort() })
     <p v-if="loading" role="status" class="muted">正在读取办理进度…</p>
     <div v-else-if="error" class="alert" role="alert"><p>{{ error }}</p><button type="button" class="text-button" @click="load()">重新读取最新进度</button></div>
     <template v-else-if="data">
-      <div class="timeline-current"><span class="status-label">{{ affairStatus(data.kind, data.status) }}</span><p>{{ data.nextStep }}</p><small>当前 V{{ data.version }} · 最近更新 {{ when(data.updatedAt) }}</small></div>
+      <div class="timeline-current"><span class="status-label">{{ affairStatus(data.kind, data.status) }}</span><p>{{ data.nextStep }}</p><small>最近更新 {{ when(data.updatedAt) }}</small></div>
       <p v-if="!data.items.length" class="muted">暂无留存节点，请在原申请核对当前资料和状态。</p>
-      <ol v-else class="timeline-events"><li v-for="item in data.items" :key="item.key"><div class="timeline-event-heading"><strong>{{ item.title }}</strong><time :datetime="item.createdAt">{{ when(item.createdAt) }}</time></div><p class="timeline-event-meta">{{ item.actor }}<template v-if="item.version !== null"> · V{{ item.version }}</template><template v-if="item.status"> · {{ affairStatus(data.kind, item.status) }}</template></p><p v-if="item.comment" class="timeline-comment">{{ item.comment }}</p></li></ol>
+      <ol v-else class="timeline-events"><li v-for="item in data.items" :key="item.key"><div class="timeline-event-heading"><strong>{{ item.title }}</strong><time :datetime="item.createdAt">{{ when(item.createdAt) }}</time></div><p class="timeline-event-meta">{{ item.actor }}<template v-if="item.status"> · {{ affairStatus(data.kind, item.status) }}</template></p><p v-if="item.comment" class="timeline-comment">{{ item.comment }}</p></li></ol>
       <div v-if="data.total > data.pageSize" class="timeline-pagination"><span>共 {{ data.total }} 条 · 第 {{ data.page }} 页</span><div><button type="button" class="text-button" :disabled="loading || data.page <= 1" @click="load(data.page - 1)">较新记录</button><button type="button" class="text-button" :disabled="loading || data.page * data.pageSize >= data.total" @click="load(data.page + 1)">更早记录</button></div></div>
       <p class="timeline-note">{{ data.historyNote }}</p>
     </template>

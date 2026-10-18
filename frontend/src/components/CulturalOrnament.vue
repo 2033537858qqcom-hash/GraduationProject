@@ -1,9 +1,12 @@
 <script setup lang="ts">
-defineProps<{ motif: 'landscape' | 'cloud' | 'corner' | 'birds' }>()
+defineProps<{
+  motif: 'landscape' | 'cloud' | 'corner' | 'birds'
+  preserveAspectRatio?: string
+}>()
 </script>
 
 <template>
-  <svg v-if="motif === 'landscape'" class="cultural-ornament cultural-landscape" viewBox="0 0 1200 240" aria-hidden="true" focusable="false">
+  <svg v-if="motif === 'landscape'" class="cultural-ornament cultural-landscape" viewBox="0 0 1200 240" :preserveAspectRatio="preserveAspectRatio ?? 'xMidYMid meet'" aria-hidden="true" focusable="false">
     <g fill="currentColor" fill-opacity=".16" stroke="none">
       <path d="M0 193C77 185 127 169 186 157C226 148 255 99 280 78C304 103 323 135 353 143C395 157 419 141 457 117C485 99 510 47 535 35C562 59 584 98 622 112C663 129 690 117 726 138C766 163 803 151 843 132C878 115 899 73 922 61C951 84 972 130 1010 151C1061 179 1119 163 1200 189V240H0Z" />
       <path d="M0 216C87 207 126 218 180 192C211 177 232 162 254 163C285 164 302 190 335 188C389 185 406 151 440 143C472 154 500 188 548 186C594 184 617 146 641 144C671 148 693 183 736 182C786 181 816 204 869 199C927 192 970 167 1007 183C1056 205 1098 206 1200 215V240H0Z" />

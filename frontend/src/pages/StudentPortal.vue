@@ -24,6 +24,8 @@ import { api, errorMessage } from '../lib/api'
 import type { Overview, Notice } from '../types'
 import { safeAffairDestination } from '../lib/navigation'
 import { useToast } from '../composables/useToast'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
+import { schoolMedia } from '../content/schoolMedia'
 
 interface PortalServiceItem {
   to: string
@@ -45,6 +47,12 @@ const error = ref('')
 const reading = ref<number | null>(null)
 const activeCategory = ref('ALL')
 const serviceSearch = ref('')
+const categoryRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: categoryIndicatorStyle } = useSlidingIndicator(
+  categoryRef,
+  () => activeCategory.value,
+  { activeSelector: '.service-segment-btn.active' }
+)
 
 const view = computed(() => route.path.endsWith('timetable') ? 'timetable' : route.path.endsWith('notices') ? 'notices' : 'home')
 const date = new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
@@ -186,7 +194,7 @@ const services = computed<PortalServiceItem[]>(() => [
     icon: MapPin,
     categoryKey: 'CAMPUS',
     category: '校园探索',
-    badge: '3D 实景',
+    badge: '3D 导览',
     badgeType: 'success' as const,
     theme: 'emerald',
   },
@@ -237,7 +245,7 @@ onMounted(load)
 </script>
 
 <template>
-  <div>
+  <div class="student-portal">
     <!-- Skeleton Loading Block -->
     <div v-if="loading" class="portal-skeleton" role="status" aria-label="正在读取你的校园信息…">
       <div class="skeleton-box" style="height: 80px; margin-bottom: 25px; border-radius: 12px;"></div>
@@ -251,23 +259,57 @@ onMounted(load)
     </div>
     <div v-if="error" class="alert" role="alert">{{ error }} <button class="text-button" @click="load">重新加载</button></div>
     <template v-if="overview && !loading">
-      <section v-if="view === 'home'" class="student-welcome">
-        <div><span class="portal-context">学生服务中心<span>{{ date }}</span></span><h1>{{ overview.profile.fullName }}，你好。</h1><p>{{ overview.profile.departmentName }} · {{ overview.profile.className }}</p></div>
-        <span class="welcome-campus">{{ overview.profile.campusName }}<small>今日校园，从容开启</small></span>
+      <section v-if="view === 'home'" class="student-welcome portal-welcome-feature">
+        <div class="portal-welcome-copy">
+          <span class="portal-context">我的校园 <span>{{ date }}</span></span>
+          <h1>{{ overview.profile.fullName }}，你好。</h1>
+          <p>{{ overview.profile.departmentName }} · {{ overview.profile.className }}</p>
+          <div class="portal-welcome-actions">
+            <RouterLink to="/portal/learning/timetable" class="button primary compact"><CalendarDays :size="15" />我的课表</RouterLink>
+            <RouterLink to="/portal/affairs" class="text-button">查看我的办事 <ArrowUpRight :size="14" /></RouterLink>
+          </div>
+        </div>
+        <RouterLink to="/campus/explore" class="portal-campus-feature" aria-label="探索校园">
+          <img :src="schoolMedia.architecture.url" :alt="schoolMedia.architecture.alt" width="800" height="518" />
+          <span><small>校园一隅</small>在熟悉的校园，开启新的一天 <ArrowUpRight :size="16" /></span>
+        </RouterLink>
       </section>
+      <div class="portal-content-grid" :class="{ single: view !== 'home' }">
+        <section v-if="view !== 'notices'" class="portal-panel">
+          <div class="section-heading"><div><span class="eyebrow">课程安排</span><h2>{{ view === 'home' ? '近期课程' : '每周课程表' }}</h2></div><RouterLink v-if="view === 'home'" to="/portal/learning/timetable">查看完整课表 <ArrowUpRight :size="14" /></RouterLink></div>
+          <p v-if="!overview.timetable.length" class="empty-state">当前没有已导入的课程安排。</p>
+          <article v-for="lesson in view === 'home' ? overview.timetable.slice(0,3) : overview.timetable" :key="lesson.id" class="lesson-row">
+            <div class="lesson-time"><strong>{{ lessonDate(lesson.startsAt) }}</strong><span>{{ lesson.startsAt.slice(11,16) }}—{{ lesson.endsAt.slice(11,16) }}</span></div>
+            <div><h3>{{ lesson.courseName }}</h3><p>{{ lesson.teacherName }} · {{ lesson.classroom }}</p></div>
+            <span class="lesson-campus">{{ lesson.campusName }}</span>
+          </article>
+          <p class="data-note">课表为当前账号的演示安排，不代表学校实际教学计划。</p>
+        </section>
+        <section v-if="view !== 'timetable'" class="portal-panel">
+          <div class="section-heading"><div><span class="eyebrow">消息通知 · 未读 {{ overview.unreadCount }} 条</span><h2>{{ view === 'home' ? '最新个人消息' : '个人消息通知' }}</h2></div><RouterLink v-if="view === 'home'" to="/portal/notices">查看全部消息 <ArrowUpRight :size="14" /></RouterLink></div>
+          <p v-if="!overview.notices.length" class="empty-state">暂时没有个人消息。</p>
+          <article v-for="notice in overview.notices" :key="notice.id" class="notice-row">
+            <div class="notice-heading"><h3>{{ notice.title }}</h3><span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span></div>
+            <p>{{ notice.body }}</p>
+            <RouterLink v-if="safeAffairDestination(notice.targetPath)" class="text-button" :to="notice.targetPath!">查看对应申请 <ArrowUpRight :size="14" /></RouterLink>
+            <button v-if="!notice.read" class="text-button" :disabled="reading === notice.id" @click="markRead(notice)"><Check :size="14" />{{ reading === notice.id ? '正在更新…' : '标为已读' }}</button>
+          </article>
+        </section>
+      </div>
       <section v-if="view === 'home'" class="portal-services" aria-labelledby="student-services-heading">
         <div class="service-hub-header">
           <div class="service-section-heading">
             <div class="service-title-wrap">
               <div class="service-title-row">
-                <h2 id="student-services-heading">常用学生服务</h2>
+                <h2 id="student-services-heading">校园服务目录</h2>
                 <span class="service-count-pill">共 {{ services.length }} 项服务</span>
               </div>
-              <p>一站式直达学业教学、生活设施、办事审批与三维校园导览</p>
+              <p>按分类查找学习、生活与办事服务</p>
             </div>
           </div>
           <div class="service-toolbar">
-            <div class="service-segmented-control" role="tablist" aria-label="服务分类筛选">
+            <div ref="categoryRef" class="service-segmented-control" role="tablist" aria-label="服务分类筛选">
+              <div class="service-segment-pill" :style="categoryIndicatorStyle" aria-hidden="true"></div>
               <button
                 v-for="cat in categories"
                 :key="cat.id"
@@ -316,28 +358,6 @@ onMounted(load)
           <button type="button" class="button compact" @click="clearFilters">清空检索条件</button>
         </div>
       </section>
-      <div class="portal-content-grid" :class="{ single: view !== 'home' }">
-        <section v-if="view !== 'notices'" class="portal-panel">
-          <div class="section-heading"><div><span class="eyebrow">课程安排</span><h2>{{ view === 'home' ? '近期课程' : '每周课程表' }}</h2></div><RouterLink v-if="view === 'home'" to="/portal/learning/timetable">查看完整课表 <ArrowUpRight :size="14" /></RouterLink></div>
-          <p v-if="!overview.timetable.length" class="empty-state">当前没有已导入的课程安排。</p>
-          <article v-for="lesson in overview.timetable" :key="lesson.id" class="lesson-row">
-            <div class="lesson-time"><strong>{{ lessonDate(lesson.startsAt) }}</strong><span>{{ lesson.startsAt.slice(11,16) }}—{{ lesson.endsAt.slice(11,16) }}</span></div>
-            <div><h3>{{ lesson.courseName }}</h3><p>{{ lesson.teacherName }} · {{ lesson.classroom }}</p></div>
-            <span class="lesson-campus">{{ lesson.campusName }}</span>
-          </article>
-          <p class="data-note">课表为当前账号的演示安排，不代表学校实际教学计划。</p>
-        </section>
-        <section v-if="view !== 'timetable'" class="portal-panel">
-          <div class="section-heading"><div><span class="eyebrow">消息通知 · 未读 {{ overview.unreadCount }} 条</span><h2>{{ view === 'home' ? '最新个人消息' : '个人消息通知' }}</h2></div><RouterLink v-if="view === 'home'" to="/portal/notices">查看全部消息 <ArrowUpRight :size="14" /></RouterLink></div>
-          <p v-if="!overview.notices.length" class="empty-state">暂时没有个人消息。</p>
-          <article v-for="notice in overview.notices" :key="notice.id" class="notice-row">
-            <div class="notice-heading"><h3>{{ notice.title }}</h3><span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span></div>
-            <p>{{ notice.body }}</p>
-            <RouterLink v-if="safeAffairDestination(notice.targetPath)" class="text-button" :to="notice.targetPath!">查看对应申请 <ArrowUpRight :size="14" /></RouterLink>
-            <button v-if="!notice.read" class="text-button" :disabled="reading === notice.id" @click="markRead(notice)"><Check :size="14" />{{ reading === notice.id ? '正在更新…' : '标为已读' }}</button>
-          </article>
-        </section>
-      </div>
     </template>
   </div>
 </template>

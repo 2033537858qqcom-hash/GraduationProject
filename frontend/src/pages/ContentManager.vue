@@ -7,6 +7,7 @@ import BaseSelect from '../components/BaseSelect.vue'
 import { contentActions } from '../lib/contentWorkflow'
 import { currentUser } from '../stores/auth'
 import type { ContentHistory, ContentRevision, ManagedContent } from '../types'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const route = useRoute(), router = useRouter()
 const items = ref<ManagedContent[]>([]), selection = ref<ManagedContent | null>(null)
@@ -38,6 +39,11 @@ const formSourceTypeOptions = [
 const filters = reactive({ q: '', status: '', category: '' })
 const filtered = computed(() => items.value.filter(item => (!filters.status || item.status === filters.status) && (!filters.category || item.category === filters.category) && (item.title + ' ' + item.slug).toLowerCase().includes(filters.q.toLowerCase().trim())))
 const view = computed(() => route.query.view === 'history' ? 'history' : route.query.view === 'live' ? 'live' : 'work')
+const contentNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: contentIndicatorStyle } = useSlidingIndicator(
+  contentNavRef,
+  () => view.value
+)
 const form = reactive({ slug: '', category: 'notice', title: '', summary: '', body: '', sourceUrl: '', sourceType: 'DEMO', version: 0 })
 let baseline = '', sequence = 0, historySequence = 0
 const snapshot = () => JSON.stringify(form)
@@ -179,10 +185,12 @@ onBeforeUnmount(() => { sequence++; historySequence++; finishConfirmation(false)
     <div class="content-manager-grid">
       <section class="portal-panel content-list" aria-label="内容目录">
         <div class="content-list-heading"><h2>内容目录</h2><small>{{ filtered.length }} 篇内容</small></div>
-        <p v-if="loading" class="loading-state" role="status">正在读取内容…</p><p v-else-if="!filtered.length" class="empty-state">没有符合条件的内容，可调整筛选或新建草稿。</p>
-        <button v-for="item in filtered" :key="item.id" class="content-list-item" :class="{ chosen: selection?.id === item.id }" :disabled="busy" :aria-pressed="selection?.id === item.id" @click="choose(item)">
-          <strong>{{ item.title }}</strong><small>{{ categoryName(item.category) }} · {{ statusNames[item.status] }}</small><small>{{ item.live?.visible ? '官网显示 V' + item.live.version : item.live ? '已停止公开' : '尚未公开' }}{{ item.createdBy === currentUser?.id ? ' · 我负责的稿件' : '' }}</small>
-        </button>
+        <p v-if="loading && !filtered.length" class="loading-state" role="status">正在读取内容…</p><p v-else-if="!loading && !filtered.length" class="empty-state">没有符合条件的内容，可调整筛选或新建草稿。</p>
+        <div v-else class="content-list-scroll" :class="{ 'is-loading': loading }">
+          <button v-for="item in filtered" :key="item.id" class="content-list-item" :class="{ chosen: selection?.id === item.id }" :disabled="busy" :aria-pressed="selection?.id === item.id" @click="choose(item)">
+            <strong>{{ item.title }}</strong><small>{{ categoryName(item.category) }} · {{ statusNames[item.status] }}</small><small>{{ item.live?.visible ? '官网显示 V' + item.live.version : item.live ? '已停止公开' : '尚未公开' }}{{ item.createdBy === currentUser?.id ? ' · 我负责的稿件' : '' }}</small>
+          </button>
+        </div>
       </section>
       <section class="portal-panel content-editor">
         <form v-if="editing" class="editor-form" @submit.prevent="save">
@@ -197,7 +205,12 @@ onBeforeUnmount(() => { sequence++; historySequence++; finishConfirmation(false)
         </form>
         <template v-else-if="selection">
           <div class="content-version-bar"><span class="status-label">{{ statusNames[selection.status] }} · 工作稿 V{{ selection.version }}</span><span>{{ selection.live?.visible ? '官网公开 V' + selection.live.version : selection.live ? '公开版本已撤下' : '尚未公开' }}</span></div>
-          <nav class="learning-tabs" aria-label="内容版本视图"><button class="text-button" :class="{ selected: view === 'work' }" :disabled="busy" @click="changeView('work')">工作稿</button><button class="text-button" :class="{ selected: view === 'live' }" :disabled="busy || !selection.live" @click="changeView('live')">{{ selection.live?.visible ? '官网公开版本' : '最近公开版本' }}</button><button class="text-button" :class="{ selected: view === 'history' }" :disabled="busy" @click="changeView('history')"><History :size="15" />操作与版本记录</button></nav>
+          <nav ref="contentNavRef" class="learning-tabs" aria-label="内容版本视图">
+            <button class="text-button" :class="{ selected: view === 'work' }" :disabled="busy" @click="changeView('work')">工作稿</button>
+            <button class="text-button" :class="{ selected: view === 'live' }" :disabled="busy || !selection.live" @click="changeView('live')">{{ selection.live?.visible ? '官网公开版本' : '最近公开版本' }}</button>
+            <button class="text-button" :class="{ selected: view === 'history' }" :disabled="busy" @click="changeView('history')"><History :size="15" />操作与版本记录</button>
+            <div class="learning-tabs-indicator" :style="contentIndicatorStyle" aria-hidden="true"></div>
+          </nav>
           <template v-if="view === 'history'">
             <h2>操作与版本记录</h2><p class="muted">每次保存和状态变化保留记录。历史全文仅供查看。</p><p v-if="historyLoading" role="status">正在读取版本记录…</p>
             <article v-for="record in history.items" :key="record.version" class="content-history-row"><div><strong>{{ actionNames[record.action] ?? record.action }} · V{{ record.version }}</strong><p>{{ record.reason }}</p><small>{{ record.actorName }} · {{ formatTime(record.recordedAt) }}</small></div><button v-if="record.hasSnapshot" class="text-button" :disabled="historyLoading" @click="showRevision(record.version)">查看全文</button><span v-else class="muted">早期全文未保留</span></article>

@@ -1,15 +1,22 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { currentUser, landingPage, restoreSession } from './stores/auth'
+import { safeLoginDestination } from './lib/navigation'
 
 export const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior: () => ({ top: 0 }),
+  scrollBehavior: (to, _from, savedPosition) => {
+    if (savedPosition) return savedPosition
+    if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/', component: () => import('./layouts/PublicLayout.vue'),
       children: [
         { path: '', component: () => import('./pages/PublicHome.vue'), meta: { title: '学校官网' } },
+        { path: 'content', redirect: '/' },
         { path: 'content/:slug', component: () => import('./pages/ContentPage.vue'), meta: { title: '校园信息' } },
+        { path: 'campus', redirect: '/campus/explore' },
         { path: 'campus/explore', component: () => import('./pages/CampusExplore.vue'), meta: { title: '校园探索' } },
         { path: 'verify/certificate', component: () => import('./pages/CertificateVerifyPage.vue'), meta: { title: '在校证明防伪验真' } },
       ],
@@ -45,10 +52,12 @@ export const router = createRouter({
         { path: 'admin/counselors', component: () => import('./pages/CounselorAssignmentsPage.vue'), meta: { title: '辅导员负责班级', permission: 'foundation:manage' } },
         { path: 'admin/repair-settings', component: () => import('./pages/RepairSettingsPage.vue'), meta: { title: '报修地点与人员范围', permission: 'repair:configure' } },
         { path: 'admin/housing', component: () => import('./pages/HousingSettingsPage.vue'), meta: { title: '宿舍资源', permission: 'housing:configure' } },
+        { path: 'housing', redirect: '/housing/mine' },
         { path: 'housing/mine', component: () => import('./pages/HousingMinePage.vue'), meta: { title: '我的住宿与调宿', permission: 'housing:read' } },
         { path: 'housing/transfer', component: () => import('./pages/HousingMinePage.vue'), meta: { title: '调宿申请与住宿', permission: 'housing:read' } },
         { path: 'student-affairs/housing', component: () => import('./pages/HousingTransferPage.vue'), meta: { title: '学院调宿初审', permission: 'housing:review' } },
         { path: 'housing/assignments', component: () => import('./pages/HousingDeskPage.vue'), meta: { title: '住宿办理', permission: 'housing:assign' } },
+        { path: 'repairs', redirect: '/repairs/mine' },
         { path: 'repairs/mine', component: () => import('./pages/RepairPage.vue'), meta: { title: '我的校园报修', permission: 'repair:apply' } },
         { path: 'logistics/repairs/dispatch', component: () => import('./pages/RepairPage.vue'), meta: { title: '后勤分诊与派单', permission: 'repair:dispatch' } },
         { path: 'logistics/repairs/statistics', component: () => import('./pages/RepairStatisticsPage.vue'), meta: { title: '校园报修统计', permission: 'repair:dispatch' } },
@@ -64,10 +73,12 @@ export const router = createRouter({
 
 router.beforeEach(async to => {
   if (to.meta.authenticated || to.path === '/login') {
-    try { await restoreSession(Boolean(to.meta.authenticated)) } catch { return '/unavailable' }
+    try { await restoreSession() } catch { return '/unavailable' }
+  } else {
+    try { await restoreSession() } catch { /* Ignore network errors for public site */ }
   }
   if (to.meta.authenticated && !currentUser.value) return { path: '/login', query: { redirect: to.fullPath } }
-  if (to.path === '/login' && currentUser.value) return landingPage()
+  if (to.path === '/login' && currentUser.value) return safeLoginDestination(to.query.redirect) ?? landingPage()
   if (to.meta.permission && !currentUser.value?.permissions.includes(String(to.meta.permission))) return '/forbidden'
   if (to.meta.contentPermission && !currentUser.value?.permissions.some(p => p.startsWith('content:'))) return '/forbidden'
   if (to.meta.repairResponsibility && !currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work')) return '/forbidden'

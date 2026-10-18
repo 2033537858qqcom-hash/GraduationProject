@@ -15,7 +15,7 @@ test('only explicit application routes and valid IDs become context', () => {
 })
 test('model or source URLs cannot create arbitrary navigation targets', () => {
   for (const path of ['https://evil.test', '//evil.test', '/assistant/guides/../../admin', '/assistant/guides/%2e%2e', '/api/assistant/query', '/portal/certificates?id=2&tab=details&userId=3', '/admin/foundation', '/portal/learning\\evil', '/campus/explore?navigate=evil%20inject', '/campus/explore?foo=bar']) assert.equal(safeAssistantDestination(path), null)
-  for (const path of ['/assistant/guides/leave', '/portal/learning/grades', '/portal/certificates?id=2&tab=details', '/student-affairs/leave', '/portal/learning/timetable?term=1&week=2026-10-12', '/portal/learning/grades?term=1', '/repairs/mine', '/repairs/mine?id=8&tab=details', '/logistics/repairs/dispatch?id=8&tab=details', '/logistics/repairs/tasks', '/campus/explore', '/campus/explore?navigate=east-jinxiu']) assert.equal(safeAssistantDestination(path), path)
+  for (const path of ['/assistant/guides/leave', '/portal/learning/grades', '/portal/certificates?id=2&tab=details', '/student-affairs/leave', '/portal/learning/timetable?term=1&week=2026-10-12', '/portal/learning/grades?term=1', '/repairs/mine', '/repairs/mine?id=8&tab=details', '/logistics/repairs/dispatch?id=8&tab=details', '/logistics/repairs/tasks', '/campus/explore', '/campus/explore?navigate=east-jinxiu', '/student-affairs/reservations', '/student-affairs/housing', '/workbench', '/admin/content', '/portal/reservations']) assert.equal(safeAssistantDestination(path), path)
   assert.equal(safeAssistantDestination('/repairs/mine?id=8&tab=details&contact=1'), null)
   assert.equal(safeAssistantDestination('/logistics/repairs/statistics'), null)
 })

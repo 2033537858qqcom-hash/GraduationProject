@@ -14,8 +14,12 @@ export function clearSession() {
   resetCsrf()
 }
 
+export function isSessionInitialized() {
+  return initialized
+}
+
 export async function restoreSession(refresh = false) {
-  if (initialized && (!refresh || !currentUser.value)) return
+  if (initialized && !refresh) return
   if (!initialization) {
     initialization = (async () => {
       try {

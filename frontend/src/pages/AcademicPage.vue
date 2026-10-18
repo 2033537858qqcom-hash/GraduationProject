@@ -5,11 +5,17 @@ import { api, errorMessage } from '../lib/api'
 import { roomOption } from '../resources'
 import type { AcademicCatalog, AcademicGrade, AcademicExam, TeachingDetail } from '../types'
 import BaseSelect from '../components/BaseSelect.vue'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const catalog = ref<AcademicCatalog | null>(null)
 const selected = ref(0)
 const detail = ref<TeachingDetail | null>(null)
 const tab = ref('classes')
+const academicNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: academicIndicatorStyle } = useSlidingIndicator(
+  academicNavRef,
+  () => tab.value
+)
 const loading = ref(true)
 const busy = ref(false)
 const error = ref('')
@@ -170,7 +176,13 @@ onMounted(load)
 <template>
   <div class="learning-page">
     <div class="learning-heading"><div><span class="eyebrow">ACADEMIC SERVICES</span><h1>教务信息维护</h1><p class="muted">维护本学院教学关系，核对并发布教学信息</p></div><button class="button compact" :disabled="busy || loading" @click="load">刷新数据</button></div>
-    <nav class="learning-tabs" aria-label="教务维护栏目"><button :class="{ selected: tab === 'classes' }" :disabled="busy" @click="tab = 'classes'"><BookOpen :size="16" />教学班</button><button :class="{ selected: tab === 'grades' }" :disabled="busy" @click="tab = 'grades'"><FileText :size="16" />成绩维护</button><button :class="{ selected: tab === 'exams' }" :disabled="busy" @click="tab = 'exams'"><CalendarDays :size="16" />考试安排</button><button :class="{ selected: tab === 'foundation' }" :disabled="busy" @click="tab = 'foundation'"><Settings2 :size="16" />基础目录</button></nav>
+    <nav ref="academicNavRef" class="learning-tabs" aria-label="教务维护栏目">
+      <button :class="{ selected: tab === 'classes' }" :disabled="busy" @click="tab = 'classes'"><BookOpen :size="16" />教学班</button>
+      <button :class="{ selected: tab === 'grades' }" :disabled="busy" @click="tab = 'grades'"><FileText :size="16" />成绩维护</button>
+      <button :class="{ selected: tab === 'exams' }" :disabled="busy" @click="tab = 'exams'"><CalendarDays :size="16" />考试安排</button>
+      <button :class="{ selected: tab === 'foundation' }" :disabled="busy" @click="tab = 'foundation'"><Settings2 :size="16" />基础目录</button>
+      <div class="learning-tabs-indicator" :style="academicIndicatorStyle" aria-hidden="true"></div>
+    </nav>
     <p v-if="error" class="alert" role="alert">{{ error }}</p><p v-if="success" class="success-message" role="status">{{ success }}</p>
     <label v-if="catalog && tab !== 'foundation'" class="class-picker">当前教学班<BaseSelect v-model="selected" :options="classPickerOptions" :disabled="busy || loading" @change="gradeText = ''; loadDetail()" /></label>
     <p v-if="loading" class="loading-state" role="status">正在读取教务信息…</p>

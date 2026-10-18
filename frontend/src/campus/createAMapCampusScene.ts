@@ -1,12 +1,15 @@
 import { loadAMap } from './amapSdk'
-import type { MapClick } from './amapSdk'
+import type { LngLat, MapClick } from './amapSdk'
 import { campusPlaces } from './manifest'
+import type { CampusPlace } from './manifest'
 import { campusLngLat, campusMapFrame } from './georeference'
+import { westCampusMapFrame, westCampusPlaces } from './westCampusData'
 import type { SceneCallbacks } from './createCampusScene'
 import { addCampusOverlay } from './amapCampusOverlay'
 
 export interface MapSceneOptions {
   key: string
+  initialCampus?: 'EAST' | 'WEST'
   onCalibration?: (coordinate: string) => void
   onModelStatus?: (ready: boolean) => void
   signal?: AbortSignal
@@ -15,30 +18,68 @@ export interface MapSceneOptions {
 export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneCallbacks, options: MapSceneOptions) {
   const AMap = await loadAMap(options.key)
   if (options.signal?.aborted) throw new DOMException('Map load cancelled', 'AbortError')
-  const frame = () => campusMapFrame(host.clientWidth, host.clientHeight)
+
+  let currentCampus: 'EAST' | 'WEST' = options.initialCampus ?? 'EAST'
+  const allPlaces: CampusPlace[] = [...campusPlaces, ...westCampusPlaces]
+
+  function getPlaceLngLat(place: CampusPlace): LngLat | undefined {
+    if (place.lnglat) return place.lnglat
+    return campusLngLat([place.x, place.z])
+  }
+
+  const frame = () => currentCampus === 'WEST'
+    ? westCampusMapFrame(host.clientWidth, host.clientHeight)
+    : campusMapFrame(host.clientWidth, host.clientHeight)
+
+  const defaultPitch = 38
   const initial = frame()
+
+  // Initialize with Gaode 2.5D vector view with 3D building blocks & roads
   const map = new AMap.Map(host, {
-    viewMode: '3D', center: initial.center, zoom: initial.zoom, pitch: 0, rotation: 0,
-    zooms: [14, 20], features: ['bg', 'road'], showLabel: false,
-    resizeEnable: true, animateEnable: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    showBuildingBlock: false, dragEnable: true, rotateEnable: true, pitchEnable: true,
+    viewMode: '3D',
+    center: initial.center,
+    zoom: initial.zoom,
+    pitch: defaultPitch,
+    rotation: 0,
+    zooms: [14, 20],
+    features: ['bg', 'road', 'building', 'point'],
+    showBuildingBlock: true,
+    showLabel: true,
+    resizeEnable: true,
+    animateEnable: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    dragEnable: true,
+    rotateEnable: true,
+    pitchEnable: true,
+    mapStyle: 'amap://styles/normal',
   })
+
   const satellite = new AMap.TileLayer.Satellite()
-  map.add(satellite)
+  // Default to normal 2.5D vector map without satellite photos
+  let satelliteOn = false
+  let night = false
+  let is25D = true
+  let activeTheme: 'normal' | 'whitesmoke' = 'normal'
+  let overlayModelActive = false
+
   const overlay = addCampusOverlay(AMap, map, host, ready => options.onModelStatus?.(ready))
-  let disposed = false, current: string | null = null, satelliteOn = true, night = false, tilted = false
+  let disposed = false, current: string | null = null
   let overviewActive = true, viewportWidth = host.clientWidth, viewportHeight = host.clientHeight
   let labelFrame = 0
   let settleTimer: ReturnType<typeof setTimeout> | undefined
-  const important = new Set(['east-library', 'east-shuhua', 'east-jingyi', 'east-jinxiu-dining', 'east-wenhua', 'east-sports', 'south-gate', 'east-admin', 'east-gym'])
+
+  const eastImportant = new Set(['east-library', 'east-shuhua', 'east-jingyi', 'east-jinxiu-dining', 'east-wenhua', 'east-sports', 'south-gate', 'east-admin', 'east-gym'])
+  const westImportant = new Set(['west-south-gate', 'west-teaching-1', 'west-teaching-2', 'west-lab-3', 'west-library', 'west-canteen', 'west-sports-ground', 'west-dorm-4'])
+  const isImportant = (id: string) => currentCampus === 'WEST' ? westImportant.has(id) : eastImportant.has(id)
+
   function labels() {
     labelFrame = 0
     if (disposed) return
     const placed: { x: number; y: number }[] = []
-    const points = [...campusPlaces].sort((a, b) => Number(b.id === current) - Number(a.id === current)).map(place => {
-      const lnglat = campusLngLat([place.x, place.z])
+    const activePlaces = currentCampus === 'WEST' ? westCampusPlaces : campusPlaces
+    const points = [...activePlaces].sort((a, b) => Number(b.id === current) - Number(a.id === current)).map(place => {
+      const lnglat = getPlaceLngLat(place)
       const pixel = lnglat ? map.lngLatToContainer(lnglat) : { x: -100, y: -100 }
-      const allowed = map.getZoom() >= 17.8 || important.has(place.id) || current === place.id
+      const allowed = map.getZoom() >= 17.5 || isImportant(place.id) || current === place.id
       const visible = allowed && pixel.x > 45 && pixel.x < host.clientWidth - 45 && pixel.y > 50 && pixel.y < host.clientHeight - 45 && !placed.some(p => Math.abs(p.x - pixel.x) < 100 && Math.abs(p.y - pixel.y) < 30)
       if (visible) placed.push(pixel)
       return { id: place.id, left: pixel.x, top: pixel.y, visible }
@@ -48,7 +89,12 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
   function scheduleLabels() { if (!labelFrame) labelFrame = requestAnimationFrame(labels) }
   const click = (event: MapClick) => {
     options.onCalibration?.(`${event.lnglat.getLng().toFixed(7)}, ${event.lnglat.getLat().toFixed(7)}`)
-    if (!options.onCalibration) { const id = overlay.pick(event.pixel.x, event.pixel.y); if (id) callbacks.select(id) }
+    if (!options.onCalibration) {
+      if (currentCampus === 'EAST' && overlayModelActive) {
+        const id = overlay.pick(event.pixel.x, event.pixel.y)
+        if (id) callbacks.select(id)
+      }
+    }
   }
   const stopped = () => { clearTimeout(settleTimer); callbacks.moving(false); scheduleLabels() }
   const moving = () => { callbacks.moving(true); scheduleLabels(); clearTimeout(settleTimer); settleTimer = setTimeout(stopped, 180) }
@@ -67,8 +113,9 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     scheduleLabels()
   })
   resize.observe(host)
-  callbacks.view('top'); scheduleLabels()
+  callbacks.view('overview'); scheduleLabels()
   let walking: import('./amapSdk').AMapWalkingInstance | undefined
+
   return {
     dispose() {
       disposed = true; resize.disconnect(); cancelAnimationFrame(labelFrame); clearTimeout(settleTimer)
@@ -76,23 +123,79 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       host.removeEventListener('wheel', leaveOverview); host.removeEventListener('touchstart', leaveOverview)
       walking?.clear(); overlay.dispose(); map.destroy()
     },
+    switchCampus(campusId: 'EAST' | 'WEST') {
+      if (campusId === currentCampus) return
+      currentCampus = campusId
+      current = null
+      overviewActive = true
+      walking?.clear()
+      overlay.select(null)
+      // 3D Three.js building overlay is for East campus
+      overlay.visible(currentCampus === 'EAST' && overlayModelActive)
+      const next = frame()
+      map.setZoomAndCenter(next.zoom, next.center, false, 950)
+      map.setPitch(is25D ? defaultPitch : 0, false, 600)
+      callbacks.view(is25D ? 'overview' : 'top')
+      scheduleLabels()
+    },
+    getCampus(): 'EAST' | 'WEST' {
+      return currentCampus
+    },
     select(id: string | null) {
       current = id
       overviewActive = !id
-      overlay.select(id)
-      const place = campusPlaces.find(p => p.id === id)
+      if (currentCampus === 'EAST') {
+        overlay.select(id)
+      }
+      const place = allPlaces.find(p => p.id === id)
+      if (place?.campusId && place.campusId !== currentCampus) {
+        this.switchCampus(place.campusId)
+      }
       const overview = frame()
-      const target = place ? campusLngLat([place.x, place.z]) : overview.center
-      if (target) map.setZoomAndCenter(place ? 18.3 : overview.zoom, target, false, 650)
-      callbacks.view(place ? 'detail' : tilted ? 'overview' : 'top'); scheduleLabels()
+      const target = place ? getPlaceLngLat(place) : overview.center
+      if (target) {
+        map.setZoomAndCenter(place ? 18.2 : overview.zoom, target, false, 650)
+        if (is25D) {
+          map.setPitch(place ? 42 : defaultPitch, false, 500)
+        }
+      }
+      callbacks.view(place ? 'detail' : is25D ? 'overview' : 'top'); scheduleLabels()
     },
-    overview() { this.select(null) },
-    top() { tilted = false; map.setPitch(0, false, 500); map.setRotation(0); callbacks.view('top') },
+    overview() {
+      this.select(null)
+      if (is25D) map.setPitch(defaultPitch, false, 500)
+      map.setRotation(0, false)
+    },
+    top() {
+      is25D = false
+      map.setPitch(0, false, 500)
+      map.setRotation(0, false)
+      callbacks.view('top')
+      scheduleLabels()
+    },
+    set25D(enabled: boolean) {
+      is25D = enabled
+      map.setPitch(enabled ? defaultPitch : 0, false, 500)
+      callbacks.view(enabled ? 'overview' : 'top')
+      scheduleLabels()
+    },
+    setTheme(theme: 'normal' | 'whitesmoke') {
+      activeTheme = theme
+      if (!satelliteOn && !night) {
+        map.setMapStyle(`amap://styles/${theme}`)
+      }
+    },
     zoom(direction: 'in' | 'out') { overviewActive = false; map.setZoom(map.getZoom() + (direction === 'in' ? 0.5 : -0.5)); callbacks.view('free') },
     setEvening(evening: boolean) {
       if (evening !== night) {
-        map.setMapStyle(evening ? 'amap://styles/dark' : satelliteOn ? 'amap://styles/normal' : 'amap://styles/whitesmoke')
         night = evening
+        if (evening) {
+          map.setMapStyle('amap://styles/dark')
+        } else if (satelliteOn) {
+          map.setMapStyle('amap://styles/normal')
+        } else {
+          map.setMapStyle(`amap://styles/${activeTheme}`)
+        }
       }
       overlay.setEvening(evening)
     },
@@ -103,16 +206,26 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
         map.add(satellite)
       } else {
         map.remove(satellite)
-        map.setMapStyle(night ? 'amap://styles/dark' : 'amap://styles/whitesmoke')
+        map.setMapStyle(night ? 'amap://styles/dark' : `amap://styles/${activeTheme}`)
       }
     },
-    setBuildings(enabled: boolean) { tilted = enabled; overlay.visible(enabled); map.setPitch(enabled ? 45 : 0, false, 600); callbacks.view(enabled ? 'overview' : 'top') },
-    planRoute(toId: string, fromId = 'south-gate') {
-      const fromPlace = campusPlaces.find(p => p.id === fromId)
-      const toPlace = campusPlaces.find(p => p.id === toId)
+    setBuildings(enabled: boolean) {
+      overlayModelActive = enabled
+      if (currentCampus === 'WEST') return
+      overlay.visible(enabled)
+      if (enabled) {
+        map.setPitch(45, false, 600)
+        callbacks.view('overview')
+      }
+    },
+    planRoute(toId: string, fromId?: string) {
+      const defaultStart = currentCampus === 'WEST' ? 'west-south-gate' : 'south-gate'
+      const startId = fromId || defaultStart
+      const fromPlace = allPlaces.find(p => p.id === startId)
+      const toPlace = allPlaces.find(p => p.id === toId)
       if (!fromPlace || !toPlace) return
-      const start = campusLngLat([fromPlace.x, fromPlace.z])
-      const end = campusLngLat([toPlace.x, toPlace.z])
+      const start = getPlaceLngLat(fromPlace)
+      const end = getPlaceLngLat(toPlace)
       if (!start || !end) return
       if (!walking && AMap.Walking) {
         walking = new AMap.Walking({ map, hideMarkers: false })

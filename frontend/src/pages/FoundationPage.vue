@@ -6,10 +6,16 @@ import { api, errorMessage } from '../lib/api'
 import BaseSelect from '../components/BaseSelect.vue'
 import { currentUser } from '../stores/auth'
 import type { FoundationAudit, FoundationCatalog, FoundationClass, FoundationDepartment, FoundationMajor, ManagedAccount, Paged } from '../foundation'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const route = useRoute(), router = useRouter()
 const root = '/admin/foundation'
 const tab = computed(() => route.query.tab === 'organization' ? 'organization' : route.query.tab === 'audit' ? 'audit' : 'accounts')
+const foundationNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: foundationIndicatorStyle } = useSlidingIndicator(
+  foundationNavRef,
+  () => tab.value
+)
 type OrgType = 'departments' | 'majors' | 'class-groups'
 const orgType = computed<OrgType>(() => route.query.org === 'majors' ? 'majors' : route.query.org === 'class-groups' ? 'class-groups' : 'departments')
 const orgLabel = computed(() => orgType.value === 'departments' ? '学院与部门' : orgType.value === 'majors' ? '专业' : '行政班')
@@ -216,19 +222,20 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
       </form>
     </dialog>
     <div class="manager-heading"><span class="portal-context">管理员服务</span><h1>账号与组织管理</h1><p class="muted">维护校园人员、学院专业和行政班，查看身份与归属的修改记录。</p></div>
-    <nav class="learning-tabs" aria-label="基础管理栏目">
+    <nav ref="foundationNavRef" class="learning-tabs" aria-label="基础管理栏目">
       <RouterLink :to="{ path: root, query: { tab: 'accounts' } }" :class="{ selected: tab === 'accounts' }"><Users :size="16" />账号与岗位</RouterLink>
       <RouterLink :to="{ path: root, query: { tab: 'organization' } }" :class="{ selected: tab === 'organization' }"><Building2 :size="16" />组织目录</RouterLink>
       <RouterLink :to="{ path: root, query: { tab: 'audit' } }" :class="{ selected: tab === 'audit' }"><History :size="16" />修改记录</RouterLink>
+      <div class="learning-tabs-indicator" :style="foundationIndicatorStyle" aria-hidden="true"></div>
     </nav>
     <p v-if="error" class="alert" role="alert">{{ error }}</p><p v-if="success" class="success-message" role="status">{{ success }}</p>
-    <p v-if="loading" class="loading-state" role="status">正在读取管理信息…</p>
+    <p v-if="loading && !catalog" class="loading-state" role="status">正在读取管理信息…</p>
     <button v-else-if="!catalog" class="button compact" @click="load">重新读取管理信息</button>
     <template v-else-if="catalog && tab === 'accounts'">
       <section class="portal-panel">
         <div class="section-heading"><div><h2>校园人员账号</h2><p class="muted">共 {{ accounts.total }} 个符合条件的账号</p></div><button class="button primary compact" :disabled="busy" @click="openAccount(null)"><Plus :size="15" />新建账号</button></div>
         <form class="foundation-filters" @submit.prevent="searchAccounts"><label class="filter-search">搜索人员<input v-model="filters.q" maxlength="100" placeholder="姓名、账号或学工号" /></label><label>身份与岗位<BaseSelect v-model="filters.role" :options="filterRoleOptions" /></label><label>所属组织<BaseSelect v-model="filters.departmentId" :options="filterDepartmentOptions" /></label><label>账号状态<BaseSelect v-model="filters.enabled" :options="filterEnabledOptions" /></label><button class="button compact" :disabled="busy"><Search :size="15" />查询</button></form>
-        <div v-if="accounts.items.length" class="table-scroll"><table class="campus-table foundation-table"><thead><tr><th>人员</th><th>组织与行政班</th><th>身份与岗位</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="a in accounts.items" :key="a.id"><td><strong>{{ a.fullName }}</strong><small>账号 {{ a.username }}</small><small>学工号 {{ a.identityNumber }}</small></td><td>{{ a.departmentName ?? '未设置' }}<small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small></td><td><span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span></td><td><span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span></td><td><div class="foundation-row-actions"><button class="text-button" :disabled="busy" @click="openAccount(a)">编辑账号</button><button class="text-button" :disabled="busy || accountOpen || a.id === currentUser?.id" :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined" @click="changeState(a)">{{ a.enabled ? '停用' : '启用' }}</button><button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button></div></td></tr></tbody></table></div>
+        <div v-if="accounts.items.length" class="table-scroll" :class="{ 'is-loading': loading }"><table class="campus-table foundation-table"><thead><tr><th>人员</th><th>组织与行政班</th><th>身份与岗位</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="a in accounts.items" :key="a.id"><td><strong>{{ a.fullName }}</strong><small>账号 {{ a.username }}</small><small>学工号 {{ a.identityNumber }}</small></td><td>{{ a.departmentName ?? '未设置' }}<small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small></td><td><span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span></td><td><span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span></td><td><div class="foundation-row-actions"><button class="text-button" :disabled="busy" @click="openAccount(a)">编辑账号</button><button class="text-button" :disabled="busy || accountOpen || a.id === currentUser?.id" :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined" @click="changeState(a)">{{ a.enabled ? '停用' : '启用' }}</button><button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button></div></td></tr></tbody></table></div>
         <p v-else class="empty-state">没有符合条件的账号，请调整搜索或筛选条件。</p>
       </section>
       <section v-if="accountOpen" class="portal-panel foundation-editor">
@@ -256,9 +263,9 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
     <section v-else-if="catalog && tab === 'audit'" class="portal-panel">
       <div class="section-heading"><div><h2>人员与组织修改记录</h2><p class="muted">保留操作人员、变更前后信息和原因；共 {{ audits.total }} 条记录。</p></div></div>
       <form class="foundation-filters audit-filters" @submit.prevent="navigate('audit', { entityType: auditType, page: 1 })"><label>记录类型<BaseSelect v-model="auditType" :options="auditTypeOptions" /></label><button class="button compact">查询</button><RouterLink v-if="route.query.entityId" :to="{ path: root, query: { tab: 'audit' } }" class="text-button">查看全部修改记录</RouterLink></form>
-      <p v-if="!audits.items.length" class="empty-state">当前没有对应的修改记录。</p><article v-for="record in audits.items" :key="record.id" class="foundation-audit"><div class="notice-heading"><h3>{{ actionNames[record.action] ?? '管理操作' }}</h3><span class="status-label">{{ typeNames[record.entityType] }}</span></div><p class="preserve-lines">{{ record.summary }}</p><p class="muted">原因：{{ record.reason }}</p><small>{{ record.actorName }} · {{ record.createdAt.slice(0, 16).replace('T', ' ') }}</small></article>
+      <p v-if="!audits.items.length" class="empty-state">当前没有对应的修改记录。</p><div :class="{ 'is-loading': loading }"><article v-for="record in audits.items" :key="record.id" class="foundation-audit"><div class="notice-heading"><h3>{{ actionNames[record.action] ?? '管理操作' }}</h3><span class="status-label">{{ typeNames[record.entityType] }}</span></div><p class="preserve-lines">{{ record.summary }}</p><p class="muted">原因：{{ record.reason }}</p><small>{{ record.actorName }} · {{ record.createdAt.slice(0, 16).replace('T', ' ') }}</small></article></div>
     </section>
-    <div v-if="!loading && catalog && tab !== 'organization'" class="foundation-pagination"><span>第 {{ shownPage.page }} / {{ totalPages }} 页</span><div><button class="button compact" :disabled="busy || shownPage.page <= 1" @click="changePage(shownPage.page - 1)">上一页</button><button class="button compact" :disabled="busy || shownPage.page >= totalPages" @click="changePage(shownPage.page + 1)">下一页</button></div></div>
+    <div v-if="catalog && tab !== 'organization' && shownPage.total > 0" class="foundation-pagination"><span>第 {{ shownPage.page }} / {{ totalPages }} 页</span><div><button class="button compact" :disabled="busy || loading || shownPage.page <= 1" @click="changePage(shownPage.page - 1)">上一页</button><button class="button compact" :disabled="busy || loading || shownPage.page >= totalPages" @click="changePage(shownPage.page + 1)">下一页</button></div></div>
     <p class="data-note">当前人员资料为毕业设计演示数据。账号停用保留业务历史，角色分配不自动授予其他岗位的业务权限。</p>
   </div>
 </template>

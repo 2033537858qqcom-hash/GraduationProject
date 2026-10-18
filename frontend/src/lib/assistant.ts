@@ -13,9 +13,9 @@ export function safeAssistantDestination(value: unknown): string | null {
   if (typeof value !== 'string') return null
   if (/^\/housing\/(?:mine|transfer)$/.test(value) || /^\/housing\/transfer\?id=[1-9]\d*&tab=details$/.test(value)) return value
   if (/^\/assistant\/guides\/[a-z0-9][a-z0-9-]{0,79}$/.test(value)) return value
-  if (/^\/(?:portal\/(?:affairs|notices|learning(?:\/(?:timetable|grades|exams))?)|notices|teaching\/timetable|student-affairs\/(?:leave|certificates))$/.test(value)) return value
+  if (/^\/(?:portal(?:\/(?:affairs|notices|reservations|learning(?:\/(?:timetable|grades|exams))?))?|workbench|profile|notices|teaching(?:\/timetable)?|academic|admin\/content|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(value)) return value
   if (/^\/(?:portal\/learning\/(?:timetable|grades|exams)|teaching\/timetable)\?term=[1-9]\d{0,14}(?:&week=\d{4}-\d{2}-\d{2})?$/.test(value)) return value
-  if (/^\/(?:portal\/(?:leave|certificates)|student-affairs\/(?:leave|certificates)|repairs\/mine|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value)) return value
+  if (/^\/(?:portal\/(?:leave|certificates|reservations)|student-affairs\/(?:leave|certificates|housing|reservations)|repairs\/mine|housing\/(?:transfer|assignments)|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value)) return value
   if (/^\/(?:repairs\/mine|logistics\/repairs\/(?:dispatch|tasks))$/.test(value)) return value
   if (/^\/campus\/explore(?:\?navigate=[a-z0-9-]+)?$/.test(value)) return value
   return null

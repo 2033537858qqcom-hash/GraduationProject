@@ -7,6 +7,7 @@ export type BuildingKind = 'building' | 'plaza' | 'sports' | 'water' | 'entrance
 
 export interface CampusPlace {
   id: string
+  campusId?: 'EAST' | 'WEST'
   name: string
   category: CampusCategory
   kind: BuildingKind
@@ -25,6 +26,7 @@ export interface CampusPlace {
   heightStatus: 'display-only'
   /** Association within a shared group, not exclusive building ownership. */
   relatedPlaceId?: string
+  lnglat?: import('./amapSdk').LngLat
 }
 
 /** Display-only top of schematic silver grandstand arcs on east-sports; not surveyed. */
@@ -58,6 +60,7 @@ export const campusPlaces: CampusPlace[] = campusPlaceDefinitions.map(entry => {
   const evidenceView = features.find(feature => feature.evidenceView)?.evidenceView
   return {
     ...entry,
+    campusId: 'EAST',
     x: (minX + maxX) / 2, z: (minZ + maxZ) / 2,
     width: Math.max(3, maxX - minX), depth: Math.max(3, maxZ - minZ),
     height: Math.max(

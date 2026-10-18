@@ -34,10 +34,10 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
   let down = { x: 0, y: 0 }, gesture = false
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFShadowMap
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.shadowMap.autoUpdate = false
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.25
+  renderer.toneMappingExposure = 1.18
   renderer.domElement.setAttribute('aria-label', '三维校园场景。拖动旋转，滚轮缩放；也可使用场景按钮和地点目录探索。')
   host.appendChild(renderer.domElement)
   const controls = new OrbitControls(camera, renderer.domElement)
@@ -48,15 +48,15 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
   controls.cursor.set(0, 0, 0)
   controls.screenSpacePanning = false
   controls.zoomToCursor = true
-  const ambient = new THREE.HemisphereLight('#f3f7ff', '#7b8974', 2.3)
-  const sun = new THREE.DirectionalLight('#fff2dc', 3.1)
+  const ambient = new THREE.HemisphereLight('#f2f7fd', '#8fa78a', 2.35)
+  const sun = new THREE.DirectionalLight('#fff8ea', 3.0)
   sun.position.set(-65, 110, 65)
   sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048)
   Object.assign(sun.shadow.camera, { left: -135, right: 135, top: 115, bottom: -115, near: 1, far: 260 })
-  sun.shadow.normalBias = 0.16; sun.shadow.bias = -0.00015
+  sun.shadow.normalBias = 0.08; sun.shadow.bias = -0.0001
   scene.add(ambient, sun)
-  scene.background = new THREE.Color('#e8eef0')
-  scene.fog = new THREE.Fog('#e8eef0', 850, 1200)
+  scene.background = new THREE.Color('#f0f5f8')
+  scene.fog = new THREE.Fog('#f0f5f8', 850, 1300)
   let model: ReturnType<typeof buildCampus>
   try { model = buildCampus(scene) } catch (error) { dispose(); throw error }
   renderer.shadowMap.needsUpdate = true

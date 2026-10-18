@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import { safeLoginDestination, safeAffairDestination } from '../src/lib/navigation.ts'
 
 test('login keeps a known student or staff deep link with its selection', () => {
-  for (const path of ['/portal/affairs?kind=CERTIFICATE&page=2', '/portal/certificates?id=14&tab=history', '/student-affairs/certificates?id=14&tab=details', '/portal/reservations?id=1&tab=details', '/student-affairs/reservations?id=1&tab=details', '/teaching/timetable', '/notices?read=false&page=3', '/admin/repair-settings', '/admin/housing', '/housing/mine', '/housing/assignments', '/housing/transfer', '/student-affairs/housing', '/logistics/repair-responsibilities', '/repairs/mine?id=5&tab=details', '/logistics/repairs/dispatch?id=5', '/logistics/repairs/tasks?id=5']) assert.equal(safeLoginDestination(path), path)
+  for (const path of ['/', '/campus/explore', '/verify/certificate', '/content/school-introduction', '/portal/timetable', '/housing', '/repairs', '/portal/affairs?kind=CERTIFICATE&page=2', '/portal/certificates?id=14&tab=history', '/student-affairs/certificates?id=14&tab=details', '/portal/reservations?id=1&tab=details', '/student-affairs/reservations?id=1&tab=details', '/teaching/timetable', '/notices?read=false&page=3', '/admin/repair-settings', '/admin/housing', '/housing/mine', '/housing/assignments', '/housing/transfer', '/student-affairs/housing', '/logistics/repair-responsibilities', '/repairs/mine?id=5&tab=details', '/logistics/repairs/dispatch?id=5', '/logistics/repairs/tasks?id=5']) assert.equal(safeLoginDestination(path), path)
+  assert.equal(safeLoginDestination('/portal/'), '/portal/')
+  assert.equal(safeLoginDestination('/workbench/'), '/workbench/')
 })
 test('login cannot be redirected to an external, malformed, or unknown destination', () => {
   for (const path of ['https://example.test', '//example.test', '/\\example.test', 'javascript:alert(1)', '/portal/../../other', '/portal/%2e%2e/other', '/portal\n/leave', '/admin/unknown', '/logistics/unknown', ['/portal']]) assert.equal(safeLoginDestination(path), null)

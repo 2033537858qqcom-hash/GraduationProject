@@ -15,31 +15,36 @@ function createFacadeTextures() {
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const idx = (y * w + x) * 4
-        let r = 246, g = 244, b = 240, rough = 220
-        if (y < 4) {
-          r = 195; g = 190; b = 185; rough = 240
-        } else if (y >= 16 && y <= 52 && x >= 8 && x <= 56) {
-          const isFrame = (y <= 18 || y >= 50 || x <= 10 || x >= 54 || (x >= 31 && x <= 33))
-          if (isFrame) {
-            r = 75; g = 80; b = 88; rough = 180
+        // Clean off-white porcelain / warm limestone base
+        let r = 248, g = 247, b = 244, rough = 210
+        if (y < 4 || y > 60) {
+          // Subtle floor slab / parapet line
+          r = 218; g = 215; b = 210; rough = 230
+        } else if (y >= 16 && y <= 48 && x >= 8 && x <= 56) {
+          // Ribbon window band
+          const isMullion = (x >= 31 && x <= 33) || (x <= 9) || (x >= 55)
+          if (isMullion) {
+            r = 160; g = 170; b = 180; rough = 150
           } else {
-            const grad = (y - 18) / 32
+            // Elegant modern architectural glass with soft sky gradient
+            const grad = (y - 16) / 32
             if (kind === 'library') {
-              r = Math.floor(65 + 35 * grad); g = Math.floor(105 + 45 * grad); b = Math.floor(150 + 50 * grad)
+              r = Math.floor(130 + 40 * grad); g = Math.floor(175 + 40 * grad); b = Math.floor(220 + 30 * grad)
             } else if (kind === 'gym') {
-              r = Math.floor(95 + 30 * grad); g = Math.floor(85 + 25 * grad); b = Math.floor(100 + 35 * grad)
+              r = Math.floor(185 + 20 * grad); g = Math.floor(105 + 20 * grad); b = Math.floor(95 + 25 * grad)
             } else if (kind === 'canteen') {
-              r = Math.floor(115 + 50 * grad); g = Math.floor(120 + 40 * grad); b = Math.floor(130 + 30 * grad)
+              r = Math.floor(205 + 25 * grad); g = Math.floor(190 + 25 * grad); b = Math.floor(170 + 30 * grad)
             } else {
-              r = Math.floor(70 + 30 * grad); g = Math.floor(90 + 40 * grad); b = Math.floor(120 + 45 * grad)
+              r = Math.floor(140 + 35 * grad); g = Math.floor(180 + 35 * grad); b = Math.floor(215 + 30 * grad)
             }
-            if (Math.abs((x - 8) - (y - 18) * 1.1) < 4) {
-              r = Math.min(255, r + 45); g = Math.min(255, g + 50); b = Math.min(255, b + 55)
+            // Crisp subtle specular glass gleam
+            if (Math.abs((x - 8) - (y - 16) * 1.2) < 3) {
+              r = Math.min(255, r + 45); g = Math.min(255, g + 45); b = Math.min(255, b + 45)
             }
-            rough = 45
+            rough = 35
           }
-        } else if (x < 2 || x > 61) {
-          r = 215; g = 210; b = 205; rough = 230
+        } else if (x < 3 || x > 60) {
+          r = 230; g = 227; b = 222; rough = 220
         }
         colorData[idx] = r; colorData[idx + 1] = g; colorData[idx + 2] = b; colorData[idx + 3] = 255
         roughData[idx] = rough; roughData[idx + 1] = rough; roughData[idx + 2] = rough; roughData[idx + 3] = 255
@@ -63,9 +68,9 @@ function createWaterTexture(): THREE.DataTexture {
     for (let x = 0; x < w; x++) {
       const idx = (y * w + x) * 4
       const wave = Math.sin(x * 0.35 + y * 0.25) * 0.5 + Math.cos(x * 0.2 - y * 0.4) * 0.5
-      data[idx] = Math.floor(210 + wave * 40)
-      data[idx + 1] = Math.floor(230 + wave * 25)
-      data[idx + 2] = 255
+      data[idx] = Math.floor(130 + wave * 30)
+      data[idx + 1] = Math.floor(190 + wave * 25)
+      data[idx + 2] = Math.floor(235 + wave * 15)
       data[idx + 3] = 255
     }
   }
@@ -79,12 +84,12 @@ function buildCampusTrees(scene: THREE.Object3D) {
   const trunk = new THREE.CylinderGeometry(0.13, 0.2, 1.0, 5)
   trunk.translate(0, 0.5, 0)
   const tc = new Float32Array(trunk.attributes.position.count * 3)
-  for (let i = 0; i < tc.length; i += 3) { tc[i] = 0.42; tc[i + 1] = 0.31; tc[i + 2] = 0.22 }
+  for (let i = 0; i < tc.length; i += 3) { tc[i] = 0.36; tc[i + 1] = 0.26; tc[i + 2] = 0.18 }
   trunk.setAttribute('color', new THREE.BufferAttribute(tc, 3))
   const crown = new THREE.ConeGeometry(0.8, 1.9, 6)
   crown.translate(0, 1.85, 0)
   const cc = new Float32Array(crown.attributes.position.count * 3)
-  for (let i = 0; i < cc.length; i += 3) { cc[i] = 0.25; cc[i + 1] = 0.44; cc[i + 2] = 0.26 }
+  for (let i = 0; i < cc.length; i += 3) { cc[i] = 0.26; cc[i + 1] = 0.52; cc[i + 2] = 0.28 }
   crown.setAttribute('color', new THREE.BufferAttribute(cc, 3))
   const treeGeo = mergeGeometries([trunk, crown])
   trunk.dispose(); crown.dispose()
@@ -133,40 +138,40 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
   const facadeTextures = createFacadeTextures()
   const waterTexture = createWaterTexture()
   const colors = {
-    building: '#dfd7c8',
-    library: '#eee7da',
-    sports: '#cad6de',
-    gym: '#c84b42',
-    annex: '#ddd5cb',
-    canteen: '#d8ccb8',
-    anonymous: '#e0ddd4',
-    water: '#438ca3',
-    plaza: '#d9d1bd',
-    track: '#ae7466',
-    field: '#6e947c',
-    court: '#ad8c80',
-    point: '#315f87',
-    base: '#92a490',
-    road: '#bac6c3',
-    grandstand: '#c5ced6',
+    building: '#f6f4ed',
+    library: '#faf8f3',
+    sports: '#d8e5ef',
+    gym: '#b85247',
+    annex: '#eeeae2',
+    canteen: '#faeee2',
+    anonymous: '#ebe8df',
+    water: '#569fcc',
+    plaza: '#f0f3f6',
+    track: '#cc6a59',
+    field: '#5ea274',
+    court: '#4f8fc5',
+    point: '#2b6694',
+    base: '#86b488',
+    road: '#f7fafc',
+    grandstand: '#d2dbe3',
   }
   const materials = {
-    building: new THREE.MeshStandardMaterial({ color: colors.building, map: facadeTextures.building.map, roughnessMap: facadeTextures.building.roughnessMap, roughness: 0.86 }),
-    library: new THREE.MeshStandardMaterial({ color: colors.library, map: facadeTextures.library.map, roughnessMap: facadeTextures.library.roughnessMap, roughness: 0.82 }),
-    sports: new THREE.MeshStandardMaterial({ color: colors.sports, map: facadeTextures.sports.map, roughnessMap: facadeTextures.sports.roughnessMap, roughness: 0.80 }),
+    building: new THREE.MeshStandardMaterial({ color: colors.building, map: facadeTextures.building.map, roughnessMap: facadeTextures.building.roughnessMap, roughness: 0.85 }),
+    library: new THREE.MeshStandardMaterial({ color: colors.library, map: facadeTextures.library.map, roughnessMap: facadeTextures.library.roughnessMap, roughness: 0.80 }),
+    sports: new THREE.MeshStandardMaterial({ color: colors.sports, map: facadeTextures.sports.map, roughnessMap: facadeTextures.sports.roughnessMap, roughness: 0.78 }),
     gym: new THREE.MeshStandardMaterial({ color: colors.gym, map: facadeTextures.gym.map, roughnessMap: facadeTextures.gym.roughnessMap, roughness: 0.82 }),
-    annex: new THREE.MeshStandardMaterial({ color: colors.annex, map: facadeTextures.annex.map, roughnessMap: facadeTextures.annex.roughnessMap, roughness: 0.88 }),
-    canteen: new THREE.MeshStandardMaterial({ color: colors.canteen, map: facadeTextures.canteen.map, roughnessMap: facadeTextures.canteen.roughnessMap, roughness: 0.85 }),
+    annex: new THREE.MeshStandardMaterial({ color: colors.annex, map: facadeTextures.annex.map, roughnessMap: facadeTextures.annex.roughnessMap, roughness: 0.86 }),
+    canteen: new THREE.MeshStandardMaterial({ color: colors.canteen, map: facadeTextures.canteen.map, roughnessMap: facadeTextures.canteen.roughnessMap, roughness: 0.84 }),
     anonymous: new THREE.MeshStandardMaterial({ color: colors.anonymous, map: facadeTextures.anonymous.map, roughnessMap: facadeTextures.anonymous.roughnessMap, roughness: 0.86 }),
-    water: new THREE.MeshStandardMaterial({ color: colors.water, map: waterTexture, roughness: 0.16, metalness: 0.22, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    plaza: new THREE.MeshStandardMaterial({ color: colors.plaza, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    track: new THREE.MeshStandardMaterial({ color: colors.track, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    field: new THREE.MeshStandardMaterial({ color: colors.field, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    court: new THREE.MeshStandardMaterial({ color: colors.court, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    point: new THREE.MeshStandardMaterial({ color: colors.point, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    water: new THREE.MeshStandardMaterial({ color: colors.water, map: waterTexture, roughness: 0.14, metalness: 0.26, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
+    plaza: new THREE.MeshStandardMaterial({ color: colors.plaza, roughness: 0.84, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
+    track: new THREE.MeshStandardMaterial({ color: colors.track, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
+    field: new THREE.MeshStandardMaterial({ color: colors.field, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
+    court: new THREE.MeshStandardMaterial({ color: colors.court, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
+    point: new THREE.MeshStandardMaterial({ color: colors.point, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     base: new THREE.MeshStandardMaterial({ color: colors.base, roughness: 0.86 }),
-    road: new THREE.MeshStandardMaterial({ color: colors.road, roughness: 0.86, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
-    grandstand: new THREE.MeshStandardMaterial({ color: '#c5ced6', metalness: 0.58, roughness: 0.32 }),
+    road: new THREE.MeshStandardMaterial({ color: colors.road, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    grandstand: new THREE.MeshStandardMaterial({ color: '#d2dbe3', metalness: 0.62, roughness: 0.28 }),
   }
   const buckets = new Map<string, { material: THREE.Material; id?: string; geometries: THREE.BufferGeometry[] }>()
   const pickables: THREE.Mesh[] = []

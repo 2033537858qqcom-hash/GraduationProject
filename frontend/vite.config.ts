@@ -7,7 +7,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, fileURLToPath(new URL('.', import.meta.url)), '')
   const mapSecret = env.AMAP_SECURITY_JSCODE ?? ''
   const proxy = {
-    '/api': { target: process.env.CAMPUS_API_TARGET ?? 'http://127.0.0.1:8080', changeOrigin: true },
+    '/api': { target: process.env.CAMPUS_API_TARGET ?? 'http://127.0.0.1:7080', changeOrigin: true },
     ...amapProxy(mapSecret),
   }
   return {

@@ -28,6 +28,7 @@ import {
 import { currentUser } from '../stores/auth'
 import { errorMessage } from '../lib/api'
 import { useEditProtection } from '../composables/useEditProtection'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 import AffairTimeline from '../components/AffairTimeline.vue'
 import BaseSelect from '../components/BaseSelect.vue'
 import {
@@ -72,6 +73,18 @@ const canManage = computed(() => currentUser.value?.permissions.includes('reserv
 const activeTab = ref<'venues' | 'mine' | 'review' | 'manage'>(
   (route.query.tab === 'manage' && canManage.value) ? 'manage' : reviewMode.value ? 'review' : 'venues'
 )
+const reservationNavRef = ref<HTMLElement | null>(null)
+const { indicatorStyle: reservationIndicatorStyle } = useSlidingIndicator(
+  reservationNavRef,
+  () => activeTab.value,
+  { activeSelector: '.learning-tabs button.active, .learning-tabs button.selected' }
+)
+const categoryPillsRef = ref<HTMLElement | null>(null)
+const venueCategory = ref('')
+const { indicatorStyle: categoryPillStyle } = useSlidingIndicator(
+  categoryPillsRef,
+  () => venueCategory.value
+)
 
 // Data states
 const venues = ref<VenueSummary[]>([])
@@ -98,7 +111,6 @@ const currentPage = ref(1)
 const pageSize = 20
 
 // Filters
-const venueCategory = ref('')
 const venueKeyword = ref('')
 const filterStatus = ref('')
 
@@ -723,7 +735,7 @@ watch(() => route.query.venue, () => {
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
 
     <!-- Navigation Tabs -->
-    <nav class="learning-tabs reservation-nav-tabs" aria-label="场地借用栏目切换">
+    <nav ref="reservationNavRef" class="learning-tabs reservation-nav-tabs" aria-label="场地借用栏目切换">
       <button v-if="!reviewMode" :class="{ active: activeTab === 'venues' }" @click="switchTab('venues')">
         <Building2 :size="15" />
         场地与设备目录
@@ -740,15 +752,17 @@ watch(() => route.query.venue, () => {
         <Settings :size="15" />
         场地资源配置
       </button>
+      <div class="learning-tabs-indicator" :style="reservationIndicatorStyle" aria-hidden="true"></div>
     </nav>
 
     <!-- ==================== TAB 1: VENUE & EQUIPMENT CATALOG ==================== -->
     <section v-if="activeTab === 'venues'" class="portal-panel venue-catalog-section" aria-label="场地与设备目录">
       <div class="foundation-filters venue-filters">
-        <div class="category-pills">
+        <div ref="categoryPillsRef" class="category-pills">
           <button :class="{ active: venueCategory === '' }" @click="venueCategory = ''; loadVenues()">全部资源</button>
           <button :class="{ active: venueCategory === 'VENUE' }" @click="venueCategory = 'VENUE'; loadVenues()">活动场地与场馆</button>
           <button :class="{ active: venueCategory === 'EQUIPMENT' }" @click="venueCategory = 'EQUIPMENT'; loadVenues()">专用器材与设备</button>
+          <div class="category-pill-indicator" :style="categoryPillStyle" aria-hidden="true"></div>
         </div>
         <div class="search-input-group">
           <Search :size="15" class="search-icon" />
@@ -762,10 +776,10 @@ watch(() => route.query.venue, () => {
         <button class="text-button" @click="router.replace({ query: { ...route.query, venue: undefined } }); loadVenues()">清除地点筛选</button>
       </div>
 
-      <p v-if="loading" class="loading-state" role="status">正在读取场地与设备资源…</p>
-      <p v-else-if="!venues.length" class="empty-state">未查询到符合条件的场地或设备资源。</p>
+      <p v-if="loading && !venues.length" class="loading-state" role="status">正在读取场地与设备资源…</p>
+      <p v-else-if="!loading && !venues.length" class="empty-state">未查询到符合条件的场地或设备资源。</p>
 
-      <div v-else class="venue-cards-grid">
+      <div v-else class="venue-cards-grid" :class="{ 'is-loading': loading }">
         <article v-for="venue in venues" :key="venue.id" class="venue-card">
           <div class="venue-card-header">
             <span class="venue-category-badge" :class="venue.category.toLowerCase()">
@@ -826,10 +840,10 @@ watch(() => route.query.venue, () => {
         </div>
       </div>
 
-      <p v-if="loading" class="loading-state" role="status">正在读取场地资源配置与责任人信息…</p>
-      <p v-else-if="!filteredManagedVenues.length" class="empty-state">没有符合搜索条件的场地资源。</p>
+      <p v-if="loading && !filteredManagedVenues.length" class="loading-state" role="status">正在读取场地资源配置与责任人信息…</p>
+      <p v-else-if="!loading && !filteredManagedVenues.length" class="empty-state">没有符合搜索条件的场地资源。</p>
 
-      <div v-else class="venue-cards-grid manage-cards-grid">
+      <div v-else class="venue-cards-grid manage-cards-grid" :class="{ 'is-loading': loading }">
         <article v-for="venue in filteredManagedVenues" :key="venue.id" class="venue-card manage-card" :class="{ disabled: !venue.enabled }">
           <div class="venue-card-header">
             <div class="badge-group">
@@ -935,10 +949,10 @@ watch(() => route.query.venue, () => {
         <span class="muted" style="margin-left: auto;">共 {{ totalItems }} 条申请</span>
       </div>
 
-      <p v-if="loading" class="loading-state" role="status">正在读取借用记录…</p>
-      <p v-else-if="!reservations.length" class="empty-state">当前没有符合筛选条件的借用申请。</p>
+      <p v-if="loading && !reservations.length" class="loading-state" role="status">正在读取借用记录…</p>
+      <p v-else-if="!loading && !reservations.length" class="empty-state">当前没有符合筛选条件的借用申请。</p>
 
-      <div v-else class="table-scroll">
+      <div v-else class="table-scroll" :class="{ 'is-loading': loading }">
         <table class="campus-table foundation-table">
           <thead>
             <tr>
@@ -1541,24 +1555,66 @@ watch(() => route.query.venue, () => {
 }
 
 .category-pills {
-  display: flex;
-  gap: 8px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
 }
 
 .category-pills button {
-  padding: 6px 14px;
+  position: relative;
+  z-index: 1;
+  padding: 6px 15px;
   border-radius: 9999px;
-  border: 1px solid var(--line, #cbd5e1);
-  background: white;
+  border: 0;
+  background: transparent;
   font-size: 13px;
+  font-weight: 500;
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none !important;
+}
+
+.category-pills button:hover:not(.active) {
+  color: #0f172a;
+}
+
+.category-pills button:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
 }
 
 .category-pills button.active {
-  background: var(--brand, #1e3a8a);
-  color: white;
-  border-color: var(--brand, #1e3a8a);
+  color: #ffffff;
+  font-weight: 600;
+  background: transparent !important;
+}
+
+.category-pill-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  background: var(--brand, #244b78);
+  border-radius: 9999px;
+  box-shadow: 0 1px 3px rgba(36, 75, 120, 0.28);
+  pointer-events: none;
+  transition: transform 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05),
+              width 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05);
+  will-change: transform, width;
+  z-index: 0;
+}
+
+.venue-cards-grid.is-loading,
+.table-scroll.is-loading {
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
 }
 
 .search-input-group {

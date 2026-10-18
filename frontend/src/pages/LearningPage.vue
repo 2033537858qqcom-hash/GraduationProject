@@ -9,9 +9,16 @@ import type { TeachingDraft } from '../lib/teachingDrafts'
 import { learningLinkSelection } from '../lib/learningLink'
 import type { AcademicTerm, TeachingClass, TeachingLesson, TeachingDetail, CourseMaterial, AcademicGrade, AcademicExam } from '../types'
 import BaseSelect from '../components/BaseSelect.vue'
+import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const route = useRoute()
 const router = useRouter()
+const navRef = ref<HTMLElement | null>(null)
+const { indicatorStyle } = useSlidingIndicator(
+  navRef,
+  () => route.path,
+  { activeSelector: '.learning-tabs a.selected, .learning-tabs a.active, .learning-tabs button.selected, .learning-tabs button.active' }
+)
 const teacher = computed(() => route.path.startsWith('/teaching'))
 const base = computed(() => teacher.value ? '/teaching' : '/portal/learning')
 const endpoint = computed(() => teacher.value ? '/teaching' : '/learning')
@@ -110,8 +117,7 @@ async function loadDetail(id: number) {
 async function load() {
   persistDraft()
   const sequence = ++loadSequence
-  detailSequence++; detail.value = null; loading.value = true; error.value = ''; success.value = ''
-  classes.value = []; lessons.value = []; grades.value = []; exams.value = []
+  detailSequence++; loading.value = true; error.value = ''; success.value = ''
   try {
     if (!terms.value.length) terms.value = await api<AcademicTerm[]>('/learning/terms')
     const linked = learningLinkSelection(terms.value, route.query.term, route.query.week)
@@ -254,15 +260,16 @@ onBeforeUnmount(() => { persistDraft(); finishConfirmation(false); detailSequenc
         />
       </div>
     </div>
-    <nav class="learning-tabs" :aria-label="teacher ? '教学服务栏目' : '学习服务栏目'">
+    <nav ref="navRef" class="learning-tabs" :aria-label="teacher ? '教学服务栏目' : '学习服务栏目'">
       <RouterLink :to="base" :class="{ selected: tab === 'courses' }"><BookOpen :size="16" aria-hidden="true" />{{ teacher ? '教学班与资料' : '课程与资料' }}</RouterLink>
       <RouterLink :to="base + '/timetable'" :class="{ selected: tab === 'timetable' }"><CalendarDays :size="16" aria-hidden="true" />{{ teacher ? '每周授课安排' : '每周课程表' }}</RouterLink>
       <RouterLink v-if="!teacher" :to="base + '/grades'" :class="{ selected: tab === 'grades' }"><GraduationCap :size="16" aria-hidden="true" />课程成绩查询</RouterLink>
       <RouterLink v-if="!teacher" :to="base + '/exams'" :class="{ selected: tab === 'exams' }"><ClipboardList :size="16" aria-hidden="true" />考试时间与地点</RouterLink>
+      <div class="learning-tabs-indicator" :style="indicatorStyle" aria-hidden="true"></div>
     </nav>
     <p v-if="error" class="alert" role="alert">{{ error }} <button class="text-button" :disabled="busy" @click="load">刷新数据</button></p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
-    <p v-if="loading" class="loading-state" role="status">正在读取教学信息…</p>
+    <p v-if="loading && !terms.length" class="loading-state" role="status">正在读取教学信息…</p>
     <p v-else-if="!terms.length" class="empty-state">尚未维护学期，请联系教务信息维护岗位。</p>
     <template v-else-if="tab === 'courses'">
       <p v-if="!classes.length" class="empty-state">本学期暂无{{ teacher ? '有效授课' : '已关联' }}教学班。</p>

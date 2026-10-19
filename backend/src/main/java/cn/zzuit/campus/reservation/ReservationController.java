@@ -3,9 +3,16 @@ package cn.zzuit.campus.reservation;
 import cn.zzuit.campus.identity.CampusPrincipal;
 import cn.zzuit.campus.reservation.ReservationDtos.*;
 import java.time.LocalDate;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.CacheControl;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,9 +21,21 @@ import org.springframework.web.bind.annotation.*;
 public class ReservationController {
 
     private final VenueReservationService reservations;
+    private final ReservationPassPdf passPdf;
 
-    public ReservationController(VenueReservationService reservations) {
+    public ReservationController(VenueReservationService reservations, ReservationPassPdf passPdf) {
         this.reservations = reservations;
+        this.passPdf = passPdf;
+    }
+
+    @GetMapping("/{id}/pass")
+    public ResponseEntity<byte[]> pass(@AuthenticationPrincipal CampusPrincipal user, @PathVariable long id,
+                                      @RequestParam(defaultValue = "false") boolean inline) throws IOException {
+        var detail = reservations.getPassDetail(user, id);
+        var disposition = inline ? ContentDisposition.inline() : ContentDisposition.attachment();
+        return ResponseEntity.ok().contentType(MediaType.APPLICATION_PDF).cacheControl(CacheControl.noStore())
+            .header(HttpHeaders.CONTENT_DISPOSITION, disposition.filename("场地借用凭证-" + id + ".pdf", StandardCharsets.UTF_8).build().toString())
+            .header("X-Content-Type-Options", "nosniff").body(passPdf.generate(detail));
     }
 
     // ==================== 场地与设备资源目录 ====================

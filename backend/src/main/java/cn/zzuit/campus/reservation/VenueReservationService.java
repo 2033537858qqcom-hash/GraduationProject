@@ -419,6 +419,15 @@ public class VenueReservationService {
         LocalDateTime updatedAt
     ) {}
 
+    public ReservationDetail getPassDetail(CampusPrincipal user, long id) {
+        var detail = getDetail(user, id);
+        identities.requirePermission(user, detail.applicantId() == user.id() ? "reservation:apply" : "reservation:review");
+        if (!"APPROVED".equals(detail.status())) {
+            throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_PASS_UNAVAILABLE", "仅已审批通过且未取消的借用申请可以导出凭证，请刷新查看最新状态");
+        }
+        return detail;
+    }
+
     public ReservationDetail getDetail(CampusPrincipal user, long id) {
         var res = jdbc.sql("""
             SELECT r.*, v.category

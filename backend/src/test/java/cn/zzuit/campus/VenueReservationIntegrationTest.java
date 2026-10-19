@@ -114,6 +114,8 @@ class VenueReservationIntegrationTest {
             "endsAt", end.toString()
         )));
         assertThat(submitted.path("status").asText()).isEqualTo("SUBMITTED");
+        assertThat(student1.get("/api/reservations/" + resId + "/pass").statusCode()).isEqualTo(409);
+        assertThat(student2.get("/api/reservations/" + resId + "/pass").statusCode()).isEqualTo(403);
 
         // 3. 冲突拦截：另一个学生尝试预约重叠时段 -> 409 Conflict
         var conflictResponse = student2.send("POST", "/api/reservations/submit", Map.of(
@@ -156,6 +158,21 @@ class VenueReservationIntegrationTest {
         )));
         assertThat(approved.path("status").asText()).isEqualTo("APPROVED");
 
+        // Export reuses live ownership / venue responsibility and produces real, private PDF bytes.
+        String passPath = "/api/reservations/" + resId + "/pass";
+        var pass = student1.http.send(student1.builder(passPath).GET().build(), HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(pass.statusCode()).isEqualTo(200);
+        assertThat(pass.headers().firstValue("Content-Type").orElse("")).contains("application/pdf");
+        assertThat(pass.headers().firstValue("Content-Disposition").orElse("")).startsWith("attachment;").contains("filename*");
+        assertThat(pass.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        try (var document = org.apache.pdfbox.Loader.loadPDF(pass.body())) {
+            assertThat(new org.apache.pdfbox.text.PDFTextStripper().getText(document)).contains("软件学院篮球联赛四强战", "20260001");
+        }
+        assertThat(reviewer.get(passPath + "?inline=true").headers().firstValue("Content-Disposition").orElse("")).startsWith("inline;");
+        assertThat(student2.get(passPath).statusCode()).isEqualTo(403);
+        assertThat(login("admin").get(passPath).statusCode()).isEqualTo(403);
+        assertThat(HttpClient.newHttpClient().send(student1.builder(passPath).GET().build(), HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(401);
+
         // 7. 验证“我的办事”集成 (/api/affairs/mine)
         var affairsMine = ok(student1.get("/api/affairs/mine?kind=RESERVATION"));
         assertThat(affairsMine.path("items").size()).isGreaterThanOrEqualTo(1);
@@ -184,6 +201,7 @@ class VenueReservationIntegrationTest {
             "reason", "赛事时间改期，申请释放场地"
         )));
         assertThat(cancelled.path("status").asText()).isEqualTo("CANCELLED");
+        assertThat(student1.get(passPath).statusCode()).isEqualTo(409);
 
         // 10. 取消后时段释放，student2 此时可以顺利预约同一时段
         var student2Submit = ok(student2.send("POST", "/api/reservations/submit", Map.of(

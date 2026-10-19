@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { campusCoverage, mapFeatures, mapRoads, mapToModel } from './eastCampusLayout'
-import type { MapPoint, SurfaceKind } from './eastCampusLayout'
-import { featureVerticalRange, sportsGrandstandRoofTop } from './manifest'
+import type { MapPoint, MapRoad, SurfaceKind } from './eastCampusLayout'
+import { sportsGrandstandRoofTop } from './manifest'
 import type { CampusPlace } from './manifest'
+import { campusSceneData } from './campusSceneData'
+import type { CampusId, CampusRepresentation } from './campusSceneData'
 
 function createFacadeTextures() {
   const kinds = ['building', 'library', 'sports', 'gym', 'annex', 'canteen', 'anonymous'] as const
@@ -80,7 +81,7 @@ function createWaterTexture(): THREE.DataTexture {
   return texture
 }
 
-function buildCampusTrees(scene: THREE.Object3D) {
+function buildCampusTrees(scene: THREE.Object3D, mapRoads: MapRoad[], mapToModel: (point: MapPoint) => [number,number]) {
   const trunk = new THREE.CylinderGeometry(0.13, 0.2, 1.0, 5)
   trunk.translate(0, 0.5, 0)
   const tc = new Float32Array(trunk.attributes.position.count * 3)
@@ -96,7 +97,7 @@ function buildCampusTrees(scene: THREE.Object3D) {
   if (!treeGeo) return null
 
   const positions: [number, number][] = []
-  const treeRoads = new Set(['south-approach', 'north-axis', 'east-internal', 'central-east-curve', 'central-west-curve', 'east-bank', 'library-ring'])
+  const treeRoads = new Set(['south-approach', 'north-axis', 'east-internal', 'central-east-curve', 'central-west-curve', 'east-bank', 'library-ring', 'west-inner-west', 'west-inner-north', 'west-inner-south', 'west-inner-axis'])
   mapRoads.filter(r => treeRoads.has(r.id)).forEach(road => {
     for (let i = 1; i < road.points.length; i++) {
       const [ax, az] = mapToModel(road.points[i - 1]!)
@@ -134,7 +135,8 @@ function buildCampusTrees(scene: THREE.Object3D) {
   return { mesh: instanced, geometry: treeGeo, material: treeMat }
 }
 
-export function buildCampus(scene: THREE.Object3D, options: { includeContext?: boolean } = {}) {
+export function buildCampus(scene: THREE.Object3D, options: { includeContext?: boolean; campusId?: CampusId; representation?: CampusRepresentation } = {}) {
+  const { features: mapFeatures, roads: mapRoads, coverage: campusCoverage, toModel: mapToModel, verticalRange: featureVerticalRange, bounds } = campusSceneData(options.campusId, options.representation)
   const facadeTextures = createFacadeTextures()
   const waterTexture = createWaterTexture()
   const colors = {
@@ -213,7 +215,11 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
 
   // A neutral support plane also carries peripheral streets and water outside the crop.
   if (options.includeContext !== false) {
-    surface([[-65, 40], [638, 40], [638, 611], [-65, 611]], [], 1.6, -1.6, materials.anonymous)
+    const base = options.campusId === 'WEST' && options.representation === 'geographic'
+      ? [[bounds.minX,bounds.minZ],[bounds.maxX,bounds.minZ],[bounds.maxX,bounds.maxZ],[bounds.minX,bounds.maxZ]] as MapPoint[]
+      : options.campusId === 'WEST' ? [[110,-10],[1810,-10],[1810,1340],[110,1340]] as MapPoint[]
+      : [[-65,40],[638,40],[638,611],[-65,611]] as MapPoint[]
+    surface(base, [], 1.6, -1.6, materials.anonymous)
     surface(campusCoverage, [], 0.05, 0, materials.base)
   }
 
@@ -237,11 +243,11 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
   function materialFor(kind: SurfaceKind, placeId?: string): THREE.MeshStandardMaterial {
     if (kind !== 'building') return materials[kind]
     if (!placeId) return materials.anonymous
-    if (placeId === 'east-library') return materials.library
+    if (placeId === 'east-library' || placeId === 'west-library') return materials.library
     if (placeId === 'east-gym') return materials.gym
     if (placeId === 'east-swimming') return materials.sports
     if (placeId === 'east-h8') return materials.annex
-    if (placeId === 'east-jinxiu-dining' || placeId === 'east-canteen-wenhua') return materials.canteen
+    if (['east-jinxiu-dining','east-canteen-wenhua','west-steel-canteen','west-siyuan-canteen'].includes(placeId)) return materials.canteen
     return materials.building
   }
 
@@ -320,7 +326,7 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
   selection.visible = false
   scene.add(selection)
 
-  const trees = options.includeContext !== false ? buildCampusTrees(scene) : null
+  const trees = options.includeContext !== false ? buildCampusTrees(scene, mapRoads, mapToModel) : null
 
   return {
     pickables,

@@ -1,0 +1,47 @@
+-- Pre-seed official campus repair locations for East and West campuses
+-- Facilitates direct selection of genuine campus teaching, living, sports, and dining venues
+
+INSERT INTO repair_location (
+  campus_id, code, name, kind, classroom_resource_id, building_id, dorm_room_id, detail_hint, provenance, enabled, version
+) VALUES
+  (1, 'EAST-LIB', '图书馆', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明具体楼层（如二楼社科阅览区、四楼自习区）及书架/座位号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-XINKE', '信科楼（信息工程学院与软件学院）', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明具体楼层、实验室/机房或多媒体教室门牌号（如信科1号楼302机房）', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-WENHUA', '文华楼教学区（商学院/外语/管理）', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明学院区域、具体楼层及教室编号（如商学院东楼204）', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-ART', '艺术楼（艺术设计与音乐学院）', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明琴房、画室、多功能排练厅或专业教室门牌号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-SHUHUA-EDU', '书华楼多媒体教学区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明阶梯教室编号、楼层或设备设施具体位置', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-ZHIYUAN-LAB', '致远楼微机实验室与机房', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明微机室编号（如401机房）、机位编号或网络交换设备位置', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-JIANGONG', '建工楼（建筑工程学院）', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明专业教室、制图室或建筑工程学院各办公室门牌号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-TRAIN-JG', '建工实训中心', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明具体实训车间、模型制作室或实验室工位编号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-MEDICAL', '医学院与药学院教学区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明具体实验室、标本室或药学实训室门牌号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-ADMIN', '行政管理中心（行政楼）', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明各处室、会议室或公共区域具体门牌号与楼层', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-AFFAIRS', '学生综合事务服务中心', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明办事大厅窗口号、自助服务终端机位或办公区域', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-AUDITORIUM', '学术报告厅', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明报告厅编号、舞台设备、音响控制室或具体排座号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-GYM', '红体馆（室内综合体育馆）', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明篮球馆、羽毛球馆、器械训练区或看台具体位置', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-SWIMMING', '游泳馆', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明泳池区域、更衣室、淋浴间或设备机房具体位置', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-SPORTS', '西侧田径运动场与室外球场', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明田径跑道、足球场草坪、看台或成组室外球场编号', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-SQUARE', '英才广场与景观园区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明广场喷泉周边、绿化步道或靠近图书馆西侧具体灯杆/设施', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-JINXIU-DINE', '锦绣餐厅', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明就餐楼层（一楼/二楼/三楼）、档口编号或洗手池/餐具回收处', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-WENHUA-DINE', '文华餐厅', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明就餐大厅、具体风味档口或学生用餐区桌椅位置', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-CLINIC', '东校区医务室', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明诊室、药房、观察室或候诊走廊具体位置', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-SHUHUA-DORM', '书华楼学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明楼层公共走廊、洗漱间、开水房、吹风机位或楼道门窗', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-ZHIYUAN-DORM', '致远楼学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明楼层公共走廊、自习室、公共卫生间或单元门禁处', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-JINGYI-DORM', '静逸楼学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明公共活动室、楼层配电箱、消防通道或洗衣房', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-YUXIU-DORM', '毓秀楼学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明临水公共连廊、楼道照明、公共卫浴或开水设施', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-FENGHUA-DORM', '风华楼学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明内院公共设施、楼层过道、公共洗手池或楼梯间照明', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-H1-DORM', 'H1学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明单元门口、一层门厅、公共洗衣房或楼道公共照明', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-H2-DORM', 'H2学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明公共楼道、开水房、公共洗手间或外侧消防设施', 'CONFIGURED', TRUE, 0),
+  (1, 'EAST-H8-DORM', 'H8学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明H8主楼/副楼连接廊、各层公共卫生间或楼栋门禁', 'CONFIGURED', TRUE, 0),
+
+  (2, 'WEST-CHENGYI', '诚毅楼教学区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明具体楼层及普通教室/阶梯教室编号', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-LIB', '西校区图书馆', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明流通借阅室、自习室、电子阅览区及具体机位', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-EXPERIMENT', '西校区实验楼', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明专业实验室、仪器室或准备间具体门牌号', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-INFO', '科技信息楼', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明网络机房、多媒体控制室或具体研究室门牌号', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-TECH-CTR', '工程实训中心', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明工程训练车间、钳工/车工区或数控加工工位', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-AUTO-LAB', '汽车实训室', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明整车实训台位、发动机拆装台或检修车位编号', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-RAIL-LAB', '城轨实训室', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明模拟驾驶舱、轨道信号实训台或车厢实训设施', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-MINGDE', '明德楼教学区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明楼层教室、多媒体讲台或走廊公共设施', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-STEEL-DINE', '钢构餐厅与公共浴室', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明餐厅大厅、就餐档口、洗消间或东侧公共浴室设施', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-SIYUAN-DINE', '思源餐厅', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明就餐区楼层、档口编号或餐具回收点位置', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-SPORTS', '西校区田径运动场', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明田径跑道、足球场或室外篮球场具体场地编号', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-SQUARES', '国旗广场与文化广场', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明广场开阔步道、公共路灯照明或周边绿化设施', 'CONFIGURED', TRUE, 0),
+  (2, 'WEST-DORM-COMMON', '西校区学生公寓公共区', 'CAMPUS_PUBLIC', NULL, NULL, NULL, '请注明楼栋号（如4号、7号、11号、24号等）、楼层公共洗漱间或楼道门窗', 'CONFIGURED', TRUE, 0);

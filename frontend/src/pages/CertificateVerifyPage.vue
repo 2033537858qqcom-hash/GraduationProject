@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertCircle, CheckCircle2, Copy, Printer, Search, ShieldCheck } from '@lucide/vue'
+import { AlertCircle, CheckCircle2, Copy, Download, Search, ShieldCheck } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { useToast } from '../composables/useToast'
+import DownloadLink from '../components/DownloadLink.vue'
 
 interface VerificationResult {
   valid: boolean
@@ -79,10 +80,6 @@ async function copyShareLink() {
   }
 }
 
-function printReport() {
-  window.print()
-}
-
 onMounted(() => {
   const queryNum = String(route.query.number ?? route.query.code ?? '').trim()
   if (queryNum) {
@@ -99,10 +96,6 @@ watch(() => route.query.number, next => {
   }
 })
 
-const verifyYear = computed(() => {
-  if (!result.value?.issuedAt) return new Date().getFullYear()
-  return new Date(result.value.issuedAt).getFullYear()
-})
 </script>
 
 <template>
@@ -112,8 +105,8 @@ const verifyYear = computed(() => {
       <div class="verify-title-row">
         <ShieldCheck :size="32" class="shield-brand-icon" />
         <div>
-          <h1>在校证明防伪验真中心</h1>
-          <p class="muted">输入证明防伪编码或扫描证明二维码，核验学生在籍在校事实与数字存证信息</p>
+          <h1>在校证明核验</h1>
+          <p class="muted">输入证明编号或扫描二维码，查询平台中的演示证明记录。公开信息已脱敏。</p>
         </div>
       </div>
 
@@ -149,7 +142,7 @@ const verifyYear = computed(() => {
     <article v-if="result && result.valid" class="verify-card printable-sheet">
       <!-- Watermark background -->
       <div class="verify-watermark" aria-hidden="true">
-        <span>郑州工业应用技术学院 · 官方学籍备案核验</span>
+        <span>校园综合服务平台 · 毕业设计演示</span>
       </div>
 
       <!-- Card Top Bar -->
@@ -160,7 +153,7 @@ const verifyYear = computed(() => {
         </div>
         <div class="verify-badge-pill">
           <CheckCircle2 :size="15" />
-          <span>学籍备案核验通过</span>
+          <span>已匹配演示记录</span>
         </div>
       </div>
 
@@ -168,10 +161,10 @@ const verifyYear = computed(() => {
 
       <!-- Document Title -->
       <div class="verify-doc-title">
-        <h2>普通全日制在籍在校证明 · 数字化备案凭证</h2>
+        <h2>在校证明核验报告（演示）</h2>
         <div class="verify-meta-line">
           <span>防伪核验编号：<strong>{{ result.documentNumber }}</strong></span>
-          <span>签发归档时间：{{ formatTime(result.issuedAt) }}</span>
+          <span>生成时间：{{ formatTime(result.issuedAt) }}</span>
         </div>
       </div>
 
@@ -208,47 +201,28 @@ const verifyYear = computed(() => {
         <div class="verify-statement-text">
           <p class="statement-lead">核验证明结论：</p>
           <p>
-            经郑州工业应用技术学院校园综合服务平台数据中心比对，上述学生在校身份与学籍信息属实，审核流程完备，已完成学院学生事务办公室及学生处审核备案。
+            已在校园综合服务平台中匹配到已办结的演示证明记录。上方信息来自申请办理时的登记快照，姓名和学号已脱敏。
           </p>
           <p class="statement-legal">
-            本电子凭证与纸质在校证明具备同等核验效力。出具证明之日起 {{ verifyYear }} 年度内有效。
+            本报告用于毕业设计功能展示，不代表学校正式学籍认证、电子签章或官方存证，不替代学校正式证明。
           </p>
-        </div>
-
-        <!-- Authentic Red Digital Seal (SVG) -->
-        <div class="verify-seal-wrap" title="郑州工业应用技术学院学生事务电子专用章">
-          <svg class="official-seal-svg" viewBox="0 0 160 160">
-            <circle cx="80" cy="80" r="74" fill="none" stroke="#d32f2f" stroke-width="4.5" />
-            <circle cx="80" cy="80" r="70" fill="none" stroke="#d32f2f" stroke-width="1.2" stroke-dasharray="2 2" />
-            <polygon points="80,50 86,68 105,68 89,80 95,98 80,86 65,98 71,80 55,68 74,68" fill="#d32f2f" />
-            <path id="seal-text-path" d="M 22,80 A 58,58 0 1,1 138,80" fill="none" />
-            <text fill="#d32f2f" font-size="12.5" font-weight="bold" letter-spacing="2">
-              <textPath href="#seal-text-path" startOffset="50%" text-anchor="middle">
-                郑州工业应用技术学院
-              </textPath>
-            </text>
-            <text x="80" y="128" fill="#d32f2f" font-size="10.5" font-weight="bold" text-anchor="middle" letter-spacing="1">
-              学生事务电子专用章
-            </text>
-          </svg>
         </div>
       </div>
 
       <!-- Footer Note & Actions -->
       <footer class="verify-card-footer">
         <div class="audit-foot-info">
-          <span>防伪状态：<strong>加密数字防篡改已存证</strong></span>
-          <span>验真端点：Campus Digital Trust Gateway</span>
+          <span>记录状态：<strong>平台演示记录已办结</strong></span>
+          <span>下载 PDF 后可打开打印</span>
         </div>
         <div class="verify-actions no-print">
           <button class="button compact" @click="copyShareLink">
             <Copy :size="14" />
             <span>{{ copied ? '链接已复制' : '复制验真链接' }}</span>
           </button>
-          <button class="button primary compact" @click="printReport">
-            <Printer :size="14" />
-            <span>打印防伪报告</span>
-          </button>
+          <DownloadLink class="button primary compact" :href="`/api/public/certificates/report?number=${encodeURIComponent(result.documentNumber)}`" expected-type="application/pdf">
+            <Download :size="14" />下载报告 PDF
+          </DownloadLink>
         </div>
       </footer>
     </article>
@@ -258,8 +232,8 @@ const verifyYear = computed(() => {
       <div class="placeholder-icon-ring">
         <ShieldCheck :size="48" />
       </div>
-      <h3>官方防伪凭证核验</h3>
-      <p>若您持有由本校学生综合服务平台出具的《在校信息证明》，请输入证明左下方的防伪编码（如 <code>DEMO-20261017-000001</code>）进行真伪查验。</p>
+      <h3>演示证明记录查询</h3>
+      <p>请输入校园综合服务平台演示证明中的编号（如 <code>DEMO-20261017-000001</code>）进行真伪查验。</p>
     </div>
   </div>
 </template>
@@ -486,19 +460,6 @@ const verifyYear = computed(() => {
   margin-top: 8px;
 }
 
-.verify-seal-wrap {
-  width: 140px;
-  height: 140px;
-  flex-shrink: 0;
-  opacity: 0.92;
-  transform: rotate(-10deg);
-}
-
-.official-seal-svg {
-  width: 100%;
-  height: 100%;
-}
-
 .verify-card-footer {
   display: flex;
   justify-content: space-between;
@@ -511,7 +472,8 @@ const verifyYear = computed(() => {
 
 .audit-foot-info {
   display: flex;
-  gap: 20px;
+  gap: 10px 20px;
+  flex-wrap: wrap;
   font-size: 11px;
   color: var(--muted);
 }
@@ -519,6 +481,7 @@ const verifyYear = computed(() => {
 .verify-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .verify-placeholder {
@@ -564,10 +527,7 @@ const verifyYear = computed(() => {
 
 /* Print Friendly Styles */
 @media print {
-  .no-print,
-  .public-header,
-  .public-footer,
-  .school-navigation {
+  .no-print {
     display: none !important;
   }
   .verify-page {
@@ -591,6 +551,21 @@ const verifyYear = computed(() => {
   .verify-statement-row {
     flex-direction: column-reverse;
     align-items: flex-start;
+  }
+}
+</style>
+
+<style>
+@media print {
+  body:has(.verify-page) .public-site > :not(.public-main),
+  body:has(.verify-page) .public-main > :not(.verify-page),
+  body:has(.verify-page) .toast-container {
+    display: none !important;
+  }
+  body:has(.verify-page) .public-main {
+    padding: 0 !important;
+    min-height: 0 !important;
+    background: white !important;
   }
 }
 </style>

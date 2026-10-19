@@ -215,6 +215,25 @@ class CertificateIntegrationTest {
         assertThat(validVerify.path("studentName").asText()).contains("*");
         assertThat(validVerify.path("departmentName").asText()).isNotEmpty();
 
+        var report=anon.bytes("/api/public/certificates/report?number="+documentNumber);
+        assertThat(report.statusCode()).isEqualTo(200);
+        assertThat(report.headers().firstValue("Content-Type").orElse("")).contains("application/pdf");
+        assertThat(report.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+        assertThat(report.headers().firstValue("Content-Disposition").orElse("")).contains("attachment", "filename*");
+        try(var document=Loader.loadPDF(report.body())) {
+            var text=new PDFTextStripper().getText(document);
+            assertThat(text).contains(documentNumber,"演**生","毕业设计").doesNotContain("演示学生", f.student(), "验真测试");
+            assertThat(text.replaceAll("\\s+", "")).contains("不替代学校正式证明");
+            assertThat(document.getNumberOfPages()).isEqualTo(1);
+        }
+        java.nio.file.Files.write(java.nio.file.Path.of("target/certificate-verification-report.pdf"),report.body());
+        assertThat(anon.bytes("/api/public/certificates/report?number=INVALID-12345").statusCode()).isEqualTo(404);
+        var draft=create(student,"未完成不可公开");
+        assertThat(anon.bytes("/api/public/certificates/report?number=DEMO-DRAFT-"+id(draft)).statusCode()).isEqualTo(404);
+        var privateFile=student.bytes(root+"mine/"+id(completed)+"/result");
+        assertThat(privateFile.statusCode()).isEqualTo(200);
+        assertThat(anon.bytes(root+"mine/"+id(completed)+"/result").statusCode()).isEqualTo(401);
+
         var invalidVerify=anon.tree("/api/public/certificates/verify?number=INVALID-12345");
         assertThat(invalidVerify.path("valid").asBoolean()).isFalse();
     }

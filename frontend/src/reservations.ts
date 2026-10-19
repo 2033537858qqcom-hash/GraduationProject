@@ -186,6 +186,11 @@ export async function getDetail(id: number): Promise<ReservationDetail> {
   return api<ReservationDetail>('/reservations/' + id)
 }
 
+export function reservationPassUrl(id: number, inline = false): string {
+  if (!Number.isSafeInteger(id) || id < 1) throw new Error('借用申请编号无效，请刷新后重试')
+  return `/api/reservations/${id}/pass${inline ? '?inline=true' : ''}`
+}
+
 export async function saveDraft(cmd: CreateReservationCommand): Promise<ReservationDetail> {
   return api<ReservationDetail>('/reservations/draft', {
     method: 'POST',

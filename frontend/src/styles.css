@@ -302,6 +302,14 @@ svg { flex-shrink: 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 /* Public university website */
+/* Homepage full-viewport lock: eliminates page-level vertical scrollbar */
+html.homepage-locked,
+body.homepage-locked {
+  height: 100svh;
+  max-height: 100svh;
+  overflow: hidden;
+}
+
 .public-site {
   --brand: #244b78;
   --muted: #667581;
@@ -314,6 +322,41 @@ svg { flex-shrink: 0; }
   min-height: 100svh;
   background: var(--site-surface);
   color: var(--site-ink);
+}
+.public-site.is-homepage {
+  height: 100svh;
+  max-height: 100svh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.public-site.is-homepage .public-header {
+  flex-shrink: 0;
+}
+.public-site.is-homepage .homepage-main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+.homepage-stage-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+.homepage-stage-wrap .chapter-stage {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  max-height: 100%;
+}
+.homepage-stage-wrap .chapter-progress {
+  flex-shrink: 0;
 }
 .public-header { position: sticky; top: 0; z-index: 30; background: var(--site-surface); }
 .school-brand-row { display: flex; align-items: center; gap: 25px; min-height: 100px; padding-block: 6px; }
@@ -350,7 +393,7 @@ svg { flex-shrink: 0; }
 }
 .chapter-stage { position: relative; height: clamp(560px,calc(100svh - 150px),780px); overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
 .chapter-stage::-webkit-scrollbar { display: none; }
-.campus-chapter { position: relative; min-height: 100%; overflow: clip; }
+.campus-chapter { position: relative; min-height: 100%; height: 100%; box-sizing: border-box; overflow: clip; }
 .hero-chapter { color: #fff; height: 100%; background: #193651; isolation: isolate; }
 .hero-slides { position: absolute; inset: 0; z-index: -2; }
 .hero-slide { position: absolute; inset: 0; background-size: cover; background-position: 65% center; opacity: 0; transition: opacity 1200ms ease; }
@@ -379,7 +422,7 @@ svg { flex-shrink: 0; }
   .chapter-education .chapter-cloud { width: 175px; left: -25px; top: auto; bottom: 12px; --culture-opacity: .14; }
   .chapter-education > .chapter-body { padding-bottom: 100px; }
 }
-.chapter-body { min-height: clamp(560px,calc(100svh - 150px),780px); padding-block: 82px 44px; display: flex; flex-direction: column; justify-content: center; gap: 28px; opacity: .4; transform: translateY(20px); transition: opacity 700ms ease,transform 900ms cubic-bezier(.22,1,.36,1); }
+.chapter-body { min-height: 100%; height: 100%; box-sizing: border-box; padding-block: 76px 36px; display: flex; flex-direction: column; justify-content: center; gap: 24px; opacity: .4; transform: translateY(20px); transition: opacity 700ms ease,transform 900ms cubic-bezier(.22,1,.36,1); }
 .theme-chapter.is-active .chapter-body, .chapter-body:focus-within { opacity: 1; transform: none; }
 .chapter-body.split, .chapter-body.directory-layout { display: grid; grid-template-columns: .82fr 1.18fr; align-items: center; gap: 5%; }
 .directory-layout .chapter-title { font-size: clamp(34px,4vw,56px); }
@@ -928,8 +971,8 @@ svg { flex-shrink: 0; }
   .school-navigation.expanded, .public-header.over-photo .school-navigation.expanded { display: block; position: static; background: var(--site-surface); color: var(--brand); border-bottom-color: var(--line); }
   .school-navigation a[aria-current="location"]::after { background: currentColor; }
   .school-navigation > div { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); }
-  .school-navigation a { min-height: 44px; padding: 12px 5px; text-align: center; font-size: 12px; }
   .chapter-stage { height: max(550px,calc(100svh - 150px)); }
+  .homepage-stage-wrap .chapter-stage { height: 100% !important; min-height: 0 !important; }
   .hero-copy h1 { font-size: clamp(34px,8vw,48px); letter-spacing: 2px; line-height: 1.6; }
   .hero-copy p { max-width: 85%; line-height: 2; font-size: 12px; }
   .hero-controls { align-items: flex-end; gap: 15px; }
@@ -1078,6 +1121,18 @@ svg { flex-shrink: 0; }
   display: grid;
   place-items: center;
   flex-shrink: 0;
+}
+.confirmation-dialog .dialog-icon-badge.warning {
+  background: #fffbeb;
+  color: #d97706;
+}
+.confirmation-dialog .dialog-icon-badge.error {
+  background: #fef2f2;
+  color: #dc2626;
+}
+.confirmation-dialog .dialog-icon-badge.info {
+  background: #eff6ff;
+  color: #2563eb;
 }
 .confirmation-dialog h2 {
   font-size: 17px;

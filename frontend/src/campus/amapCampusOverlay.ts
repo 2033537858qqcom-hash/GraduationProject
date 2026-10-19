@@ -3,8 +3,14 @@ import { buildCampus } from './buildCampus'
 import type { AMapInstance, AMapSdk } from './amapSdk'
 import { campusGeoAnchors, campusMapCenter, fitAffine } from './georeference'
 import { campusPlaces } from './manifest'
+import { westMapPlaces as westCampusPlaces, westCampusMeta } from './westCampusMapData'
+import { westGeoAnchors } from './westCampusLayout'
+import type { CampusId } from './campusSceneData'
 
-export function addCampusOverlay(AMap: AMapSdk, map: AMapInstance, host: HTMLElement, status: (ready: boolean) => void) {
+export function addCampusOverlay(AMap: AMapSdk, map: AMapInstance, host: HTMLElement, status: (ready: boolean) => void, campusId: CampusId = 'EAST') {
+  const anchors = campusId === 'WEST' ? westGeoAnchors : campusGeoAnchors
+  const center = campusId === 'WEST' ? westCampusMeta.center : campusMapCenter
+  const places = campusId === 'WEST' ? westCampusPlaces : campusPlaces
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera()
   const root = new THREE.Group(); root.visible = false; scene.add(root)
   const ambient = new THREE.AmbientLight('#ffffff', 2)
@@ -21,16 +27,16 @@ export function addCampusOverlay(AMap: AMapSdk, map: AMapInstance, host: HTMLEle
   const layer = new AMap.GLCustomLayer({
     zIndex: 120,
     init() {
-      if (disposed || renderer || campusGeoAnchors.length !== 3) return
+      if (disposed || renderer || anchors.length !== 3) return
       try {
         const coords = map.customCoords
-        coords.setCenter(campusMapCenter)
-        const fit = fitAffine(campusGeoAnchors.map(a => a.model), coords.lngLatsToCoords(campusGeoAnchors.map(a => a.lnglat)))
+        coords.setCenter(center)
+        const fit = fitAffine(anchors.map(a => a.model), coords.lngLatsToCoords(anchors.map(a => a.lnglat)))
         const [[a, b, c], [d, e, f]] = fit.rows
         root.matrixAutoUpdate = false
         // Campus models are Y-up; AMap's shared world is Z-up.
         root.matrix.set(a, 0, b, c, d, 0, e, f, 0, fit.scale, 0, 0, 0, 0, 0, 1)
-        model = buildCampus(root, { includeContext: false })
+        model = buildCampus(root, { includeContext: false, campusId, representation: 'geographic' })
         root.updateMatrixWorld(true)
         // AMap may supply WebGL 1; current Three.js requires WebGL 2. Keep an
         // independent transparent canvas and synchronize the official map camera.
@@ -38,7 +44,7 @@ export function addCampusOverlay(AMap: AMapSdk, map: AMapInstance, host: HTMLEle
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
         renderer.setClearColor(0x000000, 0)
         renderer.domElement.className = 'campus-map-model-canvas'
-        Object.assign(renderer.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', zIndex: '2', pointerEvents: 'none', display: 'none' })
+        Object.assign(renderer.domElement.style, { position: 'absolute', inset: '0', width: '100%', height: '100%', zIndex: '2', pointerEvents: 'none', display: root.visible ? 'block' : 'none' })
         renderer.domElement.setAttribute('aria-hidden', 'true')
         renderer.domElement.addEventListener('webglcontextlost', contextLost)
         host.appendChild(renderer.domElement)
@@ -50,7 +56,7 @@ export function addCampusOverlay(AMap: AMapSdk, map: AMapInstance, host: HTMLEle
     render() {
       if (!renderer || failed || disposed || !root.visible) return
       try {
-        map.customCoords.setCenter(campusMapCenter)
+        map.customCoords.setCenter(center)
         const { near, far, fov, up, position, lookAt } = map.customCoords.getCameraParams()
         camera.near = Math.min(near, 0.8); camera.far = Math.max(far, 3500); camera.fov = fov
         camera.aspect = Math.max(1, host.clientWidth) / Math.max(1, host.clientHeight)
@@ -66,7 +72,7 @@ export function addCampusOverlay(AMap: AMapSdk, map: AMapInstance, host: HTMLEle
   })
   map.add(layer)
   return {
-    select(id: string | null) { model?.select(campusPlaces.find(p => p.id === id)); if (renderer && !failed) map.render() },
+    select(id: string | null) { model?.select(places.find(p => p.id === id)); if (renderer && !failed) map.render() },
     visible(value: boolean) {
       root.visible = value && !failed
       if (renderer) { renderer.domElement.style.display = root.visible ? 'block' : 'none'; if (!failed) map.render() }

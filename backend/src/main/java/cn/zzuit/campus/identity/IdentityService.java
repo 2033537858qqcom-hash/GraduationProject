@@ -49,7 +49,7 @@ public class IdentityService implements UserDetailsService {
 
     public Profile profile(long id) {
         return jdbc.sql("""
-            SELECT u.id,u.username,u.full_name,u.identity_number,u.demo,
+            SELECT u.id,u.username,u.full_name,u.identity_number,u.demo,u.avatar_url,
                    c.name campus_name,d.name department_name,cg.name class_name
             FROM app_user u
             LEFT JOIN campus c ON c.id=u.campus_id
@@ -59,10 +59,22 @@ public class IdentityService implements UserDetailsService {
             """).param("id", id).query((rs, row) -> new Profile(rs.getLong("id"),
                 rs.getString("username"), rs.getString("full_name"), rs.getString("identity_number"),
                 rs.getString("campus_name"), rs.getString("department_name"), rs.getString("class_name"),
-                rs.getBoolean("demo"), roles(id), permissions(id))).single();
+                rs.getString("avatar_url"), rs.getBoolean("demo"), roles(id), permissions(id))).single();
+    }
+
+    public Profile updateAvatar(long userId, String avatarUrl) {
+        jdbc.sql("UPDATE app_user SET avatar_url=:avatarUrl WHERE id=:id AND enabled=TRUE")
+            .param("avatarUrl", avatarUrl).param("id", userId).update();
+        return profile(userId);
+    }
+
+    public Profile removeAvatar(long userId) {
+        jdbc.sql("UPDATE app_user SET avatar_url=NULL WHERE id=:id AND enabled=TRUE")
+            .param("id", userId).update();
+        return profile(userId);
     }
 
     public record Profile(long id, String username, String fullName, String identityNumber,
                           String campusName, String departmentName, String className,
-                          boolean demo, List<String> roles, List<String> permissions) {}
+                          String avatarUrl, boolean demo, List<String> roles, List<String> permissions) {}
 }

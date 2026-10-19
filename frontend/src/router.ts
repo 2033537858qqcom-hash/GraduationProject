@@ -72,8 +72,10 @@ export const router = createRouter({
 })
 
 router.beforeEach(async to => {
+  // The recovery page must remain reachable while the backend is starting or unavailable.
+  if (to.path === '/unavailable') return
   if (to.meta.authenticated || to.path === '/login') {
-    try { await restoreSession() } catch { return '/unavailable' }
+    try { await restoreSession() } catch { return { path: '/unavailable', query: { redirect: to.fullPath } } }
   } else {
     try { await restoreSession() } catch { /* Ignore network errors for public site */ }
   }

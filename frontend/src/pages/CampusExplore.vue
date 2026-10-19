@@ -1,28 +1,34 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, BedDouble, Boxes, Building2, CalendarCheck, Check, CloudSun, Compass, Dumbbell, Layers, LocateFixed, MapPin, Minus, Moon, Plus, Search, Stethoscope, Sun, Tag, Trees, Utensils, X } from '@lucide/vue'
 import { campusCategories, campusPlaces, campusTour } from '../campus/manifest'
 import type { CampusCategory, CampusPlace } from '../campus/manifest'
 import { createCampusScene } from '../campus/createCampusScene'
 import type { CampusView, PlaceLabel } from '../campus/createCampusScene'
 import { campusEvidence } from '../campus/eastCampusLayout'
-import { westCampusMeta, eastCampusMeta, westCampusPlaces, westCampusTour } from '../campus/westCampusData'
+import { westCampusMeta, eastCampusMeta, westCampusPlaces, westCampusTour, westUnlocatedBuildings, westMapPlaces, westMapTour } from '../campus/westCampusData'
+import { westPlanEvidence } from '../campus/westCampusPlan'
 import { createAMapCampusScene } from '../campus/createAMapCampusScene'
+import { loadAMap } from '../campus/amapSdk'
 
 const route = useRoute()
+const router = useRouter()
 const surface = ref<HTMLDivElement>()
 const mapKey = import.meta.env.VITE_AMAP_KEY ?? ''
 const mapConfigured = /^[a-f\d]{32}$/i.test(mapKey)
-const mode = ref<'map' | 'model'>(mapConfigured ? 'map' : 'model')
+const requestedNavigation = typeof route.query.navigate === 'string' ? route.query.navigate : ''
+const referenceOnlyNavigation = westCampusPlaces.some(p=>p.id===requestedNavigation) && !westMapPlaces.some(p=>p.id===requestedNavigation)
+const mode = ref<'map' | 'model'>(mapConfigured && route.query.view !== 'model' && !referenceOnlyNavigation ? 'map' : 'model')
 
 // Dual campus state
 const initialQueryCampus = (route.query.campus === 'WEST' || (typeof route.query.navigate === 'string' && route.query.navigate.startsWith('west-'))) ? 'WEST' : 'EAST'
 const currentCampus = ref<'EAST' | 'WEST'>(initialQueryCampus)
 const activeMeta = computed(() => currentCampus.value === 'WEST' ? westCampusMeta : eastCampusMeta)
-const activeCampusPlaces = computed(() => currentCampus.value === 'WEST' ? westCampusPlaces : campusPlaces)
-const activeTour = computed(() => currentCampus.value === 'WEST' ? westCampusTour : campusTour)
-const allPlaces = computed(() => [...campusPlaces, ...westCampusPlaces])
+const activeWestPlaces = computed(() => mode.value === 'model' ? westCampusPlaces : westMapPlaces)
+const activeCampusPlaces = computed(() => currentCampus.value === 'WEST' ? activeWestPlaces.value : campusPlaces)
+const activeTour = computed(() => currentCampus.value === 'WEST' ? mode.value === 'model' ? westCampusTour : westMapTour : campusTour)
+const allPlaces = computed(() => [...campusPlaces, ...activeWestPlaces.value])
 
 // 2.5D Vector default settings (satellite defaults to false as preferred by user)
 const is25D = ref(true)
@@ -33,6 +39,27 @@ const modelReady = ref(false), buildings = ref(false)
 const calibration = import.meta.env.DEV && new URLSearchParams(window.location.search).has('calibrate')
 const calibrationCoordinate = ref('在地图上点击实物参照点')
 const calibrationX = ref(0), calibrationY = ref(0)
+const surveyQuery = ref('郑州工业应用技术学院')
+const surveyOutput = ref(''), surveyLoading = ref(false)
+async function surveyPlaces() {
+  if (!calibration || surveyLoading.value) return
+  surveyLoading.value = true
+  try {
+    const sdk = await loadAMap(mapKey)
+    if (!sdk.PlaceSearch) await new Promise<void>(resolve => sdk.plugin?.(['AMap.PlaceSearch'], resolve))
+    if (!sdk.PlaceSearch) throw new Error('地点检索插件未加载')
+    const search = new sdk.PlaceSearch({ city: '新郑', citylimit: true, pageSize: 50, extensions: 'base' })
+    const response = await new Promise<{ status: string; result: import('../campus/amapSdk').AMapSearchResult }>(resolve => {
+      const done = (status: string, result: import('../campus/amapSdk').AMapSearchResult) => resolve({ status, result })
+      if (/^B[A-Z0-9]+$/.test(surveyQuery.value)) search.getDetails(surveyQuery.value, done)
+      else search.searchNearBy(surveyQuery.value, activeMeta.value.center, 1000, done)
+    })
+    surveyOutput.value = JSON.stringify({ status: response.status, info: response.result.info, count: response.result.poiList?.count,
+      pois: response.result.poiList?.pois.map(poi => ({ id: poi.id, name: poi.name, address: poi.address, type: poi.type,
+        lnglat: [poi.location.getLng(), poi.location.getLat()] })) }, null, 2)
+  } catch (reason) { surveyOutput.value = reason instanceof Error ? reason.message : '检索失败' }
+  finally { surveyLoading.value = false }
+}
 const error = ref(''), loading = ref(true), search = ref('')
 const category = ref<CampusCategory | 'all'>('all')
 const selected = ref<string | null>(null)
@@ -58,7 +85,8 @@ const categoryNames = { learning: '校园楼宇', housing: '学生公寓', servi
 const relatedPlace = computed(() => allPlaces.value.find(place => place.id === currentPlace.value?.relatedPlaceId))
 
 function placeIcon(place: CampusPlace) {
-  if (['east-jinxiu-dining', 'east-canteen-wenhua', 'west-canteen'].includes(place.id)) return Utensils
+  if (place.id.startsWith('west-road-')) return Compass
+  if (['east-jinxiu-dining', 'east-canteen-wenhua', 'west-canteen', 'west-steel-canteen', 'west-siyuan-canteen', 'west-food-street'].includes(place.id)) return Utensils
   if (place.id === 'east-clinic') return Stethoscope
   return categoryIcons[place.category]
 }
@@ -82,9 +110,10 @@ function overview() {
   }
 }
 
-function switchCampus(campus: 'EAST' | 'WEST') {
+function switchCampus(campus: 'EAST' | 'WEST', preserveNavigation = false) {
   if (currentCampus.value === campus) return
   currentCampus.value = campus
+  void router.replace({ query: { ...route.query, campus, navigate: preserveNavigation ? route.query.navigate : undefined } })
   selected.value = null
   tourStep.value = null
   category.value = 'all'
@@ -93,8 +122,7 @@ function switchCampus(campus: 'EAST' | 'WEST') {
     routeActive.value = false
     scene?.clearRoute?.()
   }
-  if (mode.value === 'model' && campus === 'WEST') {
-    mode.value = 'map'
+  if (mode.value === 'model') {
     void initScene()
     return
   }
@@ -113,15 +141,18 @@ function toggleRoute() {
 
 function applyNavigation(navId: string | null) {
   if (!navId) return
+  const referencePlace=westCampusPlaces.some(p=>p.id===navId), mapPlace=westMapPlaces.some(p=>p.id===navId)
+  if(mode.value==='map' && referencePlace && !mapPlace) { changeMode('model',true); return }
+  if(mode.value==='model' && mapPlace && !referencePlace && mapConfigured) { changeMode('map',true); return }
   const place = allPlaces.value.find(p => p.id === navId)
   if (place) {
     if (place.campusId && place.campusId !== currentCampus.value) {
-      currentCampus.value = place.campusId
-      scene?.switchCampus?.(place.campusId)
+      switchCampus(place.campusId, true)
+      if (mode.value === 'model') { selected.value = place.id; return }
     }
     locate(place.id)
-    routeActive.value = true
-    scene?.planRoute?.(place.id)
+    routeActive.value = mode.value === 'map'
+    if (routeActive.value) scene?.planRoute?.(place.id)
   }
 }
 
@@ -141,9 +172,13 @@ function setSatellite() {
   scene?.setSatellite?.(satellite.value)
 }
 function setBuildings() { buildings.value = !buildings.value; scene?.setBuildings?.(buildings.value) }
-function changeMode(next: 'map' | 'model') {
-  if (currentCampus.value === 'WEST' && next === 'model') return
-  if (next !== mode.value) { mode.value = next; void initScene() }
+function changeMode(next: 'map' | 'model', preserveNavigation = false) {
+  if (next !== mode.value) {
+    routeActive.value = false; selected.value = null; tourStep.value = null; search.value = ''; mode.value = next
+    void router.replace({ query: { ...route.query, campus: currentCampus.value, view: next === 'model' ? 'model' : undefined,
+      navigate:preserveNavigation?route.query.navigate:undefined } })
+    void initScene()
+  }
 }
 function tour(step: number) {
   tourStep.value = Math.max(0, Math.min(activeTour.value.length - 1, step))
@@ -172,7 +207,7 @@ async function initScene() {
         onCalibration: calibration ? coordinate => { calibrationCoordinate.value = coordinate } : undefined,
         onModelStatus: ready => { if (run === generation) modelReady.value = ready },
       })
-      : createCampusScene(host, callbacks)
+      : createCampusScene(host, callbacks, { campusId: currentCampus.value })
     if (run !== generation) { created.dispose(); host.remove(); return }
     scene = created
     scene.setEvening(evening.value)
@@ -204,8 +239,12 @@ watch(() => route.query.navigate, newNav => {
 
 watch(() => route.query.campus, newCampus => {
   if (newCampus === 'WEST' || newCampus === 'EAST') {
-    switchCampus(newCampus)
+    switchCampus(newCampus, true)
   }
+})
+watch(() => route.query.view, next => {
+  const target = mapConfigured && next !== 'model' ? 'map' : 'model'
+  if (target !== mode.value) changeMode(target,true)
 })
 
 onMounted(initScene)
@@ -257,8 +296,7 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
             <button :aria-pressed="mode === 'map'" @click="changeMode('map')">2.5D高德地图</button>
             <button
               :aria-pressed="mode === 'model'"
-              :disabled="currentCampus === 'WEST'"
-              :title="currentCampus === 'WEST' ? '西校区3D沙盘测绘中，推荐使用高德2.5D地图漫游' : '切换校园三维沙盘'"
+              title="切换当前校区的三维沙盘"
               @click="changeMode('model')"
             >
               独立沙盘
@@ -305,7 +343,7 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
               </button>
             </template>
 
-            <button v-if="mode === 'map' && modelReady && currentCampus === 'EAST'" :disabled="loading || !!error" :aria-pressed="buildings" aria-label="显示立体建筑沙盘" title="立体建筑沙盘" @click="setBuildings"><Building2 :size="15" /><span>精细沙盘</span></button>
+            <button v-if="mode === 'map' && modelReady" :disabled="loading || !!error" :aria-pressed="buildings" aria-label="显示立体建筑沙盘" title="立体建筑沙盘" @click="setBuildings"><Building2 :size="15" /><span>建筑沙盘</span></button>
             <button :aria-pressed="showLabels" :disabled="!!error" aria-label="显示地点名称" title="地点名称" @click="showLabels = !showLabels"><Tag :size="15" /></button>
             <button :aria-pressed="evening" :disabled="loading || !!error" :aria-label="evening ? '切换日景' : '切换暮色'" :title="evening ? '日景' : '暮色'" @click="setEvening"><Sun v-if="evening" :size="16" /><Moon v-else :size="16" /></button>
           </div>
@@ -335,10 +373,10 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
                   : (is25D
                       ? (currentCampus === 'WEST' ? '高德 2.5D 矢量底图 · 西校区立体建筑' : '高德 2.5D 矢量底图 · 东校区立体建筑')
                       : (currentCampus === 'WEST' ? '高德矢量底图 · 西校区平面' : '高德矢量底图 · 东校区平面')))
-              : '校园轮廓示意 · 高度未实测' }}
+              : currentCampus === 'WEST' ? '校内平面图沙盘 · 非等比例 · 高度未实测' : '校园轮廓示意 · 高度未实测' }}
           </div>
           <div v-if="view === 'top' && mode === 'model'" class="north-indicator" aria-label="俯视图上方为北">↑<span>北</span></div>
-          <div v-if="calibration && mode === 'map'" class="calibration-panel"><label>地图校准坐标（仅开发环境）<output>{{ calibrationCoordinate }}</output></label><div class="calibration-pixels"><input v-model.number="calibrationX" type="number" aria-label="参照点画布X" /><input v-model.number="calibrationY" type="number" aria-label="参照点画布Y" /><button @click="scene?.readCoordinate?.(calibrationX, calibrationY)">读取坐标</button></div></div>
+          <div v-if="calibration && mode === 'map'" class="calibration-panel"><label>地图校准坐标（仅开发环境）<output>{{ calibrationCoordinate }}</output></label><div class="calibration-pixels"><input v-model.number="calibrationX" type="number" aria-label="参照点画布X" /><input v-model.number="calibrationY" type="number" aria-label="参照点画布Y" /><button @click="scene?.readCoordinate?.(calibrationX, calibrationY)">读取坐标</button></div><div class="calibration-pixels"><input v-model="surveyQuery" aria-label="高德校准检索词" /><button :disabled="surveyLoading" @click="surveyPlaces">{{ surveyLoading ? '检索中' : '检索高德地点' }}</button></div><pre v-if="surveyOutput" class="survey-output" aria-label="高德地点校准结果">{{ surveyOutput }}</pre></div>
           <div class="zoom-options" role="group" aria-label="缩放场景"><button aria-label="放大场景" :disabled="loading || !!error" @click="scene?.zoom('in')"><Plus :size="17" /></button><button aria-label="缩小场景" :disabled="loading || !!error" @click="scene?.zoom('out')"><Minus :size="17" /></button></div>
           <div v-if="tourStep !== null && !error" class="exploration-tour" aria-label="校园分步导览">
             <button aria-label="上一个导览地点" :disabled="tourStep === 0" @click="tour(tourStep - 1)"><ArrowLeft :size="16" /></button>
@@ -374,7 +412,7 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
 
       <aside class="exploration-directory" aria-label="校园地点目录">
         <div class="directory-heading">
-          <h2>发现校园 · {{ currentCampus === 'WEST' ? '西区' : '东区' }}</h2>
+          <h2>{{ currentCampus === 'WEST' ? mode === 'model' ? '校园分布 · 西区' : '地图收录 · 西区' : '发现校园 · 东区' }}</h2>
           <span>{{ activeCampusPlaces.length }} 处地点</span>
         </div>
         <label class="exploration-search"><Search :size="16" /><input v-model="search" aria-label="搜索校园地点" placeholder="搜索建筑、景观或设施" /><button v-if="search" aria-label="清空搜索" @click="search = ''"><X :size="14" /></button></label>
@@ -393,29 +431,36 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
 
           <button v-if="mode === 'map'" class="route-btn" :class="{ active: routeActive }" @click="toggleRoute">
             <Compass :size="13" />
-            <span>{{ routeActive ? '清除校内路线' : (currentCampus === 'WEST' ? '从西校区主大门规划步行路线' : '从正门规划步行路线') }}</span>
+            <span>{{ routeActive ? '清除校内路线' : (currentCampus === 'WEST' ? '从校区停车场规划步行路线' : '从正门规划步行路线') }}</span>
           </button>
           <button v-if="relatedPlace" class="related-place" @click="locate(relatedPlace.id)">同组团地点：{{ relatedPlace.name }}<ArrowRight :size="12" /></button>
           <router-link to="/portal/reservations" class="reserve-btn"><CalendarCheck :size="13" /><span>场地预约服务</span><ArrowRight :size="12" /></router-link>
-          <small>{{ currentPlace.locationType === 'point' ? '符号表示图示位置，未确认独立楼体轮廓、楼层或入口。' : '建筑轮廓与功能分区为示意，高度和楼层未实测；可用场地以预约服务中的清单为准。' }}</small>
-          <a class="place-source" :href="currentPlace.sourceUrl" target="_blank" rel="noopener noreferrer">{{ currentPlace.verification === 'reference-located' ? '查看高德地图定位' : '对照实景地图轮廓' }}<ArrowRight :size="12" /></a>
+          <small>{{ currentPlace.campusId === 'WEST' ? mode === 'model' ? '名称与位置关系依据校内平面示意图，楼体为图示块体；不是测绘轮廓，未赋予精确地图坐标。' : '位置依据高德收录，可能含历史或重名记录；请同时对照校内平面图。' : currentPlace.locationType === 'point' ? '符号表示图示位置，未确认独立楼体轮廓、楼层或入口。' : '建筑轮廓与功能分区为示意，高度和楼层未实测；可用场地以预约服务中的清单为准。' }}</small>
+          <a class="place-source" :href="currentPlace.sourceUrl" target="_blank" rel="noopener noreferrer">{{ currentPlace.campusId === 'WEST' ? mode === 'model' ? '对照西校区平面图' : '查看高德地点来源' : currentPlace.verification === 'reference-located' ? '查看高德地图定位' : '对照实景地图轮廓' }}<ArrowRight :size="12" /></a>
         </div>
         <div v-else-if="currentCampus === 'WEST'" class="west-intro-box">
           <div class="west-intro-tag">西校区概况</div>
-          <h4>新村校区 · 产教工科实践重地</h4>
-          <p>西校区位于新郑市新村镇107国道路东，涵盖现代化教学楼群、3号实验实训中心、图书馆分馆、多层郑工餐厅、学生生活园区及标准田径场，是大一新生基础教学与工科实践的重要基地。</p>
+          <h4>教学实践与校园生活</h4>
+          <p v-if="mode === 'model'">按校内平面图补充图书馆、诚毅楼、科技信息楼、工程与实训区、学生公寓及两处餐厅。明德楼内教室、宿舍、医务室以同一楼体关联展示。</p>
+          <p v-else>这里展示高德收录的地点与坐标。完整楼宇分布可切换独立沙盘查看；两类资料的重名、历史标注分别保留。</p>
+          <a :href="westPlanEvidence.url" class="west-plan-link" target="_blank" rel="noopener noreferrer">查看西校区平面图<ArrowRight :size="12" /></a>
           <div class="west-intro-details">
             <div class="west-detail-row"><MapPin :size="12" /><span>新郑市新村镇107国道路东</span></div>
-            <div class="west-detail-row"><Compass :size="12" /><span>高德基准：113.7121°E, 34.4296°N</span></div>
+            <div class="west-detail-row"><Compass :size="12" /><span>{{ mode === 'model' ? '图示上方为北 · 平面图未注明编制时间' : '地图坐标依据高德收录信息' }}</span></div>
           </div>
         </div>
         <div v-else class="exploration-intro"><img :src="campusEvidence.layoutReferenceUrl" alt="东校区校园建筑分布图" /><p>楼名和功能分布参考校内分布图，建筑外轮廓参考留存卫星影像。H1、H2 为学生公寓图示位置点，楼体轮廓尚待对应。</p><a :href="campusEvidence.layoutReferenceUrl" target="_blank" rel="noopener noreferrer">查看校园分布图<ArrowRight :size="12" /></a></div>
+        <details v-if="currentCampus === 'WEST'" class="pending-buildings">
+          <summary>名称待核对 <span>{{ westUnlocatedBuildings.length }}</span></summary>
+          <p>其他学校资料提及、而本张平面图未单独标出的名称，暂不与图中楼宇直接合并。</p>
+          <a v-for="item in westUnlocatedBuildings" :key="item.name" :href="item.source" target="_blank" rel="noopener noreferrer">{{ item.name }}<ArrowRight :size="12" /></a>
+        </details>
       </aside>
     </div>
     <div class="exploration-footnote">
-      <span><span class="footnote-mark"></span>{{ currentCampus === 'WEST' ? '西校区地标经纬度基于高德地图 GCJ-02 坐标体系实测收录，建筑高度与楼层未实测，场景不用于现场施工。' : '分布图未注明编制日期。楼层、高度和入口尚待现场资料核对，场景不用于实地导航。' }}</span>
+      <span><span class="footnote-mark"></span>{{ currentCampus === 'WEST' ? mode === 'model' ? '西校区平面图提供楼名与相对位置；场景非等比例，高度、楼层和入口未实测，不用于实地导航。' : '高德收录坐标与校内平面图分别呈现；地图可能含历史名称，建筑叠加仅使用卫星影像轮廓。' : '分布图未注明编制日期。楼层、高度和入口尚待现场资料核对，场景不用于实地导航。' }}</span>
       <a v-if="currentCampus === 'EAST'" :href="campusEvidence.layoutReferenceUrl" target="_blank" rel="noopener noreferrer">对照校园分布图<ArrowRight :size="13" /></a>
-      <span v-else class="campus-footnote-tag">高德 2.5D 矢量底图支持</span>
+      <span v-else class="campus-footnote-tag">{{ mode === 'model' ? '西校区独立沙盘' : '高德地图 · 西校区' }}</span>
     </div>
   </div>
 </template>
@@ -498,11 +543,13 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
 .exploration-canvas :deep(.sandbox-host canvas) { display: block; width: 100%; height: 100%; cursor: grab; }
 .exploration-canvas :deep(.sandbox-host canvas:active) { cursor: grabbing; }
 .map-mode .model-caption { background: #ffffffeb; padding: 6px 8px; border-radius: 3px; color: #405563; z-index: 2; }
-.calibration-panel { position: absolute; left: 12px; bottom: 50px; z-index: 3; background: #fff; padding: 8px; font-size: 11px; }
+.calibration-panel { position: fixed; right: 12px; bottom: 12px; z-index: 20; background: #fff; padding: 8px; font-size: 11px; border: 1px solid #ccd8df; }
 .calibration-panel output { display: block; user-select: all; margin-top: 5px; }
 .calibration-pixels { display: flex; gap: 5px; margin-top: 5px; }
 .calibration-pixels input { width: 55px; padding: 3px; }
 .calibration-pixels button { font-size: 10px; border: 1px solid #ccd8df; background: #eef3f6; }
+.calibration-pixels input[aria-label="高德校准检索词"] { width: 190px; }
+.survey-output { max-width: 370px; max-height: 180px; overflow: auto; white-space: pre-wrap; user-select: text; }
 .fallback-sandbox { margin-top: 14px; border: 0; background: transparent; color: var(--brand); font-size: 12px; }
 .place-label-layer { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
 .place-label { position: absolute; transform: translate(-50%,-100%); display: inline-flex; align-items: center; gap: 5px; border: 1px solid #ffffffb3; border-radius: 3px; color: #425869; background: #ffffffe0; padding: 5px 7px; box-shadow: 0 2px 8px #283c4a12; font-size: 10px; white-space: nowrap; pointer-events: auto; }
@@ -560,6 +607,12 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
 .west-intro-box p { font-size: 10.5px; color: #6f808d; line-height: 1.8; margin: 0; }
 .west-intro-details { display: flex; flex-direction: column; gap: 5px; margin-top: 4px; padding-top: 8px; border-top: 1px dashed #dbe4ea; }
 .west-detail-row { display: flex; align-items: center; gap: 6px; font-size: 9.5px; color: #6b8294; }
+.west-plan-link { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 11px; color: #315e8b; }
+.pending-buildings { margin-top: 18px; padding-top: 14px; border-top: 1px solid #e5e9ec; font-size: 12px; color: #536b7c; }
+.pending-buildings summary { cursor: pointer; color: #294b69; }
+.pending-buildings summary span { margin-left: 6px; color: #8595a1; }
+.pending-buildings p { font-size: 11px; line-height: 1.8; margin: 10px 0; }
+.pending-buildings a { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; font-size: 11px; border-bottom: 1px solid #edf0f1; }
 
 .place-empty { padding: 22px 8px; text-align: center; color: #96a4ac; }
 .place-empty p { font-size: 12px; margin: 10px 0; }
@@ -629,7 +682,9 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
   .exploration-heading p { font-size: 11px; }
   .heading-actions { justify-content: space-between; }
   .campus-selector { width: 100%; justify-content: space-between; }
-  .campus-tab-btn { flex: 1; justify-content: center; }
+  .campus-tab-btn { flex: 1; min-width: 0; justify-content: center; padding: 6px 4px; }
+  .campus-tab-btn .campus-badge { display: none; }
+  .campus-tab-btn .campus-title { font-size: 11px; white-space: normal; line-height: 1.6; text-align: center; }
   .explore-tour-start { font-size: 11px; padding: 7px 10px; gap: 6px; }
   .explore-tour-start > svg:last-child { display: none; }
   .exploration-canvas { height: 340px; }

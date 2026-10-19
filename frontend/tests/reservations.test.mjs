@@ -4,10 +4,17 @@ import {
   reservationStatuses,
   reservationActions,
   activityTypes,
+  reservationPassUrl,
 } from '../src/reservations.ts'
 import { safeLoginDestination, safeAffairDestination } from '../src/lib/navigation.ts'
 import { affairTimelinePath } from '../src/lib/affairTimeline.ts'
 import { affairStatus, affairAction } from '../src/lib/affairs.ts'
+
+test('pass downloads and inline preview use the authenticated PDF endpoint', () => {
+  assert.equal(reservationPassUrl(12), '/api/reservations/12/pass')
+  assert.equal(reservationPassUrl(12, true), '/api/reservations/12/pass?inline=true')
+  for (const id of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => reservationPassUrl(id))
+})
 
 test('reservation status codes map to friendly localized labels', () => {
   assert.equal(reservationStatuses.DRAFT, '未提交草稿')

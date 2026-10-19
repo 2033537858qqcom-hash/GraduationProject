@@ -14,6 +14,7 @@ export interface AMapInstance {
   setPitch(pitch: number, immediately?: boolean, duration?: number): void
   setRotation(rotation: number, immediately?: boolean): void
   setMapStyle(style: string): void
+  setFeatures(features: string[]): void
   lngLatToContainer(lnglat: LngLat): { x: number; y: number }
   containerToLngLat(pixel: readonly [number, number]): { getLng(): number; getLat(): number }
   customCoords: {
@@ -36,12 +37,21 @@ export interface AMapWeatherLiveResult {
 export interface AMapWeatherInstance {
   getLive(city: string, callback: (err: unknown, data: AMapWeatherLiveResult) => void): void
 }
+export interface AMapSearchResult {
+  info: string
+  poiList?: { count: number; pois: { id: string; name: string; address: string; type: string; location: { getLng(): number; getLat(): number } }[] }
+}
+export interface AMapPlaceSearchInstance {
+  searchNearBy(keyword: string, center: LngLat, radius: number, callback: (status: string, result: AMapSearchResult) => void): void
+  getDetails(id: string, callback: (status: string, result: AMapSearchResult) => void): void
+}
 export interface AMapSdk {
   Map: new (host: HTMLElement, options: Record<string, unknown>) => AMapInstance
   TileLayer: { Satellite: new () => unknown; RoadNet: new () => unknown }
   GLCustomLayer: new (options: { zIndex: number; init: (gl: WebGLRenderingContext | WebGL2RenderingContext) => void; render: () => void }) => unknown
   Walking?: new (options: { map: unknown; hideMarkers?: boolean }) => AMapWalkingInstance
   Weather?: new () => AMapWeatherInstance
+  PlaceSearch?: new (options: Record<string, unknown>) => AMapPlaceSearchInstance
   plugin?: (plugins: string[], callback: () => void) => void
 }
 declare global {

@@ -77,13 +77,13 @@ pnpm install --frozen-lockfile
 pnpm run dev
 ```
 
-访问 **http://127.0.0.1:5173/**。后端为 `127.0.0.1:8080`，Vite 代理 `/api` 至后端，在前端地址完成登录。两终端按 Ctrl+C 停止。开发服务器仅绑定本机。
+访问 **http://127.0.0.1:5173/**。后端默认为 `127.0.0.1:7080`，Vite 代理 `/api` 至该后端，在前端地址完成登录。先等待后端 `/api/health` 返回 `{"status":"UP"}`，再打开需要登录的页面。两终端按 Ctrl+C 停止。开发服务器仅绑定本机。
 
-也可使用 `scripts/Start-Backend.ps1`、`scripts/Start-Frontend.ps1`；首次安装前端依赖后再运行启动脚本。后端脚本会读取当前 Windows 用户已保存的 DeepSeek 加密凭据；前端脚本支持 `-Port` 参数，默认 5173。
+也可使用 `scripts/Start-Backend.ps1`、`scripts/Start-Frontend.ps1`；首次安装前端依赖后再运行启动脚本。后端脚本会读取当前 Windows 用户已保存的 DeepSeek 加密凭据；前端脚本支持 `-Port` 参数，默认 5173，并等待后端健康检查就绪（默认最多 45 秒，可用 `-BackendWaitSeconds` 调整）。只做前端页面开发时，可显式传入 `-SkipBackendCheck`。服务启动期间进入“服务暂不可用”后，点击“重新连接”即可重新核验会话并恢复原页面。
 
-若 Windows 保留端口范围包含 8080，后端启动终端可先设置 `$env:SERVER_PORT = '18080'`；前端启动终端对应设置 `$env:CAMPUS_API_TARGET = 'http://127.0.0.1:18080'`。默认仍使用 8080，无需更改系统端口保留规则。
+若默认后端端口 7080 被占用，后端启动终端可先设置 `$env:SERVER_PORT = '18080'`；前端启动终端对应设置 `$env:CAMPUS_API_TARGET = 'http://127.0.0.1:18080'`。两侧端口需一致，无需更改系统端口保留规则。
 
-若 5173 也被占用，前端执行 `pnpm run dev --port 18090`，或在根目录执行 `./scripts/Start-Frontend.ps1 -Port 18090`。本轮运行地址为 **http://127.0.0.1:18090/**，代理后端 18080；默认配置未改动。
+若 5173 也被占用，前端执行 `pnpm run dev --port 18090`，或在根目录执行 `./scripts/Start-Frontend.ps1 -Port 18090`。此前 18090 → 18080 为临时验收地址；当前默认使用 5173 → 7080。
 
 2026-10-16 当前运行使用根目录 `data/campus.mv.db`（V24）。另有较旧的 `backend/data/campus.mv.db`（V14）保留，直接依赖相对工作目录会打开不同库。请按[本次验收的启动说明](docs/初始住宿批量导入与校验验收-2026-10-16.md#5-主库与运行)显式指定数据源。
 

@@ -1,0 +1,23 @@
+{
+  "receivedAt": "2026-10-19",
+  "source": "user-supplied image",
+  "title": "西校区平面示意图",
+  "file": "frontend/public/campus/west-campus-layout-reference.jpg",
+  "sha256": "e517f257e659989980decc67bba5e8d3f1e252ea39788f1f8b85ffc6f220b33d",
+  "originalSize": [1920, 1440],
+  "authoringSize": [1824, 1368],
+  "publicationDate": "unknown",
+  "georeferenced": false,
+  "heightsMeasured": false,
+  "namedRoads": ["华信路", "文明大道", "成才大道", "桃园路"],
+  "sharedBlocks": [
+    { "building": "明德楼", "functions": ["明德楼教室", "明德楼宿舍", "医务室"] },
+    { "building": "钢构餐厅", "associatedService": "澡堂", "separateFootprintConfirmed": false }
+  ],
+  "identityNotes": [
+    "华信路北侧4号楼与学生公寓区4号公寓是不同条目。",
+    "8号楼只有名称位置，照片未提供独立楼体框线。",
+    "实验楼、工程中心、3号楼采用平面图原名，不与高德其他名称直接等同。",
+    "东侧公寓区按本图补充，不将示意图坐标转换为GCJ-02坐标。"
+  ]
+}

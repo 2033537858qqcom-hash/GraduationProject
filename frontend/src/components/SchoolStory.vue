@@ -16,8 +16,7 @@ defineProps<{
 <template>
   <div class="school-story">
     <CulturalFrame :bottom="false" />
-    <CulturalOrnament motif="cloud" class="story-cloud" />
-    <CulturalOrnament motif="birds" class="story-birds" />
+    <CulturalOrnament motif="wenmai" class="story-wenmai" preserveAspectRatio="none" />
     <div class="chapter-body page-width school-story-inner">
       <div class="story-composition">
         <div class="story-introduction">
@@ -31,7 +30,7 @@ defineProps<{
         </div>
         <figure class="chapter-visual">
           <div class="story-photo-frame campus-photo">
-            <img :src="media.url" :alt="media.alt" :width="media.width" :height="media.height" loading="lazy" decoding="async" />
+            <img :src="media.url" :alt="media.alt" :width="media.width" :height="media.height" :style="{ objectPosition: media.position }" loading="lazy" decoding="async" />
           </div>
           <figcaption class="campus-caption"><span>{{ media.label }}</span><small><a :href="media.sourceUrl" target="_blank" rel="noopener noreferrer">学校官网影像 <ArrowUpRight :size="12" aria-hidden="true" /></a></small></figcaption>
         </figure>
@@ -56,14 +55,30 @@ defineProps<{
   isolation: isolate;
   background: var(--site-surface);
   color: var(--site-ink);
+  min-height: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
-.story-birds { width: 96px; left: 36%; top: 62px; --culture-opacity: .25; }
-.story-cloud { width: 120px; left: 22%; top: 55px; --culture-opacity: .11; }
-.school-story-inner { position: relative; z-index: 1; padding-block: 76px 32px; gap: 24px; }
+.story-wenmai {
+  position: absolute;
+  left: 0;
+  top: 36px;
+  width: min(92%, 820px);
+  height: 250px;
+  pointer-events: none;
+  z-index: 0;
+  --culture-opacity: 0.22;
+  mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.25) 6%, #000 24%, #000 72%, rgba(0,0,0,0.2) 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.25) 6%, #000 24%, #000 72%, rgba(0,0,0,0.2) 90%, transparent 100%);
+}
+.school-story-inner { position: relative; z-index: 1; padding-block: 76px 24px; gap: 20px; }
 .story-composition { display: grid; grid-template-columns: .82fr 1.18fr; gap: 5%; align-items: center; }
 .story-introduction { min-width: 0; }
-.story-summary { max-width: 390px; color: var(--muted); font-size: 13px; line-height: 2.2; margin-bottom: 15px; }
-.story-campuses { display: flex; align-items: center; gap: 13px; color: var(--muted); font-size: 11px; }
+.story-summary { max-width: 420px; color: var(--muted); font-size: 13px; line-height: 2.2; margin-bottom: 18px; }
+.story-campuses { display: flex; align-items: center; gap: 13px; color: var(--muted); font-size: 11px; margin-bottom: 22px; }
 .story-campuses span + span { padding-left: 13px; border-left: 1px solid var(--line); }
 .story-photo-frame img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 65% 50%; }
 .story-photo-frame { height: clamp(210px,21vw,300px); }
@@ -84,8 +99,7 @@ defineProps<{
   .story-timeline li { flex-direction: column; gap: 10px; }
 }
 @media (max-width: 760px) {
-  .story-cloud { width: 100px; left: auto; right: -8px; top: -10px; --culture-opacity: .11; }
-  .story-birds { width: 72px; left: auto; right: 6%; top: 14px; --culture-opacity: .2; }
+  .story-wenmai { display: none; }
   .school-story-inner { padding-block: 30px 40px; gap: 24px; }
   .story-composition { grid-template-columns: 1fr; gap: 26px; }
   .story-photo-frame { height: 210px; }

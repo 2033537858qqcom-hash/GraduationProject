@@ -1,9 +1,10 @@
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { buildCampus } from './buildCampus'
-import { campusPlaces } from './manifest'
 import type { CampusPlace } from './manifest'
-import { campusOverviewPosition, overviewTarget } from './framing'
+import { campusOverviewPosition, overviewTarget as eastOverviewTarget } from './framing'
+import { campusSceneData } from './campusSceneData'
+import type { CampusId } from './campusSceneData'
 
 export type CampusView = 'overview' | 'top' | 'detail' | 'free'
 export interface PlaceLabel { id: string; left: number; top: number; visible: boolean }
@@ -15,9 +16,11 @@ export interface SceneCallbacks {
   unavailable: (message: string) => void
 }
 
-export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) {
+export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, options: { campusId?: CampusId } = {}) {
+  const { places: campusPlaces, bounds } = campusSceneData(options.campusId)
+  const overviewTarget = options.campusId === 'WEST' ? new THREE.Vector3(-15,-10,5) : eastOverviewTarget
   const scene = new THREE.Scene()
-  const camera = new THREE.PerspectiveCamera(38, 1, 0.5, 1200)
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.5, options.campusId === 'WEST' ? 2500 : 1200)
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, logarithmicDepthBuffer: true })
   let disposed = false, contextLost = false, frame = 0
   const resize = new ResizeObserver(size)
@@ -26,11 +29,13 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
   const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), projected = new THREE.Vector3()
   const labelRay = new THREE.Ray(), labelAnchor = new THREE.Vector3(), obstruction = new THREE.Vector3()
-  const labelOccluders = campusPlaces.filter(place => place.kind === 'building').map(place => ({ id: place.id,
+  const labelOccluders = campusPlaces.filter(place => place.kind === 'building' && place.locationType === 'outline').map(place => ({ id: place.id,
     bounds: new THREE.Box3(new THREE.Vector3(place.x - place.width / 2, 0, place.z - place.depth / 2),
       new THREE.Vector3(place.x + place.width / 2, place.height + 3, place.z + place.depth / 2)),
   }))
   const activePointers = new Set<number>()
+  const westLabelOrder=['west-library','west-chengyi','west-information','west-tech-center','west-mingde',
+    'west-sports-ground','west-siyuan-canteen','west-steel-canteen','west-incubator-1','west-dorm-24']
   let down = { x: 0, y: 0 }, gesture = false
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.shadowMap.enabled = true
@@ -42,9 +47,9 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
   host.appendChild(renderer.domElement)
   const controls = new OrbitControls(camera, renderer.domElement)
   controls.enableDamping = true; controls.dampingFactor = 0.09
-  controls.minDistance = 30; controls.maxDistance = 760
+  controls.minDistance = 30; controls.maxDistance = options.campusId === 'WEST' ? 1800 : 760
   controls.minPolarAngle = 0.035; controls.maxPolarAngle = Math.PI / 2.08
-  controls.maxTargetRadius = 118
+  controls.maxTargetRadius = options.campusId === 'WEST' ? 180 : 118
   controls.cursor.set(0, 0, 0)
   controls.screenSpacePanning = false
   controls.zoomToCursor = true
@@ -58,7 +63,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
   scene.background = new THREE.Color('#f0f5f8')
   scene.fog = new THREE.Fog('#f0f5f8', 850, 1300)
   let model: ReturnType<typeof buildCampus>
-  try { model = buildCampus(scene) } catch (error) { dispose(); throw error }
+  try { model = buildCampus(scene, options) } catch (error) { dispose(); throw error }
   renderer.shadowMap.needsUpdate = true
 
   function invalidate() {
@@ -92,8 +97,8 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
       const anchorHeight = place.height + 4
       labelAnchor.set(place.x, anchorHeight, place.z)
       projected.copy(labelAnchor).project(camera)
-      const important = ['east-library', 'south-gate', 'north-gate', 'east-gate', 'east-sports', 'east-square', 'east-art', 'east-wenhua', 'east-shuhua', 'east-gym', 'east-water', 'east-h1', 'east-h2', 'east-affairs', 'east-admin', 'east-jingyi', 'east-jinxiu-dining', 'east-jinxiu', 'east-canteen-wenhua', 'east-auditorium'].includes(place.id)
-      const mobile = ['east-library', 'south-gate', 'east-gate', 'east-sports', 'east-square', 'east-gym', 'east-jinxiu-dining', 'east-jingyi', 'east-water'].includes(place.id)
+      const important = (place.campusId === 'WEST' && !place.id.startsWith('west-road-')) || ['east-library', 'south-gate', 'north-gate', 'east-gate', 'east-sports', 'east-square', 'east-art', 'east-wenhua', 'east-shuhua', 'east-gym', 'east-water', 'east-h1', 'east-h2', 'east-affairs', 'east-admin', 'east-jingyi', 'east-jinxiu-dining', 'east-jinxiu', 'east-canteen-wenhua', 'east-auditorium'].includes(place.id)
+      const mobile = [...westLabelOrder,'east-library', 'south-gate', 'east-gate', 'east-sports', 'east-square', 'east-gym', 'east-jinxiu-dining', 'east-jingyi', 'east-water'].includes(place.id)
       const distance = camera.position.distanceTo(new THREE.Vector3(place.x, place.height, place.z))
       const anchorDistance = camera.position.distanceTo(labelAnchor)
       labelRay.set(camera.position, labelAnchor.clone().sub(camera.position).normalize())
@@ -105,7 +110,9 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
     })
     const occupied: PlaceLabel[] = []
     // The selected place gets priority; suppress overlapping labels and those hidden behind buildings.
-    const orderedLabels = [...nextLabels].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id))
+    const priority=(id:string)=>{const index=westLabelOrder.indexOf(id);return index<0?100:index}
+    const orderedLabels = [...nextLabels].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id) ||
+      (options.campusId==='WEST'?priority(a.id)-priority(b.id):0))
     orderedLabels.forEach(label => {
       if (!label.visible) return
       if (occupied.some(other => Math.abs(other.left - label.left) < 86 && Math.abs(other.top - label.top) < 26)) label.visible = false
@@ -115,7 +122,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
     if (transition) invalidate()
   }
   function overviewPosition() {
-    return campusOverviewPosition(width / height)
+    return campusOverviewPosition(width / height, bounds, overviewTarget)
   }
   function move(position: THREE.Vector3, target: THREE.Vector3, nextView: CampusView, instant = false) {
     stopTransition()
@@ -166,8 +173,11 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks) 
     invalidate()
   }
   function top(instant = false) {
-    const distance = Math.max(345, 385 / camera.aspect)
-    move(new THREE.Vector3(0, distance, 0.1), new THREE.Vector3(0, 0, 0), 'top', instant)
+    const distance = options.campusId === 'WEST'
+      ? Math.max(345, (bounds.maxZ-bounds.minZ)*1.8, (bounds.maxX-bounds.minX)*1.8 / camera.aspect)
+      : Math.max(345, 385 / camera.aspect)
+    const center = new THREE.Vector3((bounds.minX+bounds.maxX)/2,0,(bounds.minZ+bounds.maxZ)/2)
+    move(center.clone().add(new THREE.Vector3(0,distance,0.1)), center, 'top', instant)
   }
   function onReducedMotion() {
     if (reduced.matches && transition) move(transition.to, transition.targetTo, view, true)

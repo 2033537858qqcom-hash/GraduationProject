@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { Check, ChevronDown, Download, FileSpreadsheet, Upload } from '@lucide/vue'
 import { api, ApiError, errorMessage } from '../lib/api'
+import { downloadFile } from '../lib/download'
 import { housingWhen } from '../housing'
 import { decodeHousingImport, housingImportCanConfirm, housingImportFileIssue, type HousingImportBatch, type HousingImportSummary } from '../lib/housingImports'
 const props = defineProps<{ buildingId: number; busy: boolean }>()
@@ -38,10 +39,7 @@ async function download() {
   if (working.value || props.busy) return
   setWorking(true); error.value = ''
   try {
-    const response = await fetch('/api/housing/imports/template?buildingId=' + props.buildingId, { credentials: 'same-origin' })
-    if (!response.ok) { const result = await response.json().catch(() => null); if (response.status === 401) window.dispatchEvent(new Event('campus:unauthorized')); throw new ApiError(response.status, result?.code ?? 'TEMPLATE_FAILED', result?.message ?? '模板下载失败，请稍后重试') }
-    const url = URL.createObjectURL(await response.blob()), link = document.createElement('a')
-    link.href = url; link.download = '住宿入住模板.csv'; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000)
+    await downloadFile('/api/housing/imports/template?buildingId=' + props.buildingId, '住宿入住模板.csv', 'text/csv')
     notice.value = '模板已下载。填写学号和入住说明后，选择文件进行校验。'
   } catch (cause) { error.value = errorMessage(cause) }
   finally { setWorking(false) }

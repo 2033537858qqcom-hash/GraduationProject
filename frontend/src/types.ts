@@ -5,6 +5,7 @@ export interface School {
 export interface Profile {
   id: number; username: string; fullName: string; identityNumber: string
   campusName: string | null; departmentName: string | null; className: string | null
+  avatarUrl: string | null
   demo: boolean; roles: string[]; permissions: string[]
 }
 export interface PublicContent {

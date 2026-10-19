@@ -37,6 +37,7 @@ public class SecurityConfiguration {
             .requestCache(AbstractHttpConfigurer::disable)
             .securityContext(context -> context.securityContextRepository(contexts))
             .csrf(config -> config.csrfTokenRepository(csrf))
+            .addFilterBefore(new cn.zzuit.campus.common.OperationLoggingFilter(), AuthorizationFilter.class)
             .addFilterBefore(new LiveIdentityFilter(identities,contexts),AuthorizationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/public/**", "/api/health", "/api/auth/csrf", "/api/auth/login", "/error").permitAll()
@@ -76,7 +77,12 @@ public class SecurityConfiguration {
                 }))
             .logout(logout -> logout.logoutUrl("/api/auth/logout")
                 .invalidateHttpSession(true).deleteCookies("CAMPUS_SESSION")
-                .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204)))
+                .logoutSuccessHandler((request, response, authentication) -> {
+                    String user = authentication != null ? authentication.getName() : "未知用户";
+                    org.slf4j.LoggerFactory.getLogger("cn.zzuit.campus.identity.AuthController")
+                        .info("[AUTH | 认证] 用户登出成功 | 用户名: '{}' | 来源IP: {}", user, request.getRemoteAddr());
+                    response.setStatus(204);
+                }))
             .build();
     }
 }

@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { BookOpen, FileText, CalendarDays, Settings2, Download, Upload } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
+import { saveBlob } from '../lib/download'
 import { roomOption } from '../resources'
 import type { AcademicCatalog, AcademicGrade, AcademicExam, TeachingDetail } from '../types'
 import BaseSelect from '../components/BaseSelect.vue'
@@ -164,8 +165,7 @@ async function csvFile(event: Event) {
 }
 function template() {
   const text = '学号,成绩\n' + (detail.value?.members.map(p => `${p.identityNumber},`).join('\n') ?? '')
-  const url = URL.createObjectURL(new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8' }))
-  const link = document.createElement('a'); link.href = url; link.download = '教学班成绩模板.csv'; link.click(); URL.revokeObjectURL(url)
+  saveBlob(new Blob(['\uFEFF' + text], { type: 'text/csv;charset=utf-8' }), '教学班成绩模板.csv')
 }
 function gradeState(grade: AcademicGrade) { void mutate(() => api(`/academic/grades/${grade.id}/state`, { method: 'POST', body: JSON.stringify({ status: grade.status === 'DRAFT' ? 'PUBLISHED' : 'DRAFT', version: grade.version }) }), grade.status === 'DRAFT' ? '成绩已发布并通知对应学生。' : '成绩已撤下，学生查询已更新。') }
 function saveExam() { void mutate(() => api(`/academic/classes/${selected.value}/exam`, { method: 'PUT', body: JSON.stringify({ roomId: examForm.roomId, startsAt: examForm.startsAt, endsAt: examForm.endsAt, version: examForm.version }) }), '考试草稿已保存，核对后可发布。') }

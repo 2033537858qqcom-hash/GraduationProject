@@ -8,6 +8,7 @@ import SchoolIdentity from '../components/SchoolIdentity.vue'
 import CulturalFrame from '../components/CulturalFrame.vue'
 import CulturalOrnament from '../components/CulturalOrnament.vue'
 import AssistantChat from '../components/AssistantChat.vue'
+import UserAvatar from '../components/UserAvatar.vue'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const router = useRouter()
@@ -50,7 +51,7 @@ async function leave() {
         <RouterLink to="/" class="portal-school" aria-label="郑州工业应用技术学院官网"><SchoolIdentity /><small>校园综合服务平台 · {{ identity }}</small></RouterLink>
         <div class="account-controls">
           <RouterLink :to="student ? '/portal/notices' : '/notices'" class="account-action"><Bell :size="17" aria-hidden="true" /><span>消息通知</span></RouterLink>
-          <RouterLink to="/profile" class="account-action"><UserRound :size="17" aria-hidden="true" /><span class="account-name">{{ currentUser?.fullName }}</span><span>个人资料</span></RouterLink>
+          <RouterLink to="/profile" class="account-action"><UserAvatar :src="currentUser?.avatarUrl" :name="currentUser?.fullName ?? ''" size="sm" /><span class="account-name">{{ currentUser?.fullName }}</span><span>个人资料</span></RouterLink>
           <button class="account-action" :disabled="leaving" @click="leave"><LogOut :size="17" aria-hidden="true" /><span>{{ leaving ? '正在退出…' : '退出登录' }}</span></button>
         </div>
       </div>

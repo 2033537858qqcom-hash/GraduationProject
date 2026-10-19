@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DownloadLink from '../components/DownloadLink.vue'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -8,6 +9,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock,
+  Download,
   Edit3,
   MapPin,
   Plus,
@@ -53,6 +55,7 @@ import {
   listVenuesForManagement,
   removeVenueManager,
   reservationStatuses,
+  reservationPassUrl,
   reviewReservation,
   saveDraft,
   submitReservation,
@@ -648,11 +651,6 @@ async function switchTab(tab: 'venues' | 'mine' | 'review' | 'manage') {
   else await loadReservations()
 }
 
-// Print pass
-function printPass() {
-  window.print()
-}
-
 // Initial setup
 onMounted(async () => {
   if (route.query.tab === 'manage' && canManage.value) {
@@ -1054,7 +1052,7 @@ watch(() => route.query.venue, () => {
           </div>
           <div class="pass-grid-item">
             <span class="label">准入使用时段</span>
-            <strong class="val time-val">{{ formatTime(selectedReservation.startsAt) }} 至 {{ formatHour(selectedReservation.endsAt) }}</strong>
+            <strong class="val time-val">{{ formatTime(selectedReservation.startsAt) }} 至 {{ formatTime(selectedReservation.endsAt) }}</strong>
           </div>
           <div class="pass-grid-item">
             <span class="label">活动申请人</span>
@@ -1074,12 +1072,16 @@ watch(() => route.query.venue, () => {
         <div class="pass-footer">
           <div class="pass-instructions">
             <p><strong>使用提示：</strong>活动开始前15分钟请向场地楼管/管理员出示此凭证开启场地门锁；遵守校内声环境与消防安全管理制度，结束时清理卫生并切断电源。</p>
+            <p class="pass-export-note no-print">可下载 PDF 后打开打印；凭证仅适用于所载时段，取消或变更以系统最新状态为准。</p>
           </div>
           <div class="pass-actions no-print">
-            <button class="button primary compact" @click="printPass">
+            <a class="button compact" :href="reservationPassUrl(selectedReservation.id, true)" target="_blank" rel="noopener">
               <Printer :size="14" />
-              打印/保存凭证
-            </button>
+              预览 / 打印
+            </a>
+            <DownloadLink class="button primary compact" :href="reservationPassUrl(selectedReservation.id)">
+              <Download :size="14" />下载 PDF
+            </DownloadLink>
           </div>
         </div>
       </div>
@@ -2125,27 +2127,13 @@ watch(() => route.query.venue, () => {
   padding-top: 14px;
 }
 
-@media print {
-  body * {
-    visibility: hidden;
-  }
-  #venue-access-pass,
-  #venue-access-pass * {
-    visibility: visible;
-  }
-  #venue-access-pass {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    border: 1px solid #333;
-  }
-  .no-print {
-    display: none !important;
-  }
-}
+.pass-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; }
+.pass-actions .button { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; white-space: nowrap; }
+.pass-instructions .pass-export-note { color: #627b6b; font-size: 11px; margin-top: 8px; }
 
 @media (max-width: 640px) {
+  .pass-footer { flex-direction: column; align-items: stretch; gap: 14px; }
+  .pass-actions { justify-content: flex-end; }
   .form-grid-two,
   .time-inputs-row,
   .pass-grid {
@@ -2259,5 +2247,38 @@ watch(() => route.query.venue, () => {
 }
 .manager-modal-card {
   max-width: 640px;
+}
+</style>
+
+<style>
+/* Print rules must escape Vue's scoped selectors and remove other content from pagination. */
+@media print {
+  body:has(#venue-access-pass) #app *:not(:has(#venue-access-pass)):not(#venue-access-pass):not(#venue-access-pass *) {
+    display: none !important;
+  }
+  body:has(#venue-access-pass) :is(#app, .portal-shell, .portal-main, .reservation-page, .reservation-detail-panel) {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  #venue-access-pass {
+    position: static !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 8mm !important;
+    border: 1px solid #829b8d !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: #172b25 !important;
+    overflow: visible !important;
+  }
+  #venue-access-pass .pass-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #venue-access-pass :is(.pass-header, .pass-grid-item, .pass-footer) { break-inside: avoid; }
+  #venue-access-pass :is(.no-print, .pass-watermark) { display: none !important; }
 }
 </style>

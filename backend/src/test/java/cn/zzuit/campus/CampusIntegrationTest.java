@@ -294,6 +294,41 @@ class CampusIntegrationTest {
         assertThat(editor.mutate("POST","/api/admin/content",unsafe,true).statusCode()).isEqualTo(400);
     }
 
+    @Test
+    void timetablePdfUsesOnlyCurrentStudentOrTeacherLessonsAndValidatesWeek() throws Exception {
+        String studentUrl="/api/learning/timetable/export?termId=1&from=2026-10-19";
+        assertThat(new Browser().get(studentUrl).statusCode()).isEqualTo(401);
+        var student=signedIn("20260001"); var teacher=signedIn("teacher1001");
+        assertThat(student.get("/api/teaching/timetable/export?termId=1&from=2026-10-19").statusCode()).isEqualTo(403);
+        assertThat(teacher.get(studentUrl).statusCode()).isEqualTo(403);
+        assertThat(student.get(studentUrl.replace("2026-10-19","2026-10-20")).statusCode()).isEqualTo(400);
+        assertThat(student.get(studentUrl.replace("2026-10-19","2028-01-03")).statusCode()).isEqualTo(400);
+        assertThat(student.get(studentUrl.replace("termId=1","termId=999999")).statusCode()).isEqualTo(404);
+        for (var actor:java.util.List.of(student,teacher)) {
+            String url=actor==student?studentUrl:studentUrl.replace("/learning/","/teaching/");
+            var response=actor.http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+url)).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.headers().firstValue("Content-Type").orElse("")).contains("application/pdf");
+            assertThat(response.headers().firstValue("Content-Disposition").orElse("")).contains("attachment", "filename*");
+            assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+            try(var document=org.apache.pdfbox.Loader.loadPDF(response.body())) {
+                var text=new org.apache.pdfbox.text.PDFTextStripper().getText(document);
+                assertThat(text).contains("2026-10-19", "2026-10-25", "周一", "周日").doesNotContain("数据库教学班 02");
+                var timetable=actor.tree(url.replace("/export?","?")).iterator();
+                while(timetable.hasNext()) assertThat(text).contains(timetable.next().path("courseName").asText());
+            }
+            if(actor==student) java.nio.file.Files.write(java.nio.file.Path.of("target/timetable-export.pdf"),response.body());
+        }
+        // Removing a membership immediately removes its lessons from future exports.
+        jdbc.sql("UPDATE teaching_member SET active=FALSE WHERE class_id=1 AND student_id=:u").param("u",userId("20260001")).update();
+        try {
+            var response=student.http.send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+port+studentUrl)).GET().build(),HttpResponse.BodyHandlers.ofByteArray());
+            try(var document=org.apache.pdfbox.Loader.loadPDF(response.body())) {
+                assertThat(new org.apache.pdfbox.text.PDFTextStripper().getText(document)).doesNotContain("Java 教学班 01");
+            }
+        } finally { jdbc.sql("UPDATE teaching_member SET active=TRUE WHERE class_id=1 AND student_id=:u").param("u",userId("20260001")).update(); }
+    }
+
     private Map<String,Object> input(String slug,int version) {
         return Map.of("slug",slug,"category","notice","title","测试演示内容","summary","集成测试摘要",
             "body","集成测试正文","sourceType","DEMO","version",version);

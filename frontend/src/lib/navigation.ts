@@ -11,3 +11,11 @@ export function safeAffairDestination(value: unknown): string | null {
   if (typeof value !== 'string') return null
   return /^\/(?:portal\/(?:leave|certificates|reservations)|student-affairs\/(?:leave|certificates|housing|reservations)|repairs\/mine|housing\/(?:transfer|assignments)|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value) ? value : null
 }
+
+/** Reconnect may resume login itself, but must never return to an error page or external URL. */
+export function safeRecoveryDestination(value: unknown): string | null {
+  const destination = safeLoginDestination(value)
+  if (destination) return destination
+  if (typeof value === 'string' && !/[\\\r\n]/.test(value) && /^\/login(?:[?#]|$)/.test(value)) return value
+  return null
+}

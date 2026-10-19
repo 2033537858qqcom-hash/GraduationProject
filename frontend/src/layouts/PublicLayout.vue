@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowUpRight, Menu, X } from '@lucide/vue'
 import SchoolIdentity from '../components/SchoolIdentity.vue'
@@ -18,6 +18,24 @@ const { indicatorStyle: schoolIndicatorStyle } = useSlidingIndicator(
   () => [route.path, activeChapter.value],
   { activeSelector: 'a[aria-current="location"]' }
 )
+
+function updateHomepageLock(path: string) {
+  if (typeof document !== 'undefined' && document.body) {
+    const isHome = path === '/'
+    document.body.classList.toggle('homepage-locked', isHome)
+    document.documentElement?.classList.toggle('homepage-locked', isHome)
+  }
+}
+
+watch(() => route.path, updateHomepageLock, { immediate: true })
+
+onUnmounted(() => {
+  if (typeof document !== 'undefined' && document.body) {
+    document.body.classList.remove('homepage-locked')
+    document.documentElement?.classList.remove('homepage-locked')
+  }
+})
+
 function navigate(event: MouseEvent, id: string) {
   if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
   event.preventDefault()
@@ -30,10 +48,10 @@ function navigate(event: MouseEvent, id: string) {
 }
 </script>
 <template>
-  <div class="public-site">
+  <div class="public-site" :class="{ 'is-homepage': route.path === '/' }">
     <header class="public-header" :class="{ 'over-photo': route.path === '/' }">
       <CulturalFrame class="brand-frame" />
-      <CulturalOrnament motif="cloud" class="brand-cloud" />
+      <CulturalOrnament motif="sundial" class="brand-heritage" preserveAspectRatio="none" />
       <div class="school-brand-row page-width">
         <RouterLink class="school-brand" to="/" aria-label="郑州工业应用技术学院首页">
           <SchoolIdentity />
@@ -54,14 +72,14 @@ function navigate(event: MouseEvent, id: string) {
         </div>
       </nav>
     </header>
-    <main class="public-main" :class="{ 'reading-scene': route.path !== '/' }">
+    <main class="public-main" :class="{ 'reading-scene': route.path !== '/', 'homepage-main': route.path === '/' }">
       <template v-if="route.path !== '/'">
         <CulturalFrame class="reading-frame" :bottom="false" />
         <CulturalOrnament motif="cloud" class="reading-cloud" />
       </template>
       <RouterView />
     </main>
-    <footer class="public-footer-wrap" aria-label="网站信息与链接">
+    <footer v-if="route.path !== '/'" class="public-footer-wrap" aria-label="网站信息与链接">
       <div class="public-footer page-width">
         <small>校园综合服务平台 · 毕业设计演示</small>
         <nav class="footer-links" aria-label="页脚链接"><RouterLink to="/campus/explore">校园探索 <ArrowUpRight :size="12" /></RouterLink><a href="https://www.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">学校官方站点 <ArrowUpRight :size="12" /></a></nav>

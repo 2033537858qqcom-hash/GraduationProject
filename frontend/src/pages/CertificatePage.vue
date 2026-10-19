@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DownloadLink from '../components/DownloadLink.vue'
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { FileCheck2, History, Plus, RefreshCw, Download, ShieldCheck } from '@lucide/vue'
@@ -141,7 +142,7 @@ onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load(
             <small>结果保留生成时的资料，不随之后的账号修改而变化。</small>
           </div>
           <div class="form-actions certificate-actions-group">
-            <a class="button primary compact" :href="`/api/certificates/${mode}/${selected.id}/result`"><Download :size="15" />下载演示证明</a>
+            <DownloadLink class="button primary compact" :href="`/api/certificates/${mode}/${selected.id}/result`"><Download :size="15" />下载演示证明</DownloadLink>
             <RouterLink v-if="selected.documentNumber" class="button compact verify-link-btn" :to="`/verify/certificate?number=${encodeURIComponent(selected.documentNumber)}`" target="_blank">
               <ShieldCheck :size="15" />查验真伪备案
             </RouterLink>

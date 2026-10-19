@@ -3,7 +3,7 @@ import type { LngLat, MapClick } from './amapSdk'
 import { campusPlaces } from './manifest'
 import type { CampusPlace } from './manifest'
 import { campusLngLat, campusMapFrame } from './georeference'
-import { westCampusMapFrame, westCampusPlaces } from './westCampusData'
+import { westCampusMapFrame, westMapPlaces as westCampusPlaces } from './westCampusMapData'
 import type { SceneCallbacks } from './createCampusScene'
 import { addCampusOverlay } from './amapCampusOverlay'
 
@@ -24,7 +24,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
 
   function getPlaceLngLat(place: CampusPlace): LngLat | undefined {
     if (place.lnglat) return place.lnglat
-    return campusLngLat([place.x, place.z])
+    return place.campusId === 'WEST' ? undefined : campusLngLat([place.x, place.z])
   }
 
   const frame = () => currentCampus === 'WEST'
@@ -43,7 +43,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     rotation: 0,
     zooms: [14, 20],
     features: ['bg', 'road', 'building', 'point'],
-    showBuildingBlock: true,
+    showBuildingBlock: !options.onCalibration,
     showLabel: true,
     resizeEnable: true,
     animateEnable: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
@@ -61,14 +61,14 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
   let activeTheme: 'normal' | 'whitesmoke' = 'normal'
   let overlayModelActive = false
 
-  const overlay = addCampusOverlay(AMap, map, host, ready => options.onModelStatus?.(ready))
+  let overlay = addCampusOverlay(AMap, map, host, ready => options.onModelStatus?.(ready), currentCampus)
   let disposed = false, current: string | null = null
   let overviewActive = true, viewportWidth = host.clientWidth, viewportHeight = host.clientHeight
   let labelFrame = 0
   let settleTimer: ReturnType<typeof setTimeout> | undefined
 
   const eastImportant = new Set(['east-library', 'east-shuhua', 'east-jingyi', 'east-jinxiu-dining', 'east-wenhua', 'east-sports', 'south-gate', 'east-admin', 'east-gym'])
-  const westImportant = new Set(['west-south-gate', 'west-teaching-1', 'west-teaching-2', 'west-lab-3', 'west-library', 'west-canteen', 'west-sports-ground', 'west-dorm-4'])
+  const westImportant = new Set(['west-incubator', 'west-teaching-1', 'west-teaching-2', 'west-lab-3', 'west-mingde', 'west-canteen', 'west-tech-center', 'west-dorm-4', 'west-dorm-7', 'west-dorm-5'])
   const isImportant = (id: string) => currentCampus === 'WEST' ? westImportant.has(id) : eastImportant.has(id)
 
   function labels() {
@@ -90,7 +90,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
   const click = (event: MapClick) => {
     options.onCalibration?.(`${event.lnglat.getLng().toFixed(7)}, ${event.lnglat.getLat().toFixed(7)}`)
     if (!options.onCalibration) {
-      if (currentCampus === 'EAST' && overlayModelActive) {
+      if (overlayModelActive) {
         const id = overlay.pick(event.pixel.x, event.pixel.y)
         if (id) callbacks.select(id)
       }
@@ -129,9 +129,11 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       current = null
       overviewActive = true
       walking?.clear()
-      overlay.select(null)
-      // 3D Three.js building overlay is for East campus
-      overlay.visible(currentCampus === 'EAST' && overlayModelActive)
+      overlay.dispose()
+      options.onModelStatus?.(false)
+      overlay = addCampusOverlay(AMap, map, host, ready => options.onModelStatus?.(ready), currentCampus)
+      overlay.setEvening(night)
+      overlay.visible(overlayModelActive)
       const next = frame()
       map.setZoomAndCenter(next.zoom, next.center, false, 950)
       map.setPitch(is25D ? defaultPitch : 0, false, 600)
@@ -142,15 +144,13 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       return currentCampus
     },
     select(id: string | null) {
-      current = id
-      overviewActive = !id
-      if (currentCampus === 'EAST') {
-        overlay.select(id)
-      }
       const place = allPlaces.find(p => p.id === id)
       if (place?.campusId && place.campusId !== currentCampus) {
         this.switchCampus(place.campusId)
       }
+      current = id
+      overviewActive = !id
+      overlay.select(id)
       const overview = frame()
       const target = place ? getPlaceLngLat(place) : overview.center
       if (target) {
@@ -202,6 +202,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     setSatellite(enabled: boolean) {
       if (enabled === satelliteOn) return
       satelliteOn = enabled
+      map.setFeatures(enabled ? ['bg', 'road', 'point'] : ['bg', 'road', 'building', 'point'])
       if (enabled) {
         map.add(satellite)
       } else {
@@ -211,7 +212,6 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     },
     setBuildings(enabled: boolean) {
       overlayModelActive = enabled
-      if (currentCampus === 'WEST') return
       overlay.visible(enabled)
       if (enabled) {
         map.setPitch(45, false, 600)
@@ -219,7 +219,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       }
     },
     planRoute(toId: string, fromId?: string) {
-      const defaultStart = currentCampus === 'WEST' ? 'west-south-gate' : 'south-gate'
+      const defaultStart = currentCampus === 'WEST' ? 'west-parking' : 'south-gate'
       const startId = fromId || defaultStart
       const fromPlace = allPlaces.find(p => p.id === startId)
       const toPlace = allPlaces.find(p => p.id === toId)

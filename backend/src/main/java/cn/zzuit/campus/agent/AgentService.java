@@ -195,7 +195,7 @@ public class AgentService {
             else if(names.contains("repair_dispatch_queue")) result.add(tools.call("repair_dispatch_queue",Map.of("status","SUBMITTED")));
             else if(names.contains("repair_work_queue")) result.add(tools.call("repair_work_queue",Map.of("status","ALL")));
         } else if(result.isEmpty() || q.matches(".*(我的办事|申请进度|需要补交|待处理|我的申请).*")) {
-            if(q.matches(".*(办事|请假|证明|申请|補交|补交|待处理).*")) result.add(tools.call("my_affairs",Map.of("kind",q.contains("证明")?"CERTIFICATE":q.contains("请假")?"LEAVE":"ALL","status",q.contains("补交")?"RETURNED":"ALL")));
+            if(q.matches(".*(办事|请假|销假|返校|证明|申请|補交|补交|待处理).*")) result.add(tools.call("my_affairs",Map.of("kind",q.contains("证明")?"CERTIFICATE":(q.contains("请假")||q.contains("销假")||q.contains("返校"))?"LEAVE":"ALL","status",q.contains("补交")?"RETURNED":"ALL")));
         }
         return new Plan(result.stream().distinct().limit(4).toList(),null,null);
     }

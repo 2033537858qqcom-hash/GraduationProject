@@ -43,7 +43,7 @@ class AgentIntegrationTest {
     @Test void localRulesHaveAccessibleVersionedSources() throws Exception {
         var student=login("20260001"); var answer=ok(query(student,input("请假最长多少天")));
         var source=answer.path("results").path(0).path("sources").path(0);
-        assertThat(source.path("slug").asText()).isEqualTo("leave"); assertThat(source.path("version").asInt()).isEqualTo(1);
+        assertThat(source.path("slug").asText()).isEqualTo("leave"); assertThat(source.path("version").asInt()).isEqualTo(2);
         assertThat(source.path("body").asText()).contains("30 天","并非学校实际制度");
         assertThat(ok(student.get("/api"+source.path("targetPath").asText())).path("body").asText()).contains("30 天");
     }

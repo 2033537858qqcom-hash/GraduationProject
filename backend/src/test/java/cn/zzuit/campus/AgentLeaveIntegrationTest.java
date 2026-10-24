@@ -39,7 +39,7 @@ class AgentLeaveIntegrationTest {
         long before=count(); var result=ok(prepare(login("20260001"),input(Map.of())));
         assertThat(result.path("ready").asBoolean()).isFalse(); assertThat(result.path("missing").size()).isEqualTo(7);
         assertThat(result.path("fields").path("startTime").asText()).isEmpty();
-        assertThat(result.path("source").path("version").asInt()).isEqualTo(1);
+        assertThat(result.path("source").path("version").asInt()).isEqualTo(2);
         assertThat(count()).isEqualTo(before); verify(model,never()).prepareLeave(anyString());
     }
     @Test void supplementsMergeLocallyAndOnlyCurrentTextReachesTheModel() throws Exception {

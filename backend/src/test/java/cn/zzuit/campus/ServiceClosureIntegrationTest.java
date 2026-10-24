@@ -161,6 +161,36 @@ class ServiceClosureIntegrationTest {
         var pending=ok(report(student,leave)); ok(close(counselor,pending,"CONFIRM"));
     }
 
+    @Test
+    void overrunUseBlocksNewBookingsUntilActualHandover() throws Exception {
+        var student=login("20260001");var reviewer=login("affairs1001");long venue=venue(student);
+        var active=approve(student,reviewer,venue,94);var using=makeOverdueUse(reviewer,active);
+        try {
+            assertThat(student.send("POST","/api/reservations/submit",booking(venue,1,95)).statusCode()).isEqualTo(409);
+        } finally { ok(use(reviewer,id(active),using,"COMPLETE")); }
+    }
+    @Test
+    void overrunUseBlocksNextApprovedReservationFromStarting() throws Exception {
+        var student=login("20260001");var reviewer=login("affairs1001");long venue=venue(student);
+        var active=approve(student,reviewer,venue,96);var next=approve(student,reviewer,venue,97);
+        var using=makeOverdueUse(reviewer,active);
+        jdbc.sql("UPDATE venue_reservation SET starts_at=:s,ends_at=:e WHERE id=:id")
+            .param("s",LocalDateTime.now().minusMinutes(1)).param("e",LocalDateTime.now().plusMinutes(59)).param("id",id(next)).update();
+        try { assertThat(use(reviewer,id(next),next,"START").statusCode()).isEqualTo(409); }
+        finally {
+            ok(use(reviewer,id(active),using,"COMPLETE"));
+            var current=ok(student.get("/api/reservations/"+id(next)));
+            if(current.path("status").asText().equals("IN_USE")) ok(use(reviewer,id(next),current,"COMPLETE"));
+        }
+    }
+    private JsonNode makeOverdueUse(Browser reviewer,JsonNode approved) throws Exception {
+        jdbc.sql("UPDATE venue_reservation SET starts_at=:s,ends_at=:e WHERE id=:id")
+            .param("s",LocalDateTime.now().minusMinutes(5)).param("e",LocalDateTime.now().plusMinutes(55)).param("id",id(approved)).update();
+        var using=ok(use(reviewer,id(approved),approved,"START"));
+        jdbc.sql("UPDATE venue_reservation SET ends_at=:e WHERE id=:id").param("e",LocalDateTime.now().minusMinutes(1)).param("id",id(approved)).update();
+        return using;
+    }
+
     private long venue(Browser b) throws Exception { return ok(b.get("/api/reservations/venues?placeId=east-gym")).get(0).path("id").asLong(); }
     private long id(JsonNode n) { return n.path("id").asLong(); }
     private Map<String,Object> booking(long venue,int people,int days) {

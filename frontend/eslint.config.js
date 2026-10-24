@@ -9,7 +9,7 @@ export default [
   ...ts.configs.recommended,
   ...vue.configs['flat/recommended'],
   { files: ['src/**/*.{ts,vue}'], languageOptions: { globals: globals.browser } },
-  { files: ['tests/**/*.mjs'], languageOptions: { globals: globals.node } },
+  { files: ['tests/**/*.mjs', 'scripts/**/*.mjs'], languageOptions: { globals: globals.node } },
   {
     files: ['**/*.vue'],
     languageOptions: { parserOptions: { parser: ts.parser } },

@@ -28,6 +28,12 @@ public class ReservationController {
         this.passPdf = passPdf;
     }
 
+    @PostMapping("/{id}/usage")
+    public ReservationDetail usage(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,
+                                   @jakarta.validation.Valid @RequestBody UsageCommand cmd) {
+        return reservations.usage(user,id,cmd);
+    }
+
     @GetMapping("/{id}/pass")
     public ResponseEntity<byte[]> pass(@AuthenticationPrincipal CampusPrincipal user, @PathVariable long id,
                                       @RequestParam(defaultValue = "false") boolean inline) throws IOException {

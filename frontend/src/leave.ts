@@ -1,5 +1,5 @@
-export type LeaveStatus = 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'
-export const leaveStatuses: Record<LeaveStatus, string> = { DRAFT: '草稿', SUBMITTED: '待审核', RETURNED: '待补交', APPROVED: '已通过', REJECTED: '已拒绝', WITHDRAWN: '已撤回' }
+export type LeaveStatus = 'DRAFT' | 'SUBMITTED' | 'RETURNED' | 'APPROVED' | 'RETURN_PENDING' | 'COMPLETED' | 'REJECTED' | 'WITHDRAWN'
+export const leaveStatuses: Record<LeaveStatus, string> = { DRAFT: '草稿', SUBMITTED: '待审核', RETURNED: '待补交', APPROVED: '已通过', RETURN_PENDING: '待确认销假', COMPLETED: '已销假', REJECTED: '已拒绝', WITHDRAWN: '已撤回' }
 export const leaveTypes = { PERSONAL: '事假', SICK: '病假', OTHER: '其他' }
 export interface LeaveRequest {
   id: number; requestKey: string; studentId: number; studentName: string; identityNumber: string; classGroupId: number; className: string

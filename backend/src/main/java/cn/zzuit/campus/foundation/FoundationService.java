@@ -134,7 +134,7 @@ public class FoundationService {
             conflict("至少须保留一名启用的系统管理员");
     }
     private boolean hasCounselorAssignments(long id) { return jdbc.sql("SELECT COUNT(*) FROM counselor_assignment WHERE counselor_id=:id").param("id",id).query(Long.class).single()>0; }
-    private boolean pendingLeave(long id) { return jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE student_id=:id AND status IN ('SUBMITTED','RETURNED')").param("id",id).query(Long.class).single()>0; }
+    private boolean pendingLeave(long id) { return jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE student_id=:id AND status IN ('SUBMITTED','RETURNED','APPROVED','RETURN_PENDING')").param("id",id).query(Long.class).single()>0; }
     private boolean pendingCertificate(long id) { return jdbc.sql("SELECT COUNT(*) FROM certificate_request WHERE student_id=:id AND status IN ('SUBMITTED','RETURNED')").param("id",id).query(Long.class).single()>0; }
     private void protectCertificateReviewer(long id,Long department) {
         if(department==null) return;

@@ -33,7 +33,7 @@ public class AffairsController {
         identities.requirePermission(user,"portal:read");
         if(page<1 || page>1000000 || pageSize<1 || pageSize>100) bad("分页参数无效");
         if(kind!=null && !PERMISSIONS.containsKey(kind)) bad("办事种类无效");
-        if(status!=null && !List.of("DRAFT","SUBMITTED","RETURNED","APPROVED","COMPLETED","REJECTED","WITHDRAWN","CANCELLED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","AWAITING_ASSIGNMENT","AWAITING_CHECKIN","EXPIRED").contains(status)) bad("办事状态无效");
+        if(status!=null && !List.of("DRAFT","SUBMITTED","RETURNED","APPROVED","COMPLETED","REJECTED","WITHDRAWN","CANCELLED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","AWAITING_ASSIGNMENT","AWAITING_CHECKIN","EXPIRED","RETURN_PENDING","IN_USE").contains(status)) bad("办事状态无效");
         var permissions=identities.permissions(user.id());
         if(kind!=null) identities.requirePermission(user,PERMISSIONS.get(kind));
         var kinds=PERMISSIONS.entrySet().stream().filter(entry->permissions.contains(entry.getValue())).map(Map.Entry::getKey).toList();
@@ -48,7 +48,7 @@ public class AffairsController {
             .query((r,n)->new Item(r.getString("kind"),r.getLong("id"),name(r.getString("kind")),r.getString("status"),r.getInt("version"),
                 r.getTimestamp("created_at").toLocalDateTime(),r.getTimestamp("updated_at").toLocalDateTime(),
                 path(r.getString("kind"))+"?id="+r.getLong("id")+"&tab=details")).list();
-        var summary=jdbc.sql("SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN status='DRAFT' THEN 1 ELSE 0 END),0) drafts,COALESCE(SUM(CASE WHEN status IN ('SUBMITTED','ASSIGNED','IN_PROGRESS','AWAITING_CONFIRMATION','AWAITING_ASSIGNMENT','AWAITING_CHECKIN') THEN 1 ELSE 0 END),0) pending,COALESCE(SUM(CASE WHEN status='RETURNED' THEN 1 ELSE 0 END),0) returned,COALESCE(SUM(CASE WHEN status IN ('APPROVED','COMPLETED','REJECTED','WITHDRAWN','CANCELLED','EXPIRED') THEN 1 ELSE 0 END),0) finished"+table+owner)
+        var summary=jdbc.sql("SELECT COUNT(*) total,COALESCE(SUM(CASE WHEN status='DRAFT' THEN 1 ELSE 0 END),0) drafts,COALESCE(SUM(CASE WHEN status IN ('SUBMITTED','ASSIGNED','IN_PROGRESS','AWAITING_CONFIRMATION','AWAITING_ASSIGNMENT','AWAITING_CHECKIN','RETURN_PENDING','IN_USE') OR (status='APPROVED' AND kind IN ('LEAVE','RESERVATION')) THEN 1 ELSE 0 END),0) pending,COALESCE(SUM(CASE WHEN status='RETURNED' THEN 1 ELSE 0 END),0) returned,COALESCE(SUM(CASE WHEN status IN ('COMPLETED','REJECTED','WITHDRAWN','CANCELLED','EXPIRED') OR (status='APPROVED' AND kind NOT IN ('LEAVE','RESERVATION')) THEN 1 ELSE 0 END),0) finished"+table+owner)
             .param("u",user.id()).param("kinds",params.get("kinds")).query((r,n)->new Summary(r.getLong("total"),r.getLong("drafts"),r.getLong("pending"),r.getLong("returned"),r.getLong("finished"))).single();
         return new Page(rows,total,page,pageSize,summary);
     }

@@ -124,6 +124,9 @@ export const reservationStatuses: Record<string, string> = {
   SUBMITTED: '待审核',
   RETURNED: '待补充材料',
   APPROVED: '已同意预约',
+  IN_USE: '使用中',
+  COMPLETED: '已结束核销',
+  EXPIRED: '已过期未使用',
   REJECTED: '已驳回',
   CANCELLED: '已取消',
   WITHDRAWN: '已撤回',
@@ -137,6 +140,10 @@ export const reservationActions: Record<string, string> = {
   REJECT: '驳回借用',
   CANCEL: '取消预约',
   WITHDRAW: '撤回申请',
+  START: '登记开始使用',
+  COMPLETE: '确认使用结束',
+  EXPIRE: '预约过期未使用',
+  RESOURCE_DISABLED: '场地停用取消预约',
 }
 
 export const activityTypes: Record<string, string> = {
@@ -297,3 +304,7 @@ export async function removeVenueManager(venueId: number, userId: number): Promi
   })
 }
 
+
+export async function recordReservationUsage(id: number, version: number, action: 'START' | 'COMPLETE', comment: string): Promise<ReservationDetail> {
+  return api<ReservationDetail>(`/reservations/${id}/usage`, { method: 'POST', body: JSON.stringify({ version, action, comment }) })
+}

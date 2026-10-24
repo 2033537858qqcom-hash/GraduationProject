@@ -60,10 +60,12 @@ public class TaskAggregationService {
         var errors = new ArrayList<TaskSourceError>();
 
         source(user, permissions, "leave:review", "leave", "班级请假", counts, tasks, errors, () -> {
-            var items=readAll(p -> { var page=leaves.list(user,"review","SUBMITTED",p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); });
+            var items=java.util.stream.Stream.of("SUBMITTED","RETURN_PENDING","APPROVED")
+                .flatMap(state->readAll(p -> { var page=leaves.list(user,"review",state,p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); }).stream())
+                .filter(item->!item.status().equals("APPROVED") || item.endsAt().isBefore(LocalDateTime.now())).toList();
             return items.stream().map(item -> new AggregatedTask("LEAVE-"+item.id(),"LEAVE","班级请假",
                 item.studentName()+" - "+leaveReasonTypeText(item.reasonType())+"（"+truncate(item.reason(),30)+"）",
-                item.status(),"待辅导员审核",item.studentName(),item.className(),"/student-affairs/leave",
+                item.status(),item.status().equals("RETURN_PENDING")?"待确认销假":item.status().equals("APPROVED")?"请假已到期，待返校跟进":"待辅导员审核",item.studentName(),item.className(),"/student-affairs/leave?id="+item.id()+"&status="+item.status(),
                 item.createdAt(),urgent(item.startsAt(),24))).toList();
         });
         source(user, permissions, "certificate:review", "certificate", "学院证明", counts, tasks, errors, () -> {
@@ -73,10 +75,12 @@ public class TaskAggregationService {
                 item.identity().studentName(),item.identity().departmentName(),"/student-affairs/certificates",item.createdAt(),"NORMAL")).toList();
         });
         source(user, permissions, "reservation:review", "reservation", "场地借用", counts, tasks, errors, () -> {
-            var items=readAll(p -> { var page=reservations.listReview(user,"SUBMITTED",null,p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); });
+            var items=java.util.stream.Stream.of("SUBMITTED","APPROVED","IN_USE")
+                .flatMap(state->readAll(p -> { var page=reservations.listReview(user,state,null,p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); }).stream())
+                .filter(item->!item.status().equals("APPROVED") || !item.startsAt().isAfter(LocalDateTime.now())).toList();
             return items.stream().filter(item -> item.applicantId()!=user.id()).map(item -> new AggregatedTask(
                 "RES-"+item.id(),"RESERVATION","场地借用",item.applicantName()+" - "+item.venueName()+"（"+truncate(item.activityTheme(),25)+"）",
-                item.status(),"待场地负责人审批",item.applicantName(),item.venueName(),"/student-affairs/reservations",
+                item.status(),item.status().equals("IN_USE")?"待使用结束核销":item.status().equals("APPROVED")?"待登记开始使用":"待场地负责人审批",item.applicantName(),item.venueName(),"/student-affairs/reservations?id="+item.id()+"&status="+item.status(),
                 item.createdAt(),urgent(item.startsAt(),48))).toList();
         });
         source(user, permissions, "housing:review", "housingReview", "调宿初审", counts, tasks, errors, () ->

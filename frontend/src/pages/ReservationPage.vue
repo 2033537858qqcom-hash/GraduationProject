@@ -8,6 +8,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CheckCircle2,
+  ClipboardCheck,
   Clock,
   Download,
   Edit3,
@@ -57,6 +58,7 @@ import {
   reservationStatuses,
   reservationPassUrl,
   reviewReservation,
+  recordReservationUsage,
   saveDraft,
   submitReservation,
   updateVenue,
@@ -409,6 +411,11 @@ async function handleSubmit() {
     error.value = '请提供11位有效联系电话，方便现场管理人员确认'
     return
   }
+  const venue = venues.value.find(v => v.id === bookingForm.venueId)
+  if (venue?.category === 'VENUE' && venue.capacity && Number(bookingForm.expectedParticipants) > venue.capacity) {
+    error.value = `预计人数超过场地容量（${venue.capacity} 人），请调整人数或选择其他场地`
+    return
+  }
   if (conflictCheck.value?.hasConflict) {
     error.value = '当前所选时段已被占用或与现有预约冲突，请先调整时段'
     return
@@ -502,6 +509,21 @@ async function handleReview(action: 'APPROVE' | 'RETURN' | 'REJECT') {
   } finally {
     busy.value = false
   }
+}
+
+async function handleUsage(action: 'START' | 'COMPLETE') {
+  const selected = selectedReservation.value
+  if (!selected || !reviewComment.value.trim()) { error.value = '请填写现场核对说明'; return }
+  const comment = reviewComment.value.trim()
+  const label = action === 'START' ? '登记开始使用' : '确认使用结束并核销'
+  if (!await ask(`确认对预约 #${selected.id} 执行“${label}”？请核对现场使用及设备情况。`, 'decision')) return
+  busy.value = true; error.value = ''; success.value = ''
+  try {
+    await recordReservationUsage(selected.id, selected.version, action, comment)
+    reviewComment.value = ''; await loadReservations(); await chooseReservation(selected.id)
+    success.value = `已${label}，申请人已收到消息。`
+  } catch (cause) { error.value = errorMessage(cause) }
+  finally { busy.value = false }
 }
 
 // Management Methods
@@ -657,7 +679,7 @@ onMounted(async () => {
     activeTab.value = 'manage'
   } else if (reviewMode.value) {
     activeTab.value = 'review'
-    filterStatus.value = 'SUBMITTED'
+    filterStatus.value = String(route.query.status || 'SUBMITTED')
   } else if (route.query.tab === 'mine') {
     activeTab.value = 'mine'
   } else if (route.query.venue) {
@@ -1028,7 +1050,7 @@ watch(() => route.query.venue, () => {
       </div>
 
       <!-- APPROVED: ELECTRONIC PASS (入场通行电子凭证) -->
-      <div v-if="selectedReservation.status === 'APPROVED'" id="venue-access-pass" class="access-pass-card">
+      <div v-if="['APPROVED', 'IN_USE'].includes(selectedReservation.status)" id="venue-access-pass" class="access-pass-card">
         <div class="pass-watermark">郑州工业应用技术学院</div>
         <div class="pass-header">
           <div class="pass-badge">
@@ -1152,6 +1174,15 @@ watch(() => route.query.venue, () => {
           </button>
         </div>
       </div>
+
+      <section v-if="canReview && !isOwnReservation && activeTab === 'review' && ['APPROVED', 'IN_USE'].includes(selectedReservation.status)" class="leave-review-form reservation-review-box" aria-label="使用登记与结束核销">
+        <h3>{{ selectedReservation.status === 'IN_USE' ? '使用结束核销' : '现场使用登记' }}</h3>
+        <p class="muted">{{ selectedReservation.status === 'IN_USE' ? '请核实场地、设施及借用设备已交接后结束本次使用；逾时仍需在此核销。' : '请在批准的使用时段内核对申请人及现场人数后登记开始使用。' }}</p>
+        <label>现场核对说明<textarea v-model="reviewComment" rows="3" maxlength="1000" :disabled="busy" placeholder="填写现场核对、设施或设备交接情况" /></label>
+        <div class="form-actions"><button class="button primary compact" :disabled="busy || !reviewComment.trim()" @click="handleUsage(selectedReservation.status === 'IN_USE' ? 'COMPLETE' : 'START')"><ClipboardCheck :size="15" />{{ selectedReservation.status === 'IN_USE' ? '确认使用结束并核销' : '登记开始使用' }}</button></div>
+      </section>
+      <p v-if="selectedReservation.status === 'COMPLETED'" class="content-context-note">本次使用已结束核销。使用登记和现场核对说明已保留，原入场凭证已失效。</p>
+      <p v-if="selectedReservation.status === 'EXPIRED'" class="content-context-note">批准时段已结束且未登记使用，本次预约已过期。如仍需使用，请重新申请。</p>
 
       <!-- STUDENT ACTIONS (Edit, Withdraw, Cancel) -->
       <div v-if="canApply && isOwnReservation" class="form-actions reservation-detail-actions">

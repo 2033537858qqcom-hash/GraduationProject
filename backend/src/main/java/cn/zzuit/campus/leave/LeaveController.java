@@ -17,6 +17,8 @@ public class LeaveController {
     public LeaveController(LeaveService leaves) { this.leaves=leaves; }
     @GetMapping("/leave/mine/eligibility") Eligibility eligibility(@AuthenticationPrincipal CampusPrincipal u) { return leaves.eligibility(u); }
     @GetMapping("/leave/mine/calendar") List<Event> calendar(@AuthenticationPrincipal CampusPrincipal u,@RequestParam LocalDate from,@RequestParam LocalDate to) { return leaves.calendar(u,from,to); }
+    @PostMapping("/leave/mine/{id}/return") Request reportReturn(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id,@Valid @RequestBody Action input) { return leaves.reportReturn(u,id,input); }
+    @PostMapping("/leave/review/{id}/close") Request close(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id,@Valid @RequestBody ClosureDecision input) { return leaves.close(u,id,input); }
     @GetMapping("/leave/{view}") Page<Request> list(@AuthenticationPrincipal CampusPrincipal u,@PathVariable String view,@RequestParam(required=false) String status,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int pageSize) { return leaves.list(u,view,status,page,pageSize); }
     @GetMapping("/leave/{view}/{id}") Request detail(@AuthenticationPrincipal CampusPrincipal u,@PathVariable String view,@PathVariable long id) { return leaves.detail(u,view,id); }
     @GetMapping("/leave/{view}/{id}/history") Page<Revision> history(@AuthenticationPrincipal CampusPrincipal u,@PathVariable String view,@PathVariable long id,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="10") int pageSize) { return leaves.history(u,view,id,page,pageSize); }

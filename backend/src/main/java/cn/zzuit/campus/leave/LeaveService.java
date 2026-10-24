@@ -49,7 +49,7 @@ public class LeaveService {
     }
     public Page<Request> list(CampusPrincipal user,String view,String status,int page,int size) {
         permission(user,view); pagination(page,size);
-        if(status!=null && !List.of("DRAFT","SUBMITTED","RETURNED","APPROVED","REJECTED","WITHDRAWN").contains(status)) bad("请假状态无效");
+        if(status!=null && !List.of("DRAFT","SUBMITTED","RETURNED","APPROVED","RETURN_PENDING","COMPLETED","REJECTED","WITHDRAWN").contains(status)) bad("请假状态无效");
         var params=new HashMap<String,Object>(); params.put("user",user.id());
         String where=view.equals("mine")?" WHERE r.student_id=:user":" WHERE r.status<>'DRAFT' AND r.student_id<>:user AND r.class_group_id IN (SELECT a.class_group_id FROM counselor_assignment a "+COUNSELOR_VALID+" AND u.id=:user)";
         if(status!=null) { where+=" AND r.status=:status"; params.put("status",status); }
@@ -83,7 +83,7 @@ public class LeaveService {
     }
     private void editable(Request request) { if(!List.of("DRAFT","RETURNED").contains(request.status())) conflict("只有草稿或待补交申请可修改，已拒绝或撤回请新建申请"); }
     private void overlap(long student,long exclude,LocalDateTime start,LocalDateTime end) {
-        if(jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE student_id=:u AND id<>:id AND status IN ('SUBMITTED','RETURNED','APPROVED') AND starts_at<:end AND ends_at>:start")
+        if(jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE student_id=:u AND id<>:id AND status IN ('SUBMITTED','RETURNED','APPROVED','RETURN_PENDING') AND starts_at<:end AND ends_at>:start")
             .param("u",student).param("id",exclude).param("start",Timestamp.valueOf(start)).param("end",Timestamp.valueOf(end)).query(Long.class).single()>0) conflict("该时间段与本人待审核、待补交或已通过请假重叠，请先核对已有申请");
     }
     @Transactional public Request save(CampusPrincipal user,Long id,Draft input) {
@@ -147,6 +147,35 @@ public class LeaveService {
         capture(user,id,state,input.comment());
         notice(request.studentId(),"请假处理结果已更新",id,switch(state) { case "APPROVED" -> "申请已通过，本人请假日程已生成。"; case "RETURNED" -> "申请待补交，请查看处理意见，补充后重新提交。"; default -> "申请未通过，请查看处理意见。"; }); return find(id);
     }
+    @Transactional public Request reportReturn(CampusPrincipal user,long id,Action input) {
+        lock(); var request=detail(user,"mine",id); version(request.version(),input.version());
+        if(!request.status().equals("APPROVED")) conflict("只有已批准且未申报销假的请假可以申报返校");
+        if(now().isBefore(request.startsAt())) conflict("请假尚未开始，不能申报返校；行程取消请联系辅导员办理变更");
+        long reviewer=counselor(request.classGroupId());
+        if(reviewer==0 || reviewer==user.id()) conflict("当前没有可确认销假的辅导员，请联系管理员核对负责关系");
+        jdbc.sql("UPDATE leave_request SET returned_at=:time WHERE id=:id").param("time",Timestamp.valueOf(now())).param("id",id).update();
+        change(id,"RETURN_PENDING"); capture(user,id,"RETURN_REPORTED",input.comment());
+        notice(reviewer,"学生返校待确认销假",id,"学生已申报返校，请核对后确认销假或退回说明。");
+        notice(user.id(),"返校申报已提交",id,"请等待负责班级的辅导员确认销假，可在原申请查看进度。");
+        return find(id);
+    }
+    @Transactional public Request close(CampusPrincipal user,long id,ClosureDecision input) {
+        lock(); var request=detail(user,"review",id); version(request.version(),input.version());
+        if(!request.status().equals("RETURN_PENDING")) conflict("当前申请不在待确认销假状态");
+        boolean confirmed=input.action().equals("CONFIRM");
+        jdbc.sql("UPDATE leave_request SET processing_comment=:comment,closed_at=:closed WHERE id=:id")
+            .param("comment",input.comment().trim()).param("closed",confirmed?Timestamp.valueOf(now()):null).param("id",id).update();
+        if(confirmed) {
+            // Keep the approved request snapshot intact; shorten only the derived absence calendar.
+            var returned=jdbc.sql("SELECT returned_at FROM leave_request WHERE id=:id").param("id",id).query(LocalDateTime.class).single();
+            jdbc.sql("UPDATE leave_calendar SET ends_at=:end WHERE request_id=:id AND ends_at>:end")
+                .param("end",Timestamp.valueOf(returned)).param("id",id).update();
+        } else jdbc.sql("UPDATE leave_request SET returned_at=NULL WHERE id=:id").param("id",id).update();
+        change(id,confirmed?"COMPLETED":"APPROVED");
+        capture(user,id,confirmed?"RETURN_CONFIRMED":"RETURN_DECLINED",input.comment());
+        notice(request.studentId(),confirmed?"请假已确认销假":"返校申报需要重新核对",id,confirmed?"辅导员已确认返校，本次请假已结束，原申请和办理记录保留。":"销假未确认："+input.comment().trim()+"；请核对后重新申报返校。");
+        return find(id);
+    }
     private void change(long id,String status) { jdbc.sql("UPDATE leave_request SET status=:s,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id").param("s",status).param("id",id).update(); }
     private String actor(long id) { return jdbc.sql("SELECT full_name FROM app_user WHERE id=:id").param("id",id).query(String.class).single(); }
     private void capture(CampusPrincipal user,long id,String action,String comment) {
@@ -200,10 +229,10 @@ public class LeaveService {
         var current=assignments(user).assignments().stream().filter(a->a.classGroupId()==group).findFirst().orElseThrow(this::missing); version(current.version(),input.version());
         if(Objects.equals(current.counselorId(),input.counselorId())) conflict("负责关系未变化");
         if(input.counselorId()==null) {
-            if(jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE class_group_id=:g AND status IN ('SUBMITTED','RETURNED')").param("g",group).query(Long.class).single()>0) conflict("班级仍有待审核或待补交申请，请先移交给有效辅导员，不能清空负责关系");
+            if(jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE class_group_id=:g AND status IN ('SUBMITTED','RETURNED','APPROVED','RETURN_PENDING')").param("g",group).query(Long.class).single()>0) conflict("班级仍有待审核或待补交申请，请先移交给有效辅导员，不能清空负责关系");
         } else if(jdbc.sql("SELECT COUNT(*) FROM app_user u JOIN class_group cg ON cg.id=:g JOIN major m ON m.id=cg.major_id WHERE u.id=:id AND u.enabled=TRUE AND u.department_id=m.department_id AND EXISTS(SELECT 1 FROM user_role ur WHERE ur.user_id=u.id AND ur.role_code='TEACHER') AND EXISTS(SELECT 1 FROM user_role ur WHERE ur.user_id=u.id AND ur.role_code='COUNSELOR')")
             .param("g",group).param("id",input.counselorId()).query(Long.class).single()!=1) bad("须选择本学院启用的教师及辅导员岗位人员");
-        if(input.counselorId()!=null && jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE class_group_id=:g AND student_id=:u AND status IN ('SUBMITTED','RETURNED')").param("g",group).param("u",input.counselorId()).query(Long.class).single()>0) conflict("不能将待处理的本人申请移交给申请人，请选择其他辅导员");
+        if(input.counselorId()!=null && jdbc.sql("SELECT COUNT(*) FROM leave_request WHERE class_group_id=:g AND student_id=:u AND status IN ('SUBMITTED','RETURNED','APPROVED','RETURN_PENDING')").param("g",group).param("u",input.counselorId()).query(Long.class).single()>0) conflict("不能将待处理的本人申请移交给申请人，请选择其他辅导员");
         if(jdbc.sql("SELECT COUNT(*) FROM counselor_assignment WHERE class_group_id=:g").param("g",group).query(Long.class).single()==0)
             jdbc.sql("INSERT INTO counselor_assignment(class_group_id,counselor_id,version) VALUES(:g,:id,1)").param("g",group).param("id",input.counselorId()).update();
         else jdbc.sql("UPDATE counselor_assignment SET counselor_id=:id,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE class_group_id=:g").param("id",input.counselorId()).param("g",group).update();

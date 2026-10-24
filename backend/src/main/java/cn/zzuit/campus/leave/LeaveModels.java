@@ -17,6 +17,7 @@ public final class LeaveModels {
         @NotBlank @Size(max=80) String contact,@NotNull LocalDateTime startsAt,@NotNull LocalDateTime endsAt,@Min(0) int version) {}
     public record Action(@Min(0) int version,@NotBlank @Size(max=1000) String comment) {}
     public record Decision(@Min(0) int version,@NotBlank @Pattern(regexp="APPROVE|RETURN|REJECT") String action,@NotBlank @Size(max=1000) String comment) {}
+    public record ClosureDecision(@Min(0) int version,@NotBlank @Pattern(regexp="CONFIRM|RETURN") String action,@NotBlank @Size(max=1000) String comment) {}
     public record Assignment(long classGroupId,String className,String departmentName,Long counselorId,String counselorName,int version) {}
     public record Counselor(long id,String name,String departmentName,long departmentId) {}
     public record AssignmentCatalog(List<Assignment> assignments,List<Counselor> counselors) {}

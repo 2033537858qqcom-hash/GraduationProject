@@ -101,6 +101,12 @@ public class ReservationDtos {
         String contactPhone
     ) {}
 
+    public record UsageCommand(
+        @jakarta.validation.constraints.Min(0) int version,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(regexp="START|COMPLETE") String action,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=1000) String comment
+    ) {}
+
     public record ReviewReservationCommand(
         String action,
         String comment

@@ -67,7 +67,7 @@ public class AgentTools {
                 case "search_guides" -> properties.put("query",Map.of("type","string","description","办理事项关键词，1—200 字"));
                 case "my_timetable" -> { properties.put("week",Map.of("type","string","description","可选 ISO 日期；查询该日期所在的周，不明确时省略")); properties.put("termId",Map.of("type","integer","minimum",1,"description","可选；只在用户明确选择学期编号时提供")); }
                 case "my_grades","my_exams" -> properties.put("termId",Map.of("type","integer","minimum",1,"description","可选；省略时选择覆盖今天的唯一学期"));
-                case "my_affairs" -> { properties.put("kind",Map.of("type","string","enum",List.of("ALL","LEAVE","CERTIFICATE"))); properties.put("status",Map.of("type","string","enum",List.of("ALL","DRAFT","SUBMITTED","RETURNED","APPROVED","COMPLETED","REJECTED","WITHDRAWN"))); }
+                case "my_affairs" -> { properties.put("kind",Map.of("type","string","enum",List.of("ALL","LEAVE","CERTIFICATE"))); properties.put("status",Map.of("type","string","enum",List.of("ALL","DRAFT","SUBMITTED","RETURNED","APPROVED","RETURN_PENDING","COMPLETED","REJECTED","WITHDRAWN"))); }
                 case "application_status" -> { properties.put("kind",Map.of("type","string","enum",List.of("LEAVE","CERTIFICATE"))); properties.put("id",Map.of("type","integer","minimum",1,"description","只取用户明确给出的申请编号；省略时使用本地页面上下文")); properties.put("view",Map.of("type","string","enum",List.of("MINE","REVIEW"),"description","省略时采用页面上下文或本人视图")); }
                 case "my_repairs","repair_dispatch_queue","repair_work_queue" -> properties.put("status",Map.of("type","string","enum",REPAIR_STATUSES,"description","省略时查看该范围的全部可见状态"));
                 case "housing_transfer_status" -> properties.put("id",Map.of("type","integer","minimum",1,"description","本人调宿申请编号；省略时使用当前调宿页面上下文"));
@@ -104,7 +104,7 @@ public class AgentTools {
             case "search_guides" -> knowledge(text(a,"query",null,200));
             case "my_timetable" -> timetable(user,text(a,"week",null,10),number(a,"termId"));
             case "my_grades","my_exams" -> learning(user,call.name(),number(a,"termId"));
-            case "my_affairs" -> affairs(user,choice(a,"kind","ALL",Set.of("ALL","LEAVE","CERTIFICATE")),choice(a,"status","ALL",Set.of("ALL","DRAFT","SUBMITTED","RETURNED","APPROVED","COMPLETED","REJECTED","WITHDRAWN")));
+            case "my_affairs" -> affairs(user,choice(a,"kind","ALL",Set.of("ALL","LEAVE","CERTIFICATE")),choice(a,"status","ALL",Set.of("ALL","DRAFT","SUBMITTED","RETURNED","APPROVED","RETURN_PENDING","COMPLETED","REJECTED","WITHDRAWN")));
             case "my_notice_summary" -> messages(user);
             case "my_review_pending" -> pending(user);
             case "application_status" -> {
@@ -186,11 +186,11 @@ public class AgentTools {
     private record TimedFact(Fact fact,LocalDateTime time) {}
     private ToolResult affairs(CampusPrincipal user,String kind,String status) {
         identities.requirePermission(user,"portal:read"); var rows=new ArrayList<TimedFact>(); long total=0; String filter=status.equals("ALL")?null:status;
-        if(!kind.equals("CERTIFICATE") && !status.equals("COMPLETED")) {
+        if(!kind.equals("CERTIFICATE")) {
             var page=leaves.list(user,"mine",filter,1,8); total+=page.total();
             page.items().forEach(r->rows.add(new TimedFact(fact("LEAVE",r.id(),r.status(),r.version(),r.updatedAt(),"mine"),r.updatedAt())));
         }
-        if(!kind.equals("LEAVE") && !status.equals("APPROVED")) {
+        if(!kind.equals("LEAVE") && !Set.of("APPROVED","RETURN_PENDING").contains(status)) {
             var page=certificates.list(user,"mine",filter,1,8); total+=page.total();
             page.items().forEach(r->rows.add(new TimedFact(fact("CERTIFICATE",r.id(),r.status(),r.version(),r.updatedAt(),"mine"),r.updatedAt())));
         }
@@ -338,6 +338,6 @@ public class AgentTools {
     private String choice(JsonNode a,String name,String fallback,Set<String> options) { String x=text(a,name,fallback,40); if(x!=null && !options.contains(x)) throw invalid(); return x; }
     private Long number(JsonNode a,String name) { var x=a.path(name); if(x.isMissingNode() || x.isNull()) return null; if(!x.isIntegralNumber() || !x.asText().matches("[1-9][0-9]{0,17}")) throw invalid(); return x.asLong(); }
     private ApiException invalid() { return new ApiException(HttpStatus.BAD_REQUEST,"INVALID_TOOL_ARGUMENTS","查询参数无效，未读取其他人的资料或修改业务"); }
-    private String statusName(String status) { return switch(status) { case "DRAFT" -> "草稿"; case "SUBMITTED" -> "待审核"; case "RETURNED" -> "待补交"; case "APPROVED" -> "已通过"; case "COMPLETED" -> "办理完成"; case "REJECTED" -> "已拒绝"; case "WITHDRAWN" -> "已撤回"; default -> "未知状态"; }; }
+    private String statusName(String status) { return switch(status) { case "DRAFT" -> "草稿"; case "SUBMITTED" -> "待审核"; case "RETURNED" -> "待补交"; case "APPROVED" -> "已批准，待返校销假"; case "RETURN_PENDING" -> "返校已申报，待确认销假"; case "COMPLETED" -> "办理完成"; case "REJECTED" -> "已拒绝"; case "WITHDRAWN" -> "已撤回"; default -> "未知状态"; }; }
     private String period(LocalDateTime start,LocalDateTime end) { return start.format(DateTimeFormatter.ofPattern("MM月dd日 HH:mm"))+"—"+end.format(DateTimeFormatter.ofPattern(start.toLocalDate().equals(end.toLocalDate())?"HH:mm":"MM月dd日 HH:mm")); }
 }

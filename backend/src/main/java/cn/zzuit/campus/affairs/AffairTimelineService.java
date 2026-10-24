@@ -97,7 +97,7 @@ public class AffairTimelineService {
     private String title(String kind,String action,String previousStatus) {
         if("RETURNED".equals(previousStatus) && List.of("SUBMITTED","submit").contains(action))return "补交后重新提交";
         if(kind.equals("RESERVATION"))return switch(action) {
-            case "SAVE"->"保存借用草稿";case "SUBMIT"->"提交借用申请";case "WITHDRAW"->"撤回借用申请";case "APPROVE"->"审批通过借用";case "RETURN"->"退回补充说明";case "REJECT"->"未获审批通过";case "CANCEL"->"取消场地借用";default->"借用办理记录";
+            case "SAVE"->"保存借用草稿";case "SUBMIT"->"提交借用申请";case "WITHDRAW"->"撤回借用申请";case "APPROVE"->"审批通过借用";case "RETURN"->"退回补充说明";case "REJECT"->"未获审批通过";case "CANCEL"->"取消场地借用";case "RESOURCE_DISABLED"->"场地停用取消预约";case "START"->"登记开始使用";case "COMPLETE"->"确认使用结束";case "EXPIRE"->"预约过期未使用";default->"借用办理记录";
         };
         if(kind.equals("REPAIR"))return switch(action) {
             case "SAVE"->"保存报修资料";case "UPLOAD"->"上传报修图片";case "REMOVE_IMAGE"->"移出当前图片";case "submit"->"提交报修";case "withdraw"->"撤回报修";
@@ -105,7 +105,7 @@ public class AffairTimelineService {
             case "progress"->"记录维修进展";case "unable"->"交回后勤处理";case "complete"->"提交维修结果";case "confirm"->"本人确认完成";case "reopen"->"反馈问题未解决";
             case "evaluation"->"提交服务评价";case "priority"->"调整处理优先级";case "CANCEL_REQUEST"->"申请取消报修";case "CANCEL_WITHDRAW"->"撤销取消申请";case "CANCEL_APPROVE"->"后勤同意取消";case "CANCEL_REJECT"->"后勤未同意取消";default->"报修办理记录";
         };
-        return switch(action) {case "CREATED"->"保存申请草稿";case "UPDATED"->"更新申请资料";case "FILE"->"补充申请材料";case "SUBMITTED"->"提交审核";case "RETURNED"->"退回补充资料";case "APPROVED"->"请假审核通过";case "COMPLETED"->"生成演示证明";case "REJECTED"->"申请未通过";case "WITHDRAWN"->"本人撤回申请";default->"申请办理记录";};
+        return switch(action) {case "RETURN_REPORTED"->"学生申报返校";case "RETURN_CONFIRMED"->"辅导员确认销假";case "RETURN_DECLINED"->"返校申报退回核对";case "CREATED"->"保存申请草稿";case "UPDATED"->"更新申请资料";case "FILE"->"补充申请材料";case "SUBMITTED"->"提交审核";case "RETURNED"->"退回补充资料";case "APPROVED"->"请假审核通过";case "COMPLETED"->"生成演示证明";case "REJECTED"->"申请未通过";case "WITHDRAWN"->"本人撤回申请";default->"申请办理记录";};
     }
     private String nextStep(String kind,Current current) {
         if(current.restriction()!=null && !current.restriction().isBlank())return current.restriction();
@@ -118,9 +118,11 @@ public class AffairTimelineService {
             case "AWAITING_CONFIRMATION"->"请核对维修结果，在原工单确认修复或反馈问题。";
             case "AWAITING_ASSIGNMENT"->"学院初审已通过，等待宿管安排床位。";
             case "AWAITING_CHECKIN"->"请在原申请核对床位和入住期限，联系宿管确认入住。";
-            case "APPROVED"->kind.equals("RESERVATION")?"场地借用审批已通过，请准时入场并出示借用记录。":"请假已通过，可在请假日程核对时间。";
-            case "COMPLETED"->kind.equals("CERTIFICATE")?"证明已生成，请在原申请下载演示证明。":kind.equals("HOUSING")?"调宿已完成，可在我的住宿核对新床位。":"报修已完成，可在原工单查看结果及评价。";
-            case "EXPIRED"->"预留已到期，原住宿保留；如仍需调宿，请重新申请。";
+            case "APPROVED"->kind.equals("RESERVATION")?"场地借用审批已通过，请准时入场并出示借用记录。":"请假已批准，返校后请在原申请申报销假。";
+            case "RETURN_PENDING"->"返校已申报，等待辅导员确认销假。";
+            case "IN_USE"->"场地使用中，结束后请联系负责人登记核销。";
+            case "COMPLETED"->kind.equals("LEAVE")?"辅导员已确认返校，请假已销假结束。":kind.equals("RESERVATION")?"使用已结束核销，原预约与办理记录保留。":kind.equals("CERTIFICATE")?"证明已生成，请在原申请下载演示证明。":kind.equals("HOUSING")?"调宿已完成，可在我的住宿核对新床位。":"报修已完成，可在原工单查看结果及评价。";
+            case "EXPIRED"->kind.equals("RESERVATION")?"批准时段已结束且未登记使用，预约已过期；需要使用请重新申请。":"预留已到期，原住宿保留；如仍需调宿，请重新申请。";
             case "REJECTED","WITHDRAWN","CANCELLED"->"本次办理已结束，历史保留；重新办理请新建申请。";
             default->"请在原申请核对当前状态与可用操作。";
         };

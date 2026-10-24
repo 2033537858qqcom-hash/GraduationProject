@@ -135,6 +135,13 @@ public class VenueReservationService {
     public void updateVenue(CampusPrincipal user, long id, VenueUpdateCommand cmd) {
         lock(user, "reservation:manage");
         var venue = getVenue(id);
+        if (cmd.capacity()!=null && cmd.capacity()<1) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CAPACITY","容量须大于零");
+        if (cmd.name()!=null && (cmd.name().isBlank() || cmd.name().length()>150)) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_VENUE_NAME","请填写有效场地名称");
+        if (Boolean.FALSE.equals(cmd.enabled()) && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND status='IN_USE'").param("v",id).query(Long.class).single()>0)
+            throw new ApiException(HttpStatus.CONFLICT,"VENUE_IN_USE","场地仍在使用中，请先核对并登记使用结束后再停用");
+        if (cmd.capacity()!=null && venue.category().equals("VENUE") && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND status IN ('APPROVED','IN_USE') AND ends_at>CURRENT_TIMESTAMP AND expected_participants>:cap")
+                .param("v",id).param("cap",cmd.capacity()).query(Long.class).single()>0)
+            throw new ApiException(HttpStatus.CONFLICT,"ACTIVE_RESERVATION_CAPACITY","新容量低于已批准或使用中预约的人数，请先处理受影响预约");
         jdbc.sql("""
             UPDATE venue_resource
             SET name = :name,
@@ -153,6 +160,17 @@ public class VenueReservationService {
             .param("rules", cmd.rules() != null ? cmd.rules().trim() : venue.rules())
             .param("enabled", cmd.enabled() != null ? cmd.enabled() : venue.enabled())
             .update();
+        if (Boolean.FALSE.equals(cmd.enabled())) {
+            var affected=jdbc.sql("SELECT id,applicant_id,version FROM venue_reservation WHERE venue_id=:v AND status IN ('SUBMITTED','APPROVED')")
+                .param("v",id).query((row,n)->new long[]{row.getLong(1),row.getLong(2),row.getInt(3)}).list();
+            var actor=identities.profile(user.id());
+            for (var item:affected) {
+                jdbc.sql("UPDATE venue_reservation SET status='CANCELLED',processing_comment='场地临时停用，未开始的预约已取消',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id")
+                    .param("id",item[0]).update();
+                recordAction(item[0],(int)item[2]+1,user.id(),actor.fullName(),"RESOURCE_DISABLED","CANCELLED","场地临时停用，未开始的预约已取消");
+                noticeWriter.write(item[1],"场地停用，预约已取消","RESERVATION",item[0],"MINE","【"+venue.name()+"】暂时停用，请重新选择其他场地；原凭证已失效。");
+            }
+        }
     }
 
     public List<VenueManagementItem> listVenuesForManagement(CampusPrincipal user) {
@@ -300,7 +318,7 @@ public class VenueReservationService {
             SELECT starts_at, ends_at, activity_theme, status
             FROM venue_reservation
             WHERE venue_id = :venueId
-              AND status IN ('SUBMITTED', 'APPROVED')
+              AND status IN ('SUBMITTED', 'APPROVED', 'IN_USE')
               AND ends_at > :startOfDay AND starts_at < :endOfDay
             ORDER BY starts_at ASC
             """)
@@ -337,7 +355,7 @@ public class VenueReservationService {
             SELECT starts_at, ends_at, activity_theme, status
             FROM venue_reservation
             WHERE venue_id = :venueId
-              AND status IN ('SUBMITTED', 'APPROVED')
+              AND status IN ('SUBMITTED', 'APPROVED', 'IN_USE')
               AND (:excludeId IS NULL OR id != :excludeId)
               AND ends_at > :startsAt AND starts_at < :endsAt
             ORDER BY starts_at ASC
@@ -422,8 +440,8 @@ public class VenueReservationService {
     public ReservationDetail getPassDetail(CampusPrincipal user, long id) {
         var detail = getDetail(user, id);
         identities.requirePermission(user, detail.applicantId() == user.id() ? "reservation:apply" : "reservation:review");
-        if (!"APPROVED".equals(detail.status())) {
-            throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_PASS_UNAVAILABLE", "仅已审批通过且未取消的借用申请可以导出凭证，请刷新查看最新状态");
+        if (!List.of("APPROVED","IN_USE").contains(detail.status()) || !getVenue(detail.venueId()).enabled() || !detail.endsAt().isAfter(LocalDateTime.now())) {
+            throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_PASS_UNAVAILABLE", "仅有效时段内未结束、场地可用的已批准预约可以导出凭证，请刷新查看最新状态");
         }
         return detail;
     }
@@ -531,6 +549,7 @@ public class VenueReservationService {
 
         var profile = identities.profile(user.id());
         var venue = getVenue(cmd.venueId());
+        validateCapacity(venue,cmd.expectedParticipants());
         if (!venue.enabled()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VENUE_DISABLED", "该场地目前暂停对外借用开放");
         }
@@ -639,6 +658,7 @@ public class VenueReservationService {
 
         var profile = identities.profile(user.id());
         var venue = getVenue(cmd.venueId());
+        validateCapacity(venue,cmd.expectedParticipants());
         if (!venue.enabled()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VENUE_DISABLED", "该场地目前暂停借用");
         }
@@ -886,6 +906,9 @@ public class VenueReservationService {
         String comment = cmd.comment() != null ? cmd.comment().trim() : "";
 
         if ("APPROVE".equals(action)) {
+            var venue=getVenue(detail.venueId());
+            if (!venue.enabled()) throw new ApiException(HttpStatus.CONFLICT,"VENUE_DISABLED","场地已停用，不能批准使用");
+            validateCapacity(venue,detail.expectedParticipants());
             // 审批通过时二次确认时段冲突
             var conflict = checkConflict(new CheckConflictCommand(detail.venueId(), detail.startsAt(), detail.endsAt(), id));
             if (conflict.hasConflict()) {
@@ -966,6 +989,36 @@ public class VenueReservationService {
         }
 
         return getDetail(user, id);
+    }
+
+    private void validateCapacity(VenueSummary venue,int participants) {
+        if (participants<1) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_PARTICIPANTS","预计人数须大于零");
+        if (venue.category().equals("VENUE") && venue.capacity()!=null && participants>venue.capacity())
+            throw new ApiException(HttpStatus.CONFLICT,"VENUE_CAPACITY_EXCEEDED","预计人数超过场地容量（"+venue.capacity()+" 人），请选择合适场地或调整人数");
+    }
+
+    @Transactional
+    public ReservationDetail usage(CampusPrincipal user,long id,UsageCommand cmd) {
+        lock(user,"reservation:review");
+        var detail=getDetail(user,id);
+        if (detail.applicantId()==user.id() || !isVenueManager(user.id(),detail.venueId()))
+            throw new ApiException(HttpStatus.FORBIDDEN,"FORBIDDEN","仅负责该场地且非申请人本人的办理人员可以登记使用");
+        if (detail.version()!=cmd.version()) throw new ApiException(HttpStatus.CONFLICT,"CONCURRENT_MODIFICATION","记录已更新，请刷新后操作");
+        boolean start=cmd.action().equals("START");
+        if (!(start?"APPROVED":"IN_USE").equals(detail.status())) throw new ApiException(HttpStatus.CONFLICT,"INVALID_USAGE_STATE","当前状态不能执行该使用操作");
+        if (start) {
+            var now=LocalDateTime.now();
+            if (now.isBefore(detail.startsAt()) || !now.isBefore(detail.endsAt())) throw new ApiException(HttpStatus.CONFLICT,"OUTSIDE_USAGE_TIME","请在批准的使用时段内登记入场");
+            var venue=getVenue(detail.venueId());
+            if (!venue.enabled()) throw new ApiException(HttpStatus.CONFLICT,"VENUE_DISABLED","场地已停用，不能登记使用");
+            validateCapacity(venue,detail.expectedParticipants());
+        }
+        String state=start?"IN_USE":"COMPLETED";
+        jdbc.sql("UPDATE venue_reservation SET status=:state,processing_comment=:comment,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id")
+            .param("state",state).param("comment",cmd.comment().trim()).param("id",id).update();
+        recordAction(id,detail.version()+1,user.id(),identities.profile(user.id()).fullName(),cmd.action(),state,cmd.comment().trim());
+        noticeWriter.write(detail.applicantId(),start?"场地已登记开始使用":"场地使用已结束核销","RESERVATION",id,"MINE",cmd.comment().trim());
+        return getDetail(user,id);
     }
 
     private void recordAction(long reservationId, int version, long actorId, String actorName, String action, String status, String comment) {

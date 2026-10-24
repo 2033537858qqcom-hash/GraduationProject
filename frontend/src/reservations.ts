@@ -46,7 +46,7 @@ export interface ReservationActionDto {
   id: number
   reservationId: number
   reservationVersion: number
-  actorId: number
+  actorId: number | null
   actorName: string
   action: string
   status: string

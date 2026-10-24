@@ -53,7 +53,7 @@ public class ReservationDtos {
         long id,
         long reservationId,
         int reservationVersion,
-        long actorId,
+        Long actorId,
         String actorName,
         String action,
         String status,

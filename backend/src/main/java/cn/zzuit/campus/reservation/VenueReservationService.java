@@ -506,7 +506,7 @@ public class VenueReservationService {
                 r.getLong("id"),
                 r.getLong("reservation_id"),
                 r.getInt("reservation_version"),
-                r.getLong("actor_id"),
+                r.getObject("actor_id", Long.class),
                 r.getString("actor_name"),
                 r.getString("action"),
                 r.getString("status"),

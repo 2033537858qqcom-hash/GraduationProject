@@ -1418,7 +1418,7 @@ watch(() => route.query.venue, () => {
             <li v-for="slot in scheduleSlots" :key="slot.startsAt" class="schedule-slot-item">
               <div class="slot-time">
                 <strong>{{ formatHour(slot.startsAt) }} - {{ formatHour(slot.endsAt) }}</strong>
-                <span class="slot-status-badge">{{ slot.status === 'APPROVED' ? '已同意占用' : '审核中' }}</span>
+                <span class="slot-status-badge">{{ slot.status === 'IN_USE' ? '使用中' : slot.status === 'APPROVED' ? '已同意占用' : '审核中' }}</span>
               </div>
               <div class="slot-desc">
                 <h4>{{ slot.activityTheme }}</h4>
@@ -1480,6 +1480,7 @@ watch(() => route.query.venue, () => {
             <input v-model="venueEditForm.enabled" type="checkbox" />
             <span>开启该场地/设备的对外预约开放（取消勾选将暂停开放）</span>
           </label>
+          <p v-if="!venueEditForm.enabled" class="alert" role="status">停用会取消尚未开始的待审和已批准预约，并通知申请人。正在使用的场地须先完成结束核销，才能停用。</p>
 
           <div class="form-actions modal-actions" style="margin-top: 18px;">
             <button type="submit" class="button primary compact" :disabled="busy">

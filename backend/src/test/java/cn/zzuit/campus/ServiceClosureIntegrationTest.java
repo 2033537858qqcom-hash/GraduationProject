@@ -191,6 +191,18 @@ class ServiceClosureIntegrationTest {
         return using;
     }
 
+    @Test
+    void agentGuideExplainsTheImplementedReturnWorkflow() throws Exception {
+        var guide=ok(login("20260001").get("/api/assistant/guides/leave"));
+        assertThat(guide.path("version").asInt()).isGreaterThan(1);
+        assertThat(guide.path("body").asText()).contains("申报返校","确认销假").doesNotContain("销假与通过后变更尚未实现");
+    }
+    @Test
+    void agentLocalQueryUnderstandsReturnAndClosureProgress() throws Exception {
+        var answer=ok(login("20260001").send("POST","/api/assistant/query",Map.of("message","我的返校销假进度","mode","LOCAL","externalConsent",false)));
+        assertThat(answer.toString()).contains("my_affairs");
+    }
+
     private long venue(Browser b) throws Exception { return ok(b.get("/api/reservations/venues?placeId=east-gym")).get(0).path("id").asLong(); }
     private long id(JsonNode n) { return n.path("id").asLong(); }
     private Map<String,Object> booking(long venue,int people,int days) {

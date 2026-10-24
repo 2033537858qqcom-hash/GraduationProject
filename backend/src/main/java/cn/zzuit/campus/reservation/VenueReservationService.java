@@ -139,7 +139,7 @@ public class VenueReservationService {
         if (cmd.name()!=null && (cmd.name().isBlank() || cmd.name().length()>150)) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_VENUE_NAME","请填写有效场地名称");
         if (Boolean.FALSE.equals(cmd.enabled()) && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND status='IN_USE'").param("v",id).query(Long.class).single()>0)
             throw new ApiException(HttpStatus.CONFLICT,"VENUE_IN_USE","场地仍在使用中，请先核对并登记使用结束后再停用");
-        if (cmd.capacity()!=null && venue.category().equals("VENUE") && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND status IN ('APPROVED','IN_USE') AND ends_at>CURRENT_TIMESTAMP AND expected_participants>:cap")
+        if (cmd.capacity()!=null && venue.category().equals("VENUE") && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND (status='IN_USE' OR (status='APPROVED' AND ends_at>CURRENT_TIMESTAMP)) AND expected_participants>:cap")
                 .param("v",id).param("cap",cmd.capacity()).query(Long.class).single()>0)
             throw new ApiException(HttpStatus.CONFLICT,"ACTIVE_RESERVATION_CAPACITY","新容量低于已批准或使用中预约的人数，请先处理受影响预约");
         jdbc.sql("""
@@ -357,7 +357,7 @@ public class VenueReservationService {
             WHERE venue_id = :venueId
               AND status IN ('SUBMITTED', 'APPROVED', 'IN_USE')
               AND (:excludeId IS NULL OR id != :excludeId)
-              AND ends_at > :startsAt AND starts_at < :endsAt
+              AND ((ends_at > :startsAt AND starts_at < :endsAt) OR (status='IN_USE' AND ends_at<=CURRENT_TIMESTAMP))
             ORDER BY starts_at ASC
             """)
             .param("venueId", cmd.venueId())
@@ -1007,6 +1007,9 @@ public class VenueReservationService {
         boolean start=cmd.action().equals("START");
         if (!(start?"APPROVED":"IN_USE").equals(detail.status())) throw new ApiException(HttpStatus.CONFLICT,"INVALID_USAGE_STATE","当前状态不能执行该使用操作");
         if (start) {
+            if (jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND id<>:id AND status='IN_USE'")
+                    .param("v",detail.venueId()).param("id",id).query(Long.class).single()>0)
+                throw new ApiException(HttpStatus.CONFLICT,"VENUE_STILL_IN_USE","上一场使用尚未结束核销，请先完成现场交接");
             var now=LocalDateTime.now();
             if (now.isBefore(detail.startsAt()) || !now.isBefore(detail.endsAt())) throw new ApiException(HttpStatus.CONFLICT,"OUTSIDE_USAGE_TIME","请在批准的使用时段内登记入场");
             var venue=getVenue(detail.venueId());

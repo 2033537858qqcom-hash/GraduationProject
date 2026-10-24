@@ -56,6 +56,7 @@ import {
   listVenuesForManagement,
   removeVenueManager,
   reservationStatuses,
+  reservationActions,
   reservationPassUrl,
   reviewReservation,
   recordReservationUsage,
@@ -1050,7 +1051,7 @@ watch(() => route.query.venue, () => {
       </div>
 
       <!-- APPROVED: ELECTRONIC PASS (入场通行电子凭证) -->
-      <div v-if="['APPROVED', 'IN_USE'].includes(selectedReservation.status)" id="venue-access-pass" class="access-pass-card">
+      <div v-if="['APPROVED', 'IN_USE'].includes(selectedReservation.status) && new Date(selectedReservation.endsAt).getTime() > Date.now()" id="venue-access-pass" class="access-pass-card">
         <div class="pass-watermark">郑州工业应用技术学院</div>
         <div class="pass-header">
           <div class="pass-badge">
@@ -1214,7 +1215,15 @@ watch(() => route.query.venue, () => {
 
       <!-- TIMELINE INTEGRATION -->
       <div class="reservation-timeline-wrap">
-        <AffairTimeline kind="RESERVATION" :request-id="selectedReservation.id" />
+        <AffairTimeline v-if="isOwnReservation" kind="RESERVATION" :request-id="selectedReservation.id" />
+        <section v-else aria-label="预约办理记录">
+          <h3>办理记录</h3>
+          <article v-for="record in selectedReservation.actions" :key="record.id" class="resource-history">
+            <div class="section-heading"><strong>{{ reservationActions[record.action] || record.action }}</strong><span class="status-label">{{ reservationStatuses[record.status] || record.status }}</span></div>
+            <p class="preserve-lines">{{ record.comment }}</p>
+            <small class="muted">{{ record.actorName }} · {{ formatTime(record.createdAt) }}</small>
+          </article>
+        </section>
       </div>
     </section>
 

@@ -37,6 +37,8 @@ class ServiceClosureIntegrationTest {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired cn.zzuit.campus.affairs.ServiceFollowupService followups;
+
     final JsonMapper json = JsonMapper.builder().build();
 
     @Test
@@ -121,6 +123,42 @@ class ServiceClosureIntegrationTest {
         var second=ok(report(student,rejected));
         assertThat(second.path("version").asInt()).isGreaterThan(pending.path("version").asInt());
         ok(close(counselor,second,"CONFIRM"));
+    }
+
+    @Test
+    void expiredUnusedBookingsCloseButActiveUseRemainsForHumanHandover() throws Exception {
+        var student=login("20260001"); var reviewer=login("affairs1001"); long venue=venue(student);
+        var approved=approve(student,reviewer,venue,86);
+        var pending=ok(student.send("POST","/api/reservations/submit",booking(venue,1,87)));
+        var active=approve(student,reviewer,venue,88);
+        jdbc.sql("UPDATE venue_reservation SET starts_at=:s,ends_at=:e WHERE id=:id")
+            .param("s",LocalDateTime.now().minusMinutes(5)).param("e",LocalDateTime.now().plusMinutes(55)).param("id",id(active)).update();
+        var using=ok(use(reviewer,id(active),active,"START"));
+        try {
+            for (var record:List.of(approved,pending,active)) jdbc.sql("UPDATE venue_reservation SET starts_at=:s,ends_at=:e WHERE id=:id")
+                .param("s",LocalDateTime.now().minusHours(2)).param("e",LocalDateTime.now().minusHours(1)).param("id",id(record)).update();
+            followups.processDue(); followups.processDue();
+            assertThat(ok(student.get("/api/reservations/"+id(approved))).path("status").asText()).isEqualTo("EXPIRED");
+            assertThat(ok(student.get("/api/reservations/"+id(pending))).path("status").asText()).isEqualTo("EXPIRED");
+            assertThat(ok(student.get("/api/reservations/"+id(active))).path("status").asText()).isEqualTo("IN_USE");
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM venue_reservation_action WHERE reservation_id=:id AND action='EXPIRE' AND actor_id IS NULL")
+                .param("id",id(approved)).query(Long.class).single()).isEqualTo(1);
+            assertThat(jdbc.sql("SELECT COUNT(*) FROM service_followup_reminder WHERE kind='RESERVATION' AND request_id=:id")
+                .param("id",id(active)).query(Long.class).single()).isEqualTo(2);
+        } finally { ok(use(reviewer,id(active),using,"COMPLETE")); }
+    }
+
+    @Test
+    void overdueLeaveRemindsStudentAndCurrentCounselorOnlyOncePerDay() throws Exception {
+        var student=login("20260001"); var counselor=login("counselor1001");
+        var leave=approvedLeave(student,counselor,93); long id=id(leave);
+        jdbc.sql("UPDATE leave_request SET starts_at=:s,ends_at=:e WHERE id=:id")
+            .param("s",LocalDateTime.now().minusHours(3)).param("e",LocalDateTime.now().minusHours(1)).param("id",id).update();
+        followups.processDue(); followups.processDue();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM service_followup_reminder WHERE kind='LEAVE' AND request_id=:id")
+            .param("id",id).query(Long.class).single()).isEqualTo(2);
+        assertThat(ok(student.get("/api/leave/mine/"+id)).path("status").asText()).isEqualTo("APPROVED");
+        var pending=ok(report(student,leave)); ok(close(counselor,pending,"CONFIRM"));
     }
 
     private long venue(Browser b) throws Exception { return ok(b.get("/api/reservations/venues?placeId=east-gym")).get(0).path("id").asLong(); }

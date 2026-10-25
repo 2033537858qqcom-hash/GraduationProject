@@ -20,7 +20,10 @@ test('map choices in the server catalog stay aligned with both existing campus s
   const definitions = new Map()
   for (const [campusCode, file] of [['EAST', 'placeDefinitions.ts'], ['WEST', 'westCampusPlan.ts']]) {
     const source = await readFile(new URL(`../src/campus/${file}`, import.meta.url), 'utf8')
-    for (const match of source.matchAll(/^\s*\{\s*id:\s*'([^']+)',\s*name:\s*'([^']+)'/gm)) definitions.set(match[1], { campusCode, name: match[2] })
+    const name = campusCode === 'EAST' ? 'campusPlaceDefinitions' : 'westPlanDefinitions'
+    const array = source.match(new RegExp(`export const ${name}[^=]*= \\[([\\s\\S]*?)\\n\\]`))?.[1]
+    assert.ok(array, `Missing named place definition array: ${name}`)
+    for (const match of array.matchAll(/^\s*\{\s*id:\s*'([^']+)',\s*name:\s*'([^']+)'/gm)) definitions.set(match[1], { campusCode, name: match[2] })
   }
   assert.equal(catalog.length, definitions.size)
   assert.equal(new Set(catalog.map(p => p.id)).size, catalog.length)

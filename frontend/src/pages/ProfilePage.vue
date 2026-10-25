@@ -142,7 +142,6 @@ async function handleRemoveAvatar() {
         <div class="profile-full-item"><dt>身份角色</dt><dd>{{ currentUser.roles.map(role => roleNames[role] ?? role).join('、') }}</dd></div>
       </dl>
       <p class="data-note">当前资料为毕业设计演示账号信息。</p>
-      <AccountPasswordForm />
     </section>
 
     <aside class="profile-scenic-card">
@@ -160,6 +159,7 @@ async function handleRemoveAvatar() {
         </RouterLink>
       </div>
     </aside>
+    <section class="portal-panel profile-password-panel"><AccountPasswordForm /></section>
   </div>
 </template>
 
@@ -174,6 +174,8 @@ async function handleRemoveAvatar() {
 .profile-info-panel {
   padding: 30px 34px;
 }
+.profile-password-panel { grid-column: 1 / -1; padding: 4px 34px 28px; }
+.profile-password-panel :deep(.password-section) { border-top: 0; margin-top: 0; }
 
 /* Avatar header layout */
 .profile-avatar-header {

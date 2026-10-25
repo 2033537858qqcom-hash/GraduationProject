@@ -47,6 +47,7 @@ async function submit() {
         <p v-if="route.query.expired" class="alert" role="status">会话已过期，请重新登录。</p>
         <label>账号<input v-model="username" name="username" autocomplete="username" maxlength="64" placeholder="请输入账号" required /></label>
         <label>密码<input v-model="password" name="password" type="password" autocomplete="current-password" maxlength="72" placeholder="请输入密码" required /></label>
+        <small class="muted">忘记密码时，请联系账号管理员核验身份并重置。</small>
         <p v-if="error" class="alert" role="alert">{{ error }}</p>
         <button class="button primary" :disabled="busy">{{ busy ? '正在登录…' : '登录' }} <ArrowRight :size="16" /></button>
         <details class="demo-accounts">

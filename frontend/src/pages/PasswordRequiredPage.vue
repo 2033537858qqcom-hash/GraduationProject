@@ -12,7 +12,7 @@ async function exit() { await logout(); await router.replace('/login') }
     <section class="portal-panel password-required-panel">
       <span class="eyebrow">账号安全</span><h1>设置你自己的登录密码</h1>
       <p>{{ currentUser?.fullName }}，你的账号使用初始密码或管理员重置的密码。请先完成修改，再进入校园服务。</p>
-      <AccountPasswordForm />
+      <AccountPasswordForm stacked />
     </section>
   </main>
 </template>

@@ -104,6 +104,9 @@ class ResponsibilityHandoffIntegrationTest {
   long u=staff("TEACHER");assertThat(login("admin").send("POST",root(u)+"/state",Map.of("enabled",false,"emergency",true,"version",0,"reason","")).statusCode()).isEqualTo(400);
   ok(state(u,false,true));assertThat(state(u,true,true).statusCode()).isEqualTo(400);ok(state(u,true,false));
  }
+ @Test void legacyStatePayloadWithoutEmergencyKeepsNormalSemantics()throws Exception{
+  long u=staff("TEACHER");ok(login("admin").send("POST",root(u)+"/state",Map.of("enabled",false,"version",0,"reason","普通停用")));
+ }
  private String root(long u){return "/api/admin/foundation/users/"+u;}
  private HttpResponse<String> state(long u,boolean enabled,boolean emergency)throws Exception{return login("admin").send("POST",root(u)+"/state",Map.of("enabled",enabled,"emergency",emergency,"version",jdbc.sql("SELECT version FROM app_user WHERE id=:u").param("u",u).query(Integer.class).single(),"reason","岗位交接测试"));}
  private long exception(String code)throws Exception{var items=ok(login("admin").get("/api/admin/foundation/responsibility-exceptions"));for(var item:items)if(item.path("code").asText().equals(code))return item.path("count").asLong();throw new AssertionError(code);}

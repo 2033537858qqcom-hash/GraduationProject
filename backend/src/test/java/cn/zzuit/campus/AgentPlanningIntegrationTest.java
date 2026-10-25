@@ -35,6 +35,7 @@ import tools.jackson.databind.json.JsonMapper;
 class AgentPlanningIntegrationTest {
  @LocalServerPort int port;
  @Autowired JdbcClient jdbc;
+ @Autowired cn.zzuit.campus.agent.AgentTools agentTools;
  @MockitoSpyBean DeepSeekClient model;
  final JsonMapper json=JsonMapper.builder().build();
  @BeforeEach void offline(){doReturn(false).when(model).ready();}
@@ -58,7 +59,7 @@ class AgentPlanningIntegrationTest {
   var response=ok(query(login("20260001"),"找一个空闲场地",null));assertThat(response.path("results").path(0).path("name").asText()).isEqualTo("find_available_venues");assertThat(response.path("results").path(0).path("status").asText()).isEqualTo("NEEDS_INPUT");assertThat(response.toString()).contains("校区","人数","起止");
  }
  @Test void localDateTimeAndCampusConditionsFindOnlyRealMatchingVenues()throws Exception{
-  var f=fixture();long v=venue(f,"EAST",30);String name=venueName(v);var result=ok(query(login(f.username()),"2029-04-02 东校区 20人 12:00-14:00 查询空闲场地 "+name,null));var row=result.path("results").path(0);assertThat(row.path("name").asText()).isEqualTo("find_available_venues");assertThat(row.path("status").asText()).isEqualTo("OK");assertThat(row.path("items").toString()).contains(name);
+  var f=fixture();long v=venue(f,"EAST",30);String name=venueName(v);var result=ok(query(login(f.username()),"2029-04-02 东校区 20人 12:00-14:00 查询空闲场地 关键词："+name,null));var row=result.path("results").path(0);assertThat(row.path("name").asText()).isEqualTo("find_available_venues");assertThat(row.path("status").asText()).isEqualTo("OK");assertThat(row.path("items").toString()).contains(name);
  }
  @Test void availabilityUsesTeachingExamAndBookingOccupancyAndReleasesWithdrawnBookings()throws Exception{
   var f=fixture();long v=venue(f,"EAST",30);long room=TestRooms.ensure(jdbc,"计划教室-"+v);jdbc.sql("UPDATE venue_resource SET classroom_resource_id=:r WHERE id=:v").param("r",room).param("v",v).update();jdbc.sql("UPDATE teaching_lesson SET room_id=:r WHERE class_id=:c").param("r",room).param("c",f.group()).update();jdbc.sql("UPDATE academic_exam SET room_id=:r WHERE class_id=:c").param("r",room).param("c",f.group()).update();
@@ -90,7 +91,7 @@ class AgentPlanningIntegrationTest {
   var f=fixture();long v=venue(f,"EAST",30);long count=jdbc.sql("SELECT COUNT(*) FROM venue_reservation").query(Long.class).single();var row=find(login(f.username()),v,"2029-04-02T12:00","2029-04-02T14:00");assertThat(row.path("items").path(0).path("targetPath").asText()).contains("resource="+v,"starts=2029-04-02T12:00","ends=2029-04-02T14:00","people=20");assertThat(row.path("message").asText()).contains("提交","复核");assertThat(jdbc.sql("SELECT COUNT(*) FROM venue_reservation").query(Long.class).single()).isEqualTo(count);
  }
  @Test void unavailableRoleToolAndSpoofedReservationIdCannotLeakRows()throws Exception{
-  var f=fixture();assertThat(planned(login("teacher1001"),"my_schedule",Map.of()).path("status").asText()).isNotEqualTo("OK");
+  var f=fixture();assertThat(planned(login("teacher1001"),"my_schedule",Map.of()).path("code").asText()).isEqualTo("MODEL_TOOL_REJECTED");
   var row=planned(login("20260002"),"my_reservations",Map.of("id",booking(f)));assertThat(row.path("status").asText()).isEqualTo("NOT_FOUND");
  }
  @Test void askingForOthersScheduleOrAutomaticCancellationIsRefused()throws Exception{
@@ -98,6 +99,10 @@ class AgentPlanningIntegrationTest {
  }
  @Test void standaloneWeekdayAndVagueTimesAskForClarification()throws Exception{
   var b=login("20260001");var row=ok(query(b,"周一东校区20人找个空闲场地，上午到下午",null)).path("results").path(0);assertThat(row.path("status").asText()).isEqualTo("NEEDS_INPUT");
+ }
+ @Test void localBareTimesCannotAssumeTodaysDate() {
+  var plan=agentTools.localPlanning("东校区20人09:00-11:00查找空闲场地",null);
+  assertThat(plan.get(0).arguments().has("startsAt")).isFalse();
  }
  private JsonNode find(Browser b,long v,String start,String end)throws Exception{return planned(b,"find_available_venues",args(v,start,end));}
  private java.util.HashMap<String,Object> args(long v,String start,String end){var a=new java.util.HashMap<String,Object>();a.put("campus","EAST");a.put("participants",20);a.put("startsAt",start);a.put("endsAt",end);a.put("keyword",venueName(v));return a;}

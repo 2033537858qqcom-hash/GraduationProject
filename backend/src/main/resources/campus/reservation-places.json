@@ -343,25 +343,5 @@
     "campusCode": "WEST",
     "id": "west-road-taoyuan",
     "name": "桃园路"
-  },
-  {
-    "campusCode": "WEST",
-    "id": "west-plan-huaxin",
-    "name": "华信路"
-  },
-  {
-    "campusCode": "WEST",
-    "id": "west-plan-wenming",
-    "name": "文明大道"
-  },
-  {
-    "campusCode": "WEST",
-    "id": "west-plan-chengcai",
-    "name": "成才大道"
-  },
-  {
-    "campusCode": "WEST",
-    "id": "west-plan-taoyuan",
-    "name": "桃园路"
   }
 ]

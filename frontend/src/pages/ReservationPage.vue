@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import DownloadLink from '../components/DownloadLink.vue'
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   AlertTriangle,
@@ -53,6 +53,7 @@ import {
   cancelReservation,
   checkConflict,
   getDetail,
+  getVenue,
   getReviewerCandidates,
   getVenueSchedule,
   listMine,
@@ -272,14 +273,32 @@ function runConflictCheck() {
   })
 }
 let lastSearchSelection = ''
-function applySearchSelection() {
+async function applySearchSelection() {
   const conditions = reservationSearchSelection(route.fullPath)
   if (!conditions || reviewMode.value || lastSearchSelection === route.fullPath) return
-  lastSearchSelection = route.fullPath
-  const venue = venues.value.find(item => item.id === conditions.venueId)
-  if (!venue || !venue.enabled) { error.value = '该资源已暂停开放或不在当前目录中，请刷新后重新选择。'; return }
-  activeTab.value = 'venues'
-  initBookingForm(venue, conditions)
+  const path = route.fullPath
+  lastSearchSelection = path
+  try {
+    const venue = await getVenue(conditions.venueId)
+    if (route.fullPath !== path) return
+    if (!venue.enabled) { error.value = '该资源已暂停开放，请刷新后重新选择。'; return }
+    const index = venues.value.findIndex(item => item.id === venue.id)
+    if (index < 0) venues.value.unshift(venue)
+    else venues.value[index] = venue
+    activeTab.value = 'venues'
+    initBookingForm(venue, conditions)
+  } catch (cause) { if (route.fullPath === path) error.value = errorMessage(cause) }
+}
+async function closeBookingForm() {
+  if (busy.value || !await allowLeave()) return
+  showBookingModal.value = false
+  lastSearchSelection = ''
+  void checkCurrentConflict(null)
+  if (route.query.resource) {
+    const query = { ...route.query }
+    for (const key of ['resource', 'starts', 'ends', 'people']) delete query[key]
+    await router.replace({ query })
+  }
 }
 
 // Load Venue Catalog
@@ -329,19 +348,28 @@ async function loadReservations() {
 }
 
 // View Reservation Detail
+let detailRequest = 0
+function closeReservationDetail() {
+  detailRequest++
+  selectedReservation.value = null
+  void router.replace({ query: { ...route.query, id: undefined } })
+}
 async function chooseReservation(id: number) {
+  const request = ++detailRequest
   loading.value = true
   error.value = ''
   selectedReservation.value = null
   reviewUpdateNotice.value = ''
   try {
-    selectedReservation.value = await getDetail(id)
+    const detail = await getDetail(id)
+    if (request !== detailRequest) return
+    selectedReservation.value = detail
     reviewComment.value = ''
     await router.replace({ query: { ...route.query, id: String(id), tab: activeTab.value } })
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (request === detailRequest) error.value = errorMessage(cause)
   } finally {
-    loading.value = false
+    if (request === detailRequest) loading.value = false
   }
 }
 
@@ -687,7 +715,7 @@ async function switchTab(tab: 'venues' | 'mine' | 'review' | 'manage') {
   selectedReservation.value = null
   currentPage.value = 1
   filterStatus.value = tab === 'review' ? 'SUBMITTED' : ''
-  await router.replace({ query: { ...route.query, tab } })
+  await router.replace({ query: { ...route.query, id: undefined, tab, status: tab === 'review' ? 'SUBMITTED' : undefined } })
   if (tab === 'venues') await loadVenues()
   else if (tab === 'manage') await loadManagementData()
   else await loadReservations()
@@ -700,7 +728,7 @@ onMounted(async () => {
   } else if (reviewMode.value) {
     activeTab.value = 'review'
     filterStatus.value = String(route.query.status || 'SUBMITTED')
-  } else if (route.query.tab === 'mine') {
+  } else if (route.query.tab === 'mine' || !reviewMode.value && linkedReservationId() !== null) {
     activeTab.value = 'mine'
     const status = String(route.query.status ?? '')
     filterStatus.value = status in reservationStatuses ? status : ''
@@ -715,12 +743,12 @@ onMounted(async () => {
     await loadReservations()
   }
 
-  applySearchSelection()
+  await applySearchSelection()
 
   // Pre-load specific reservation if id passed in route query
   if (route.query.id) {
-    const id = Number(route.query.id)
-    if (id > 0) {
+    const id = linkedReservationId()
+    if (id !== null) {
       await chooseReservation(id)
       if (!reviewMode.value && activeTab.value !== 'manage') activeTab.value = 'mine'
     }
@@ -731,7 +759,36 @@ watch(() => [bookingForm.venueId, bookingForm.startsAt, bookingForm.endsAt], () 
   void runConflictCheck()
 })
 
-watch(() => route.fullPath, () => { applySearchSelection() })
+function linkedReservationId(): number | null {
+  const value = route.query.id
+  return typeof value === 'string' && /^[1-9]\d{0,14}$/.test(value) ? Number(value) : null
+}
+let reservationNavigation = 0
+watch(() => [route.query.id, route.query.tab, route.query.status], async () => {
+  const navigation = ++reservationNavigation
+  const id = linkedReservationId()
+  if (id !== null && selectedReservation.value?.id !== id) {
+    detailRequest++
+    if (!reviewMode.value) activeTab.value = 'mine'
+    const status = String(route.query.status ?? '')
+    filterStatus.value = status in reservationStatuses ? status : reviewMode.value ? 'SUBMITTED' : ''
+    await loadReservations()
+    if (navigation !== reservationNavigation) return
+    await chooseReservation(id)
+    return
+  }
+  if (id === null && !route.query.id) { detailRequest++; selectedReservation.value = null }
+  if (!reviewMode.value && route.query.tab === 'mine') {
+    const status = String(route.query.status ?? '')
+    const nextStatus = status in reservationStatuses ? status : ''
+    if (activeTab.value !== 'mine' || filterStatus.value !== nextStatus) {
+      activeTab.value = 'mine'; filterStatus.value = nextStatus; currentPage.value = 1
+      await loadReservations()
+    }
+  }
+})
+onBeforeUnmount(() => { detailRequest++; reservationNavigation++; void checkCurrentConflict(null) })
+watch(() => route.fullPath, () => { if (!reservationSearchSelection(route.fullPath)) lastSearchSelection = ''; void applySearchSelection() })
 
 watch(() => route.query.venue, () => {
   if (activeTab.value === 'venues') void loadVenues()
@@ -1070,7 +1127,7 @@ watch(() => route.query.venue, () => {
           <span class="status-label" :class="selectedReservation.status.toLowerCase()">
             {{ reservationStatuses[selectedReservation.status] }} · V{{ selectedReservation.version }}
           </span>
-          <button class="text-button" @click="selectedReservation = null">
+          <button class="text-button" @click="closeReservationDetail">
             <X :size="16" />
             关闭详情
           </button>
@@ -1258,14 +1315,14 @@ watch(() => route.query.venue, () => {
     </section>
 
     <!-- ==================== BOOKING MODAL (DRAWER/POPUP) ==================== -->
-    <div v-if="showBookingModal" class="modal-overlay" @click.self="showBookingModal = false">
+    <div v-if="showBookingModal" class="modal-overlay" @click.self="closeBookingForm">
       <div class="modal-card booking-modal-card" role="dialog" aria-labelledby="booking-modal-title">
         <div class="modal-header">
           <h2 id="booking-modal-title">
             <CalendarCheck :size="18" />
             {{ editingReservationId ? `修改借用申请 #${editingReservationId}` : '新建公共场地与设备借用' }}
           </h2>
-          <button class="close-icon-btn" @click="showBookingModal = false">
+          <button class="close-icon-btn" @click="closeBookingForm">
             <X :size="18" />
           </button>
         </div>
@@ -1415,7 +1472,7 @@ watch(() => route.query.venue, () => {
             <button type="submit" class="button primary compact" :disabled="busy || conflictCheck?.hasConflict">
               正式提交预约
             </button>
-            <button type="button" class="button compact" :disabled="busy" @click="showBookingModal = false">
+            <button type="button" class="button compact" :disabled="busy" @click="closeBookingForm">
               取消
             </button>
           </div>

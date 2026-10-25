@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { ArrowUpRight, Bot, ChevronDown, RotateCw, Send, Sparkles, X } from '@lucide/vue'
 import { api, ApiError, errorMessage } from '../lib/api'
 import { assistantContext, assistantContextLabel, assistantSuggestions, safeAssistantDestination } from '../lib/assistant'
+import { reservationSearchSelection } from '../lib/reservationSearch'
 import type { AssistantAnswer, AssistantCapabilities } from '../lib/assistant'
 import { currentUser } from '../stores/auth'
 import AssistantLeaveDraft from './AssistantLeaveDraft.vue'
@@ -291,7 +292,7 @@ onBeforeUnmount(() => {
           <p class="assistant-summary">{{ entry.answer.summary }}</p>
           <section v-for="result in entry.answer.results" :key="result.name" class="assistant-result" :class="{ 'query-issue': result.status !== 'OK' }">
             <h3>{{ result.title }}</h3><p>{{ result.message }}</p>
-            <RouterLink v-for="item in result.items" :key="item.key" :to="safeAssistantDestination(item.targetPath) ?? '#'" class="assistant-fact" :class="{ 'no-target': !safeAssistantDestination(item.targetPath) }"><strong>{{ item.title }}</strong><span>{{ item.description }}</span><ArrowUpRight v-if="safeAssistantDestination(item.targetPath)" :size="13" /></RouterLink>
+            <RouterLink v-for="item in result.items" :key="item.key" :to="safeAssistantDestination(item.targetPath) ?? '#'" class="assistant-fact" :class="{ 'no-target': !safeAssistantDestination(item.targetPath) }" @click="item.targetPath && reservationSearchSelection(item.targetPath) && (open = false)"><strong>{{ item.title }}</strong><span>{{ item.description }}</span><ArrowUpRight v-if="safeAssistantDestination(item.targetPath)" :size="13" /></RouterLink>
             <div v-for="source in result.sources" :key="source.slug" class="assistant-source"><strong>{{ source.title }}</strong><p>{{ source.body.slice(0, 220) }}{{ source.body.length > 220 ? '…' : '' }}</p><RouterLink v-if="safeAssistantDestination(source.targetPath)" :to="source.targetPath">来源 · V{{ source.version }} · 查看完整指南 <ArrowUpRight :size="12" /></RouterLink></div>
             <RouterLink v-if="safeAssistantDestination(result.targetPath) && (!result.items.length || result.total > result.items.length)" :to="result.targetPath!" class="assistant-more">{{ result.items.length ? '查看完整业务列表' : '查看业务页面' }} <ArrowUpRight :size="13" /></RouterLink>
           </section>

@@ -42,6 +42,7 @@ async function submit() {
       <form class="login-form" @submit.prevent="submit">
         <KeyRound :size="26" class="text-brand" aria-hidden="true" />
         <h2>校园服务登录</h2>
+        <p v-if="route.query.passwordChanged" class="success-message" role="status">密码已修改，请使用新密码重新登录。</p>
         <p class="muted">使用你的校园服务账号进入个人门户</p>
         <p v-if="route.query.expired" class="alert" role="status">会话已过期，请重新登录。</p>
         <label>账号<input v-model="username" name="username" autocomplete="username" maxlength="64" placeholder="请输入账号" required /></label>

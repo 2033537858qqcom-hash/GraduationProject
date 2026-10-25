@@ -9,7 +9,7 @@ export interface FoundationCatalog {
 export interface ManagedAccount {
   id: number; username: string; fullName: string; identityNumber: string; campusId: number | null; campusName: string | null
   departmentId: number | null; departmentName: string | null; classGroupId: number | null; className: string | null
-  enabled: boolean; demo: boolean; version: number; roles: string[]
+  enabled: boolean; demo: boolean; version: number; roles: string[]; passwordChangeRequired: boolean
 }
 export interface Paged<T> { items: T[]; total: number; page: number; pageSize: number }
 export interface FoundationAudit { id: number; actorName: string; action: string; entityType: string; entityId: number; summary: string; reason: string; createdAt: string }

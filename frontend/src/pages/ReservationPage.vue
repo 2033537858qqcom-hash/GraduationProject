@@ -29,11 +29,12 @@ import {
   XCircle,
 } from '@lucide/vue'
 import { currentUser } from '../stores/auth'
-import { ApiError, errorMessage } from '../lib/api'
+import { api, ApiError, errorMessage } from '../lib/api'
 import { useEditProtection } from '../composables/useEditProtection'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 import AffairTimeline from '../components/AffairTimeline.vue'
 import BaseSelect from '../components/BaseSelect.vue'
+import VenueCreateForm from '../components/VenueCreateForm.vue'
 import {
   type ConflictResult,
   type ReservationDetail,
@@ -43,6 +44,7 @@ import {
   type VenueManagementItem,
   type VenueManagerItem,
   type VenueUpdateCommand,
+  type VenueCreationCatalog,
   activityTypes,
   addVenueManager,
   cancelReservation,
@@ -95,6 +97,8 @@ const { indicatorStyle: categoryPillStyle } = useSlidingIndicator(
 // Data states
 const venues = ref<VenueSummary[]>([])
 const managedVenues = ref<VenueManagementItem[]>([])
+const creationCatalog = ref<VenueCreationCatalog | null>(null)
+const showVenueCreate = ref(false)
 const reviewerCandidates = ref<VenueManagerItem[]>([])
 const manageKeyword = ref('')
 const showVenueEditModal = ref(false)
@@ -564,12 +568,14 @@ async function loadManagementData() {
   loading.value = true
   error.value = ''
   try {
-    const [venueList, candidates] = await Promise.all([
+    const [venueList, candidates, catalog] = await Promise.all([
       listVenuesForManagement(),
       getReviewerCandidates(),
+      api<VenueCreationCatalog>('/reservations/venues/catalog'),
     ])
     managedVenues.value = venueList
     reviewerCandidates.value = candidates
+    creationCatalog.value = catalog
   } catch (cause) {
     error.value = errorMessage(cause)
   } finally {
@@ -585,6 +591,13 @@ function openVenueEdit(venue: VenueManagementItem) {
   venueEditForm.rules = venue.rules ?? ''
   venueEditForm.enabled = venue.enabled
   showVenueEditModal.value = true
+}
+
+async function venueCreated(venue: VenueSummary) {
+  showVenueCreate.value = false
+  await loadManagementData()
+  manageKeyword.value = venue.code
+  success.value = `${venue.campusName} · ${venue.name}已创建${venue.enabled ? '并开放预约' : '，可继续配置后开放'}。`
 }
 
 async function saveVenueEdit() {
@@ -824,7 +837,7 @@ watch(() => route.query.venue, () => {
           <div class="venue-meta">
             <span class="meta-item">
               <MapPin :size="14" />
-              {{ venue.buildingName || '校园公共区' }} · {{ venue.locationDetail }}
+              {{ venue.campusName }} · {{ venue.buildingName || '校园公共区' }} · {{ venue.locationDetail }}
             </span>
             <span v-if="venue.capacity" class="meta-item">
               <Users :size="14" />
@@ -858,6 +871,7 @@ watch(() => route.query.venue, () => {
 
     <!-- ==================== TAB 4: VENUE MANAGEMENT (RESOURCE MANAGERS) ==================== -->
     <section v-else-if="activeTab === 'manage'" class="portal-panel venue-manage-section" aria-label="场地资源配置">
+      <div class="section-heading"><div><h2>校园场地与设备目录</h2><p class="muted">按校区、地点和负责人员维护可借用资源。</p></div><button class="button primary compact" :disabled="busy || loading || !creationCatalog" @click="showVenueCreate = true"><Plus :size="15" />新增资源</button></div>
       <div class="foundation-filters venue-filters">
         <div class="manage-header-desc">
           <p class="muted">
@@ -893,7 +907,7 @@ watch(() => route.query.venue, () => {
           <div class="venue-meta">
             <span class="meta-item">
               <MapPin :size="14" />
-              {{ venue.buildingName || '校园公共区' }} · {{ venue.locationDetail }}
+              {{ venue.campusName }} · {{ venue.buildingName || '校园公共区' }} · {{ venue.locationDetail }}
             </span>
             <span v-if="venue.capacity" class="meta-item">
               <Users :size="14" />
@@ -1586,6 +1600,7 @@ watch(() => route.query.venue, () => {
         </div>
       </div>
     </div>
+    <VenueCreateForm v-if="showVenueCreate && creationCatalog" :catalog="creationCatalog" :candidates="reviewerCandidates" @close="showVenueCreate = false" @saved="venueCreated" />
   </div>
 </template>
 

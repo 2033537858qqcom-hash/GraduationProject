@@ -22,6 +22,7 @@ export const router = createRouter({
       ],
     },
     { path: '/login', component: () => import('./pages/LoginPage.vue'), meta: { title: '校园服务登录' } },
+    { path: '/account/password', component: () => import('./pages/PasswordRequiredPage.vue'), meta: { title: '设置登录密码', authenticated: true } },
     {
       path: '/', component: () => import('./layouts/PortalLayout.vue'), meta: { authenticated: true },
       children: [
@@ -80,6 +81,7 @@ router.beforeEach(async to => {
     try { await restoreSession() } catch { /* Ignore network errors for public site */ }
   }
   if (to.meta.authenticated && !currentUser.value) return { path: '/login', query: { redirect: to.fullPath } }
+  if (to.meta.authenticated && currentUser.value?.passwordChangeRequired && to.path !== '/account/password') return '/account/password'
   if (to.path === '/login' && currentUser.value) return safeLoginDestination(to.query.redirect) ?? landingPage()
   if (to.meta.permission && !currentUser.value?.permissions.includes(String(to.meta.permission))) return '/forbidden'
   if (to.meta.contentPermission && !currentUser.value?.permissions.some(p => p.startsWith('content:'))) return '/forbidden'

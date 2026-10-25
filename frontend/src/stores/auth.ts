@@ -49,6 +49,7 @@ export async function logout() {
 }
 
 export function landingPage(profile = currentUser.value) {
+  if (profile?.passwordChangeRequired) return '/account/password'
   if (profile?.permissions.includes('foundation:manage')) return '/workbench'
   if (profile?.permissions.includes('portal:read')) return '/portal'
   if (profile?.permissions.some(permission => permission.startsWith('content:'))) return '/admin/content'

@@ -1,7 +1,14 @@
 import { api } from './lib/api.ts'
 
+export interface VenueCreationCatalog {
+  campuses: { id: number; code: string; name: string }[]
+  places: { id: string; name: string; campusCode: string }[]
+}
+
 export interface VenueSummary {
   id: number
+  campusId: number
+  campusName: string
   code: string
   name: string
   category: 'VENUE' | 'EQUIPMENT'
@@ -253,6 +260,8 @@ export interface VenueManagerItem {
 
 export interface VenueManagementItem {
   id: number
+  campusId: number
+  campusName: string
   code: string
   name: string
   category: 'VENUE' | 'EQUIPMENT'

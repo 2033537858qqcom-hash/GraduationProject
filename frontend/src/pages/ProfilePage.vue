@@ -5,6 +5,7 @@ import { currentUser } from '../stores/auth'
 import { api, errorMessage } from '../lib/api'
 import { schoolMedia } from '../content/schoolMedia'
 import UserAvatar from '../components/UserAvatar.vue'
+import AccountPasswordForm from '../components/AccountPasswordForm.vue'
 import type { Profile } from '../types'
 
 const roleNames: Record<string, string> = {
@@ -141,6 +142,7 @@ async function handleRemoveAvatar() {
         <div class="profile-full-item"><dt>身份角色</dt><dd>{{ currentUser.roles.map(role => roleNames[role] ?? role).join('、') }}</dd></div>
       </dl>
       <p class="data-note">当前资料为毕业设计演示账号信息。</p>
+      <AccountPasswordForm />
     </section>
 
     <aside class="profile-scenic-card">

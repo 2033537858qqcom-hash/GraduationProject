@@ -45,7 +45,7 @@ class FoundationIntegrationTest {
         assertThat(catalog.body()).contains("foundation:manage","ACADEMIC_STAFF");
         var users=admin.get(ROOT+"/users");
         assertThat(users.statusCode()).isEqualTo(200);
-        assertThat(users.body()).doesNotContain("password","securityVersion","password_hash");
+        assertThat(users.body()).doesNotContain("\"password\":","securityVersion","password_hash","initialPassword");
         assertThat(admin.get("/api/academic/catalog").statusCode()).isEqualTo(403);
     }
 
@@ -219,7 +219,11 @@ class FoundationIntegrationTest {
         input.put("classGroupId",role.equals("STUDENT")?1:null); input.put("roles",List.of(role)); input.put("initialPassword",PASSWORD); return input;
     }
     private Map<String,Object> update(Map<String,Object> input,int version) { var result=new HashMap<>(input); result.remove("initialPassword"); result.remove("username"); result.put("version",version); result.put("reason","回归测试变更"); return result; }
-    private Browser login(String name,String password) throws Exception { var browser=new Browser(); browser.csrf(); assertThat(browser.send("POST","/api/auth/login",Map.of("username",name,"password",password)).statusCode()).isEqualTo(200); browser.csrf(); return browser; }
+    private Browser login(String name,String password) throws Exception {
+        // These fixtures represent established accounts; first-login gating is
+        // covered through the real password endpoint in CredentialLifecycleIntegrationTest.
+        if(name.startsWith("test-")) jdbc.sql("UPDATE app_user SET must_change_password=FALSE WHERE username=:name").param("name",name).update();
+        var browser=new Browser(); browser.csrf(); assertThat(browser.send("POST","/api/auth/login",Map.of("username",name,"password",password)).statusCode()).isEqualTo(200); browser.csrf(); return browser; }
     private class Browser {
         final HttpClient http=HttpClient.newBuilder().cookieHandler(new CookieManager(null,CookiePolicy.ACCEPT_ALL)).build();
         String header,token;

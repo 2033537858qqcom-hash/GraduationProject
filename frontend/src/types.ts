@@ -6,7 +6,7 @@ export interface Profile {
   id: number; username: string; fullName: string; identityNumber: string
   campusName: string | null; departmentName: string | null; className: string | null
   avatarUrl: string | null
-  demo: boolean; roles: string[]; permissions: string[]
+  demo: boolean; roles: string[]; permissions: string[]; passwordChangeRequired: boolean
 }
 export interface PublicContent {
   id: number; slug: string; category: string; title: string; summary: string; body: string

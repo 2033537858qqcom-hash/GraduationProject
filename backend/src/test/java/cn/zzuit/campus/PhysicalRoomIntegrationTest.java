@@ -83,7 +83,7 @@ class PhysicalRoomIntegrationTest {
  @ParameterizedTest @ValueSource(strings={"DISABLED","CAPACITY"})
  void bookingRechecksTheCurrentPhysicalRoom(String mode)throws Exception{
   var f=fixture();if(mode.equals("DISABLED"))jdbc.sql("UPDATE classroom_resource SET enabled=FALSE WHERE id=:id").param("id",f.room()).update();
-  else jdbc.sql("UPDATE classroom_resource SET teaching_capacity=5 WHERE id=:id").param("id",f.room()).update();
+  else jdbc.sql("UPDATE classroom_resource SET teaching_capacity=5,exam_capacity=5 WHERE id=:id").param("id",f.room()).update();
   assertThat(book(f,"2029-04-07T09:00:00","2029-04-07T10:00:00").statusCode()).isEqualTo(409);
  }
  @Test void roomAndVenueCalendarShowTheSameTeachingOccupancy()throws Exception{
@@ -99,17 +99,19 @@ class PhysicalRoomIntegrationTest {
    assertThat(java.util.List.of(a.get(),b.get())).containsExactlyInAnyOrder(200,409);
   }
  }
- private record Fixture(long room,long venue,long group){}
+ private record Fixture(long room,long venue,long group,long teacher){}
  private Fixture fixture()throws Exception{
-  String key=UUID.randomUUID().toString();long room=TestRooms.ensure(jdbc,"物理教室-"+key);
+  String key=UUID.randomUUID().toString();long teacher=uniqueTeacher();long room=TestRooms.ensure(jdbc,"物理教室-"+key);
   jdbc.sql("INSERT INTO academic_term(name,starts_on,ends_on) VALUES(:name,'2029-01-01','2029-12-31')").param("name",key).update();long term=jdbc.sql("SELECT id FROM academic_term WHERE name=:n").param("n",key).query(Long.class).single();
   jdbc.sql("INSERT INTO teaching_class(term_id,course_id,department_id,name) VALUES(:t,1,1,:n)").param("t",term).param("n",key).update();long group=jdbc.sql("SELECT id FROM teaching_class WHERE name=:n").param("n",key).query(Long.class).single();
-  jdbc.sql("INSERT INTO teaching_instructor(class_id,teacher_id) VALUES(:g,:u)").param("g",group).param("u",teacher()).update();
-  var venue=ok(login("affairs1001").send("POST","/api/reservations/venues",form(room)));return new Fixture(room,venue.path("id").asLong(),group);
+  jdbc.sql("INSERT INTO teaching_instructor(class_id,teacher_id) VALUES(:g,:u)").param("g",group).param("u",teacher).update();
+  var venue=ok(login("affairs1001").send("POST","/api/reservations/venues",form(room)));return new Fixture(room,venue.path("id").asLong(),group,teacher);
  }
- private long teacher(){return jdbc.sql("SELECT id FROM app_user WHERE username='teacher1001'").query(Long.class).single();}
+ private long uniqueTeacher(){String name="phy_"+UUID.randomUUID().toString().substring(0,8);
+  jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id) SELECT :name,password_hash,'物理资源教师',:name,1,1 FROM app_user WHERE username='teacher1001'").param("name",name).update();
+  long id=jdbc.sql("SELECT id FROM app_user WHERE username=:n").param("n",name).query(Long.class).single();jdbc.sql("INSERT INTO user_role(user_id,role_code) VALUES(:id,'TEACHER')").param("id",id).update();return id; }
  private java.util.HashMap<String,Object> form(long room){var x=new java.util.HashMap<String,Object>();x.put("campusId",1);x.put("code","PHY-"+UUID.randomUUID());x.put("name","教室预约资源");x.put("category","VENUE");x.put("placeId","east-library");x.put("buildingName","测试教学楼");x.put("locationDetail","测试房间");x.put("capacity",30);x.put("enabled",true);x.put("managerUserIds",java.util.List.of(jdbc.sql("SELECT id FROM app_user WHERE username='affairs1001'").query(Long.class).single()));x.put("classroomResourceId",room);return x;}
- private HttpResponse<String> lesson(Fixture f,String s,String e)throws Exception{return login("academic1001").send("POST","/api/academic/classes/"+f.group()+"/lessons",Map.of("teacherId",teacher(),"roomId",f.room(),"startsAt",s,"endsAt",e));}
+ private HttpResponse<String> lesson(Fixture f,String s,String e)throws Exception{return login("academic1001").send("POST","/api/academic/classes/"+f.group()+"/lessons",Map.of("teacherId",f.teacher(),"roomId",f.room(),"startsAt",s,"endsAt",e));}
  private HttpResponse<String> book(Fixture f,String s,String e)throws Exception{return login("20260001").send("POST","/api/reservations/submit",Map.of("requestKey",UUID.randomUUID().toString(),"venueId",f.venue(),"activityTheme","私有活动主题","activityType","ACADEMIC","expectedParticipants",10,"contactPhone","13800138000","startsAt",s,"endsAt",e));}
     private JsonNode ok(HttpResponse<String> response) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);

@@ -1,0 +1,367 @@
+[
+  {
+    "campusCode": "EAST",
+    "id": "east-gate",
+    "name": "东门"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "south-gate",
+    "name": "南门"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "north-gate",
+    "name": "北门"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-library",
+    "name": "图书馆"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-square",
+    "name": "英才广场"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-shuhua",
+    "name": "书华楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-zhiyuan",
+    "name": "致远楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-jingyi",
+    "name": "静逸楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-jinxiu-dining",
+    "name": "锦绣餐厅"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-h8",
+    "name": "H8"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-h1",
+    "name": "H1"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-h2",
+    "name": "H2"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-art",
+    "name": "美术、音乐楼组团"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-xinke",
+    "name": "信科楼组团"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-jiangong",
+    "name": "建工楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-wenhua",
+    "name": "文华楼组团"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-clinic",
+    "name": "医务室（地图服务点）"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-jinxiu",
+    "name": "毓秀楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-fenghua",
+    "name": "风华楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-swimming",
+    "name": "游泳馆"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-gym",
+    "name": "红体馆"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-sports",
+    "name": "西侧体育场"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-canteen-wenhua",
+    "name": "文华餐厅"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-construction-training",
+    "name": "建工实训中心"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-admin",
+    "name": "行政楼"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-auditorium",
+    "name": "学术报告厅"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-affairs",
+    "name": "学生综合事务服务中心"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-construction",
+    "name": "建工学院"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-medical",
+    "name": "医学院、药学院组团"
+  },
+  {
+    "campusCode": "EAST",
+    "id": "east-water",
+    "name": "东侧水系"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-incubator-1",
+    "name": "1号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-building-4",
+    "name": "4号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-building-8",
+    "name": "8号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-7",
+    "name": "7号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-sports-ground",
+    "name": "运动场"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-flag-square",
+    "name": "国旗广场"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-chengyi",
+    "name": "诚毅楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-parking",
+    "name": "停车处"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-library",
+    "name": "图书馆"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-electricity",
+    "name": "购电中心"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-experiment-building",
+    "name": "实验楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-information",
+    "name": "科技信息楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-culture-square",
+    "name": "文化广场"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-5",
+    "name": "5号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-tech-center",
+    "name": "工程中心"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-auto-training",
+    "name": "汽车实训室"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-rail-training",
+    "name": "城轨实训室"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-mingde",
+    "name": "明德楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-clinic",
+    "name": "医务室"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-teaching-2",
+    "name": "2号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-lab-3",
+    "name": "3号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-steel-canteen",
+    "name": "钢构餐厅"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-bathhouse",
+    "name": "澡堂"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-12",
+    "name": "12号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-13",
+    "name": "13号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-11",
+    "name": "11号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-20",
+    "name": "20号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-21",
+    "name": "21号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-siyuan-canteen",
+    "name": "思源餐厅"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-4",
+    "name": "4号公寓"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-22",
+    "name": "22号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-24",
+    "name": "24号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-food-street",
+    "name": "小吃街"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-19",
+    "name": "19号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-dorm-23",
+    "name": "23号楼"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-road-huaxin",
+    "name": "华信路"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-road-wenming",
+    "name": "文明大道"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-road-chengcai",
+    "name": "成才大道"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-road-taoyuan",
+    "name": "桃园路"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-plan-huaxin",
+    "name": "华信路"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-plan-wenming",
+    "name": "文明大道"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-plan-chengcai",
+    "name": "成才大道"
+  },
+  {
+    "campusCode": "WEST",
+    "id": "west-plan-taoyuan",
+    "name": "桃园路"
+  }
+]

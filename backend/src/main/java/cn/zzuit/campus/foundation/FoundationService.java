@@ -193,7 +193,7 @@ public class FoundationService {
     }
     public Page<Audit> audits(CampusPrincipal user,String type,Long id,int page,int size) {
         permission(user); pagination(page,size); String where=" WHERE 1=1"; var params=new HashMap<String,Object>();
-        if(type!=null && !type.isBlank()) { if(!List.of("USER","DEPARTMENT","MAJOR","CLASS_GROUP","REPAIR_LOCATION","REPAIR_SCOPE").contains(type)) bad("记录类型无效"); where+=" AND entity_type=:type"; params.put("type",type); }
+        if(type!=null && !type.isBlank()) { if(!List.of("USER","DEPARTMENT","MAJOR","CLASS_GROUP","REPAIR_LOCATION","REPAIR_SCOPE","VENUE").contains(type)) bad("记录类型无效"); where+=" AND entity_type=:type"; params.put("type",type); }
         if(id!=null) { where+=" AND entity_id=:id"; params.put("id",id); }
         long total=jdbc.sql("SELECT COUNT(*) FROM foundation_audit"+where).params(params).query(Long.class).single();
         var rows=jdbc.sql("SELECT * FROM foundation_audit"+where+" ORDER BY id DESC LIMIT :limit OFFSET :offset").params(params).param("limit",size).param("offset",((long)page-1)*size)

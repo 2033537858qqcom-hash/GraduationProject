@@ -7,6 +7,8 @@ public class ReservationDtos {
 
     public record VenueSummary(
         long id,
+        long campusId,
+        String campusName,
         String code,
         String name,
         String category,
@@ -134,6 +136,23 @@ public class ReservationDtos {
         Boolean enabled
     ) {}
 
+    public record VenueCreateCommand(
+        @jakarta.validation.constraints.Positive long campusId,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(regexp="[A-Za-z0-9][A-Za-z0-9_-]{1,63}") String code,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=120) String name,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Pattern(regexp="VENUE|EQUIPMENT") String category,
+        @jakarta.validation.constraints.Size(max=64) String placeId,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=100) String buildingName,
+        @jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=200) String locationDetail,
+        @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Integer capacity,
+        @jakarta.validation.constraints.Size(max=500) String availableEquipment,
+        @jakarta.validation.constraints.Size(max=1000) String rules,
+        @jakarta.validation.constraints.NotNull Boolean enabled,
+        @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=20) List<@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Long> managerUserIds
+    ) {}
+    public record CampusChoice(long id,String code,String name) {}
+    public record CreationCatalog(List<CampusChoice> campuses,List<ReservationPlaceCatalog.Place> places) {}
+
     public record ReservationPage(
         List<ReservationItem> items,
         long total,
@@ -152,6 +171,8 @@ public class ReservationDtos {
 
     public record VenueManagementItem(
         long id,
+        long campusId,
+        String campusName,
         String code,
         String name,
         String category,

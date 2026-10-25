@@ -40,11 +40,14 @@ public class VenueReservationService {
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final NoticeWriter noticeWriter;
+    private final ReservationPlaceCatalog placeCatalog;
+    private static final String VENUE_SELECT="SELECT v.*,c.name campus_name FROM venue_resource v JOIN campus c ON c.id=v.campus_id";
 
-    public VenueReservationService(JdbcClient jdbc, IdentityService identities, NoticeWriter noticeWriter) {
+    public VenueReservationService(JdbcClient jdbc, IdentityService identities, NoticeWriter noticeWriter,ReservationPlaceCatalog placeCatalog) {
         this.jdbc = jdbc;
         this.identities = identities;
         this.noticeWriter = noticeWriter;
+        this.placeCatalog = placeCatalog;
     }
 
     private void lock() {
@@ -86,28 +89,28 @@ public class VenueReservationService {
     // ==================== 场地与设备目录 ====================
 
     public List<VenueSummary> listVenues(String category, String placeId, String keyword, Boolean enabledOnly) {
-        StringBuilder sql = new StringBuilder("SELECT * FROM venue_resource WHERE 1=1");
+        StringBuilder sql = new StringBuilder(VENUE_SELECT+" WHERE 1=1");
         Map<String, Object> params = new HashMap<>();
 
         if (Boolean.TRUE.equals(enabledOnly)) {
-            sql.append(" AND enabled = TRUE");
+            sql.append(" AND v.enabled = TRUE");
         }
         if (category != null && !category.isBlank()) {
-            sql.append(" AND category = :category");
+            sql.append(" AND v.category = :category");
             params.put("category", category.trim());
         }
         if (placeId != null && !placeId.isBlank()) {
-            sql.append(" AND place_id = :placeId");
+            sql.append(" AND v.place_id = :placeId");
             params.put("placeId", placeId.trim());
         }
         if (keyword != null && !keyword.isBlank()) {
-            sql.append(" AND (name LIKE :kw OR building_name LIKE :kw OR location_detail LIKE :kw OR code LIKE :kw)");
+            sql.append(" AND (v.name LIKE :kw OR v.building_name LIKE :kw OR v.location_detail LIKE :kw OR v.code LIKE :kw)");
             params.put("kw", "%" + keyword.trim() + "%");
         }
-        sql.append(" ORDER BY id ASC");
+        sql.append(" ORDER BY v.id ASC");
 
         return jdbc.sql(sql.toString()).params(params).query((r, n) -> new VenueSummary(
-            r.getLong("id"),
+            r.getLong("id"),r.getLong("campus_id"),r.getString("campus_name"),
             r.getString("code"),
             r.getString("name"),
             r.getString("category"),
@@ -122,9 +125,9 @@ public class VenueReservationService {
     }
 
     public VenueSummary getVenue(long id) {
-        return jdbc.sql("SELECT * FROM venue_resource WHERE id = :id").param("id", id)
+        return jdbc.sql(VENUE_SELECT+" WHERE v.id = :id").param("id", id)
             .query((r, n) -> new VenueSummary(
-                r.getLong("id"),
+                r.getLong("id"),r.getLong("campus_id"),r.getString("campus_name"),
                 r.getString("code"),
                 r.getString("name"),
                 r.getString("category"),
@@ -136,6 +139,45 @@ public class VenueReservationService {
                 r.getString("rules"),
                 r.getBoolean("enabled")
             )).optional().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "VENUE_NOT_FOUND", "借用场地或设备资源不存在"));
+    }
+
+    public CreationCatalog creationCatalog(CampusPrincipal user) {
+        identities.requirePermission(user,"reservation:manage");
+        return new CreationCatalog(jdbc.sql("SELECT id,code,name FROM campus ORDER BY id")
+            .query((r,n)->new CampusChoice(r.getLong(1),r.getString(2),r.getString(3))).list(),placeCatalog.places());
+    }
+
+    @Transactional public VenueSummary createVenue(CampusPrincipal user,VenueCreateCommand input) {
+        lock(user,"reservation:manage");
+        String campusCode=jdbc.sql("SELECT code FROM campus WHERE id=:id").param("id",input.campusId()).query(String.class).optional()
+            .orElseThrow(()->new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CAMPUS","所选校区不存在"));
+        String place=placeCatalog.validatedId(campusCode,input.placeId());
+        var owners=input.managerUserIds();
+        if (new java.util.HashSet<>(owners).size()!=owners.size()) throw new ApiException(HttpStatus.BAD_REQUEST,"DUPLICATE_VENUE_OWNER","负责人不能重复");
+        if (input.enabled() && owners.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST,"NO_VENUE_REVIEWER","开放资源前请至少配置一名有效办理人员");
+        if (!owners.isEmpty() && jdbc.sql("""
+            SELECT COUNT(DISTINCT u.id) FROM app_user u JOIN user_role ur ON ur.user_id=u.id
+            JOIN role_permission rp ON rp.role_code=ur.role_code
+            WHERE u.id IN (:ids) AND u.enabled=TRUE AND rp.permission_code='reservation:review'
+            """).param("ids",owners).query(Long.class).single()!=owners.size())
+            throw new ApiException(HttpStatus.BAD_REQUEST,"USER_NOT_REVIEWER","所选负责人不存在、已停用或缺少办理权限");
+        if(jdbc.sql("SELECT COUNT(*) FROM venue_resource WHERE campus_id=:campus AND UPPER(code)=UPPER(:code)")
+            .param("campus",input.campusId()).param("code",input.code()).query(Long.class).single()>0)
+            throw new ApiException(HttpStatus.CONFLICT,"VENUE_CODE_EXISTS","同一校区的资源编号已存在");
+        var key=new GeneratedKeyHolder();
+        jdbc.sql("""
+            INSERT INTO venue_resource(campus_id,code,name,category,place_id,building_name,location_detail,capacity,available_equipment,rules,enabled)
+            VALUES(:campus,:code,:name,:category,:place,:building,:location,:capacity,:equipment,:rules,:enabled)
+            """).param("campus",input.campusId()).param("code",input.code()).param("name",input.name().trim()).param("category",input.category())
+            .param("place",place).param("building",input.buildingName().trim()).param("location",input.locationDetail().trim()).param("capacity",input.capacity())
+            .param("equipment",input.availableEquipment()==null?"":input.availableEquipment().trim()).param("rules",input.rules()==null?"":input.rules().trim())
+            .param("enabled",input.enabled()).update(key,"id");
+        long id=key.getKey().longValue();
+        for(long owner:owners) addVenueManager(user,id,owner);
+        jdbc.sql("INSERT INTO foundation_audit(actor_id,actor_name,action,entity_type,entity_id,summary,reason) VALUES(:actor,:name,'VENUE_CREATE','VENUE',:id,:summary,'资源人员建档')")
+            .param("actor",user.id()).param("name",identities.profile(user.id()).fullName()).param("id",id)
+            .param("summary",input.code()+" / "+input.name().trim()+" / "+campusCode+" / "+input.locationDetail().trim()+" / "+(input.enabled()?"已开放":"待开放")+" / 负责人 "+owners.size()+" 人").update();
+        return getVenue(id);
     }
 
     @Transactional
@@ -221,7 +263,7 @@ public class VenueReservationService {
                 .query((r, n) -> new long[] {r.getLong("pending_review"), r.getLong("unattended_review"),
                     r.getLong("pending_usage"), r.getLong("active_use"), r.getLong("unattended_tasks")}).single();
             return new VenueManagementItem(
-                v.id(),
+                v.id(),v.campusId(),v.campusName(),
                 v.code(),
                 v.name(),
                 v.category(),

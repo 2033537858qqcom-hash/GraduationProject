@@ -46,6 +46,14 @@ public class ReservationController {
 
     // ==================== 场地与设备资源目录 ====================
 
+    @GetMapping("/venues/catalog")
+    public CreationCatalog creationCatalog(@AuthenticationPrincipal CampusPrincipal user) { return reservations.creationCatalog(user); }
+
+    @PostMapping("/venues")
+    public VenueSummary createVenue(@AuthenticationPrincipal CampusPrincipal user,@jakarta.validation.Valid @RequestBody VenueCreateCommand input) {
+        return reservations.createVenue(user,input);
+    }
+
     @GetMapping("/venues")
     public List<VenueSummary> listVenues(
         @RequestParam(required = false) String category,

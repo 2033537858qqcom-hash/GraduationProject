@@ -99,6 +99,20 @@ class PhysicalRoomIntegrationTest {
    assertThat(java.util.List.of(a.get(),b.get())).containsExactlyInAnyOrder(200,409);
   }
  }
+ @Test void linkChangesRequireCurrentVersionAndNoOpenBookings()throws Exception{
+  var f=fixture();var manager=login("affairs1001");var endpoint="/api/reservations/venues/"+f.venue()+"/classroom";
+  var unlink=new java.util.HashMap<String,Object>();unlink.put("version",0);unlink.put("reason","核对房间");
+  var unlinked=ok(manager.send("PUT",endpoint,unlink));assertThat(unlinked.path("classroomResourceId").isNull()).isTrue();
+  assertThat(manager.send("PUT",endpoint,Map.of("classroomResourceId",f.room(),"version",0,"reason","旧版本")).statusCode()).isEqualTo(409);
+  ok(manager.send("PUT",endpoint,Map.of("classroomResourceId",f.room(),"version",1,"reason","确认同一教室")));
+  ok(book(f,"2029-04-20T09:00:00","2029-04-20T10:00:00"));unlink.put("version",2);
+  assertThat(manager.send("PUT",endpoint,unlink).statusCode()).isEqualTo(409);
+ }
+ @Test void linkChangeCannotReuseAnotherVenueRoomAndStudentCannotLink()throws Exception{
+  var a=fixture();var b=fixture();var payload=Map.of("classroomResourceId",a.room(),"version",0,"reason","重复关联");
+  assertThat(login("affairs1001").send("PUT","/api/reservations/venues/"+b.venue()+"/classroom",payload).statusCode()).isEqualTo(409);
+  assertThat(login("20260001").send("PUT","/api/reservations/venues/"+b.venue()+"/classroom",payload).statusCode()).isEqualTo(403);
+ }
  private record Fixture(long room,long venue,long group,long teacher){}
  private Fixture fixture()throws Exception{
   String key=UUID.randomUUID().toString();long teacher=uniqueTeacher();long room=TestRooms.ensure(jdbc,"物理教室-"+key);

@@ -25,14 +25,15 @@ public class FoundationService {
     private final IdentityService identities;
     private final PasswordEncoder passwords;
     private final TeachingService teaching;
+    private final ResponsibilityService responsibilities;
     private static final String ACCOUNT_SELECT="""
         SELECT u.id,u.username,u.full_name,u.identity_number,u.campus_id,u.department_id,u.class_group_id,u.enabled,u.demo,u.version,u.must_change_password,
             cp.name campus_name,d.name department_name,cg.name class_name
         FROM app_user u LEFT JOIN campus cp ON cp.id=u.campus_id LEFT JOIN department d ON d.id=u.department_id
         LEFT JOIN class_group cg ON cg.id=u.class_group_id
         """;
-    public FoundationService(JdbcClient jdbc,IdentityService identities,PasswordEncoder passwords,TeachingService teaching) {
-        this.jdbc=jdbc; this.identities=identities; this.passwords=passwords; this.teaching=teaching;
+    public FoundationService(JdbcClient jdbc,IdentityService identities,PasswordEncoder passwords,TeachingService teaching,ResponsibilityService responsibilities) {
+        this.jdbc=jdbc; this.identities=identities; this.passwords=passwords; this.teaching=teaching; this.responsibilities=responsibilities;
     }
     private void permission(CampusPrincipal user) { identities.requirePermission(user,"foundation:manage"); }
     private void lock(CampusPrincipal user) {
@@ -98,6 +99,7 @@ public class FoundationService {
         if(old.enabled() && old.roles().contains("STUDENT_AFFAIRS") && (!input.roles().contains("STUDENT_AFFAIRS") || !Objects.equals(old.departmentId(),input.departmentId()))) protectCertificateReviewer(id,old.departmentId());
         if(!Objects.equals(old.departmentId(),input.departmentId()) && jdbc.sql("SELECT (SELECT COUNT(*) FROM teaching_member WHERE student_id=:u AND active=TRUE)+(SELECT COUNT(*) FROM teaching_instructor WHERE teacher_id=:u AND active=TRUE)")
             .param("u",id).query(Long.class).single()>0) conflict("该人员仍有有效教学关系，请先调整教学关系再变更学院归属");
+        responsibilities.requireRoleHandoff(id,input.roles(),!Objects.equals(old.departmentId(),input.departmentId()));
         boolean changedAccess=!new HashSet<>(old.roles()).equals(new HashSet<>(input.roles())) || !Objects.equals(old.departmentId(),input.departmentId())
             || !Objects.equals(old.classGroupId(),input.classGroupId()) || !Objects.equals(old.campusId(),input.campusId());
         if(jdbc.sql("UPDATE app_user SET full_name=:full,identity_number=:number,campus_id=:campus,department_id=:department,class_group_id=:group,version=version+1,security_version=security_version+:security WHERE id=:id AND version=:v")
@@ -109,11 +111,13 @@ public class FoundationService {
     @Transactional public Account state(CampusPrincipal user,long id,StateChange input) {
         lock(user); var old=account(id); version(old.version(),input.version()); protectAdmin(user,old,input.enabled(),old.roles());
         if(old.enabled()==input.enabled()) conflict("账号已经处于目标状态");
-        if(!input.enabled() && hasCounselorAssignments(id)) conflict("该人员仍负责行政班，请先移交或清空负责关系，再停用账号");
-        if(!input.enabled() && old.roles().contains("STUDENT_AFFAIRS")) protectCertificateReviewer(id,old.departmentId());
+        if(input.enabled() && input.emergency()) bad("紧急停用不能用于启用账号");
+        if(!input.enabled() && !input.emergency()) responsibilities.requireNormalDisable(user,id);
+        if(!input.enabled() && !input.emergency() && hasCounselorAssignments(id)) conflict("该人员仍负责行政班，请先移交或清空负责关系，再停用账号");
+        if(!input.enabled() && !input.emergency() && old.roles().contains("STUDENT_AFFAIRS")) protectCertificateReviewer(id,old.departmentId());
         if(jdbc.sql("UPDATE app_user SET enabled=:enabled,version=version+1,security_version=security_version+1 WHERE id=:id AND version=:v")
             .param("enabled",input.enabled()).param("id",id).param("v",input.version()).update()!=1) stale();
-        var updated=account(id); audit(user,input.enabled()?"USER_ENABLE":"USER_DISABLE","USER",id,snapshot(old)+" → "+snapshot(updated),input.reason().trim()); return updated;
+        var updated=account(id); audit(user,input.enabled()?"USER_ENABLE":input.emergency()?"USER_EMERGENCY_DISABLE":"USER_DISABLE","USER",id,snapshot(old)+" → "+snapshot(updated),input.reason().trim()); return updated;
     }
     private void validateAssignment(long campus,long department,Long group,List<String> roles) {
         if(new HashSet<>(roles).size()!=roles.size()) bad("角色不能重复");

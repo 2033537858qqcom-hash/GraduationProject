@@ -24,7 +24,7 @@ public final class FoundationModels {
     public record AccountUpdate(@NotBlank @Size(max=100) String fullName,@NotBlank @Size(max=64) String identityNumber,
         @NotNull @Positive Long campusId,@NotNull @Positive Long departmentId,@Positive Long classGroupId,
         @NotEmpty @Size(max=10) List<@NotBlank @Size(max=40) String> roles,@Min(0) int version,@NotBlank @Size(max=200) String reason) {}
-    public record StateChange(@NotNull Boolean enabled,@Min(0) int version,@NotBlank @Size(max=200) String reason) {}
+    public record StateChange(@NotNull Boolean enabled,@Min(0) int version,@NotBlank @Size(max=200) String reason,boolean emergency) {}
     public record DepartmentInput(@NotBlank @Size(max=100) String name,@Pattern(regexp="COLLEGE|ADMIN") @NotBlank String kind,@Min(0) Integer version) {}
     public record MajorInput(@NotBlank @Size(max=100) String name,@Positive long departmentId,@Min(0) Integer version) {}
     public record ClassGroupInput(@NotBlank @Size(max=100) String name,@Positive long majorId,@Min(0) Integer version) {}

@@ -34,6 +34,7 @@ import { useEditProtection } from '../composables/useEditProtection'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 import AffairTimeline from '../components/AffairTimeline.vue'
 import BaseSelect from '../components/BaseSelect.vue'
+import VenueRoomLinkForm from '../components/VenueRoomLinkForm.vue'
 import VenueCreateForm from '../components/VenueCreateForm.vue'
 import {
   type ConflictResult,
@@ -58,6 +59,7 @@ import {
   listVenuesForManagement,
   removeVenueManager,
   reservationStatuses,
+  occupancyStatus,
   reservationActions,
   reservationPassUrl,
   reviewReservation,
@@ -99,6 +101,7 @@ const venues = ref<VenueSummary[]>([])
 const managedVenues = ref<VenueManagementItem[]>([])
 const creationCatalog = ref<VenueCreationCatalog | null>(null)
 const showVenueCreate = ref(false)
+const roomLinkVenue = ref<VenueManagementItem | null>(null)
 const reviewerCandidates = ref<VenueManagerItem[]>([])
 const manageKeyword = ref('')
 const showVenueEditModal = ref(false)
@@ -925,6 +928,7 @@ watch(() => route.query.venue, () => {
             <p>{{ venue.rules }}</p>
           </div>
 
+          <div v-if="venue.category === 'VENUE'" class="venue-rules-box"><span class="box-label">物理房间关联</span><p>{{ venue.classroomName || '尚未关联教学教室，当前仅检查本资源预约占用。' }}</p><button class="text-button compact" :disabled="busy || !creationCatalog" @click="roomLinkVenue = venue">关联教学教室</button></div>
           <!-- Managers Box -->
           <div class="venue-managers-box">
             <div class="managers-box-header">
@@ -1454,7 +1458,7 @@ watch(() => route.query.venue, () => {
             <li v-for="slot in scheduleSlots" :key="slot.startsAt" class="schedule-slot-item">
               <div class="slot-time">
                 <strong>{{ formatHour(slot.startsAt) }} - {{ formatHour(slot.endsAt) }}</strong>
-                <span class="slot-status-badge">{{ slot.status === 'IN_USE' ? '使用中' : slot.status === 'APPROVED' ? '已同意占用' : '审核中' }}</span>
+                <span class="slot-status-badge">{{ occupancyStatus(slot.status) }}</span>
               </div>
               <div class="slot-desc">
                 <h4>{{ slot.activityTheme }}</h4>
@@ -1600,6 +1604,7 @@ watch(() => route.query.venue, () => {
         </div>
       </div>
     </div>
+    <VenueRoomLinkForm v-if="roomLinkVenue && creationCatalog" :venue="roomLinkVenue" :catalog="creationCatalog" @close="roomLinkVenue = null" @saved="roomLinkVenue = null; loadManagementData()" />
     <VenueCreateForm v-if="showVenueCreate && creationCatalog" :catalog="creationCatalog" :candidates="reviewerCandidates" @close="showVenueCreate = false" @saved="venueCreated" />
   </div>
 </template>

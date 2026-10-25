@@ -79,6 +79,31 @@ class ResponsibilityHandoffIntegrationTest {
   long u=staff("STUDENT_AFFAIRS");jdbc.sql("UPDATE app_user SET version=1 WHERE id=:u").param("u",u).update();
   assertThat(login("admin").send("POST",root(u)+"/state",Map.of("enabled",false,"version",0,"reason","紧急撤权","emergency",true)).statusCode()).isEqualTo(409);
  }
+ @Test void disabledOrWrongScopeTechnicianAppearsUntilValidReplacementHasTheTask()throws Exception{
+  long worker=staff("REPAIR_TECHNICIAN");long before=exception("REPAIR_WORK");String key=UUID.randomUUID().toString();
+  jdbc.sql("INSERT INTO repair_request(reporter_id,reporter_name,request_key,campus_id,category,status,technician_id) VALUES(1,'学生',:k,1,'WATER','IN_PROGRESS',:u)").param("k",key).param("u",worker).update();
+  assertThat(exception("REPAIR_WORK")).isEqualTo(before+1);
+  jdbc.sql("INSERT INTO repair_staff_scope(user_id,capability,campus_id,category) VALUES(:u,'WORK',2,'WATER')").param("u",worker).update();
+  assertThat(exception("REPAIR_WORK")).isEqualTo(before+1);
+  jdbc.sql("UPDATE repair_staff_scope SET campus_id=1 WHERE user_id=:u").param("u",worker).update();assertThat(exception("REPAIR_WORK")).isEqualTo(before);
+  ok(state(worker,false,true));assertThat(exception("REPAIR_WORK")).isEqualTo(before+1);
+  long next=staff("REPAIR_TECHNICIAN");jdbc.sql("INSERT INTO repair_staff_scope(user_id,capability,campus_id,category) VALUES(:u,'WORK',1,'WATER')").param("u",next).update();
+  assertThat(exception("REPAIR_WORK")).isEqualTo(before+1);
+  jdbc.sql("UPDATE repair_request SET technician_id=:u WHERE request_key=:k").param("u",next).param("k",key).update();assertThat(exception("REPAIR_WORK")).isEqualTo(before);
+ }
+ @Test void emergencyBypassesCounselorAssignmentGuardButStillReportsUnfinishedLeave()throws Exception{
+  long u=staff("COUNSELOR");jdbc.sql("INSERT INTO user_role(user_id,role_code) VALUES(:u,'TEACHER')").param("u",u).update();String key=UUID.randomUUID().toString();
+  jdbc.sql("INSERT INTO class_group(name,major_id) SELECT :n,MIN(id) FROM major WHERE department_id=1").param("n",key).update();long cg=jdbc.sql("SELECT id FROM class_group WHERE name=:n").param("n",key).query(Long.class).single();
+  jdbc.sql("INSERT INTO counselor_assignment(class_group_id,counselor_id) VALUES(:g,:u)").param("g",cg).param("u",u).update();
+  jdbc.sql("INSERT INTO leave_request(student_id,request_key,class_group_id,student_name,identity_number,class_name,reason_type,reason,contact,starts_at,ends_at,status) VALUES(1,:k,:g,'学生','学号','班级','OTHER','私有事由','13800138000','2029-01-01 09:00:00','2029-01-01 10:00:00','APPROVED')").param("k",key).param("g",cg).update();
+  long before=exception("COUNSELOR");assertThat(state(u,false,false).statusCode()).isEqualTo(409);ok(state(u,false,true));assertThat(exception("COUNSELOR")).isEqualTo(before+1);
+  long next=staff("COUNSELOR");jdbc.sql("INSERT INTO user_role(user_id,role_code) VALUES(:u,'TEACHER')").param("u",next).update();jdbc.sql("UPDATE counselor_assignment SET counselor_id=:u WHERE class_group_id=:g").param("u",next).param("g",cg).update();assertThat(exception("COUNSELOR")).isEqualTo(before);
+  assertThat(ok(login("admin").get("/api/admin/foundation/responsibility-exceptions")).toString()).doesNotContain("私有事由","13800138000");
+ }
+ @Test void emptyReasonAndEmergencyEnablingAreRejected()throws Exception{
+  long u=staff("TEACHER");assertThat(login("admin").send("POST",root(u)+"/state",Map.of("enabled",false,"emergency",true,"version",0,"reason","")).statusCode()).isEqualTo(400);
+  ok(state(u,false,true));assertThat(state(u,true,true).statusCode()).isEqualTo(400);ok(state(u,true,false));
+ }
  private String root(long u){return "/api/admin/foundation/users/"+u;}
  private HttpResponse<String> state(long u,boolean enabled,boolean emergency)throws Exception{return login("admin").send("POST",root(u)+"/state",Map.of("enabled",enabled,"emergency",emergency,"version",jdbc.sql("SELECT version FROM app_user WHERE id=:u").param("u",u).query(Integer.class).single(),"reason","岗位交接测试"));}
  private long exception(String code)throws Exception{var items=ok(login("admin").get("/api/admin/foundation/responsibility-exceptions"));for(var item:items)if(item.path("code").asText().equals(code))return item.path("count").asLong();throw new AssertionError(code);}

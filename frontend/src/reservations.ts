@@ -1,8 +1,11 @@
 import { api } from './lib/api.ts'
 
+export interface ClassroomChoice { id: number; campusId: number; name: string; buildingName: string; roomNumber: string; capacity: number; enabled: boolean }
+
 export interface VenueCreationCatalog {
   campuses: { id: number; code: string; name: string }[]
   places: { id: string; name: string; campusCode: string }[]
+  classrooms: ClassroomChoice[]
 }
 
 export interface VenueSummary {
@@ -19,6 +22,9 @@ export interface VenueSummary {
   availableEquipment: string | null
   rules: string | null
   enabled: boolean
+  classroomResourceId: number | null
+  classroomName: string | null
+  version: number
 }
 
 export interface TimeSlot {
@@ -272,6 +278,9 @@ export interface VenueManagementItem {
   availableEquipment: string | null
   rules: string | null
   enabled: boolean
+  classroomResourceId: number | null
+  classroomName: string | null
+  version: number
   managers: VenueManagerItem[]
   activeReviewerCount: number
   pendingReviewCount: number
@@ -320,4 +329,14 @@ export async function removeVenueManager(venueId: number, userId: number): Promi
 
 export async function recordReservationUsage(id: number, version: number, action: 'START' | 'COMPLETE', comment: string): Promise<ReservationDetail> {
   return api<ReservationDetail>(`/reservations/${id}/usage`, { method: 'POST', body: JSON.stringify({ version, action, comment }) })
+}
+
+export function occupancyStatus(status: string): string {
+  if (status === 'LESSON') return '教学课程'
+  if (status === 'EXAM') return '已发布考试'
+  return reservationStatuses[status] ?? '其他占用'
+}
+
+export function classroomOptions(rooms: ClassroomChoice[], campusId: number, currentId = 0) {
+  return [{ value: 0, label: '不关联教学教室', disabled: false }, ...rooms.filter(r => r.campusId === campusId).map(r => ({ value: r.id, label: `${r.name} · ${r.buildingName} ${r.roomNumber} · ${r.capacity}人`, disabled: !r.enabled && r.id !== currentId }))]
 }

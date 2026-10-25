@@ -4,14 +4,15 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vu
 import { Building2, History, Plus, Search, ShieldCheck, Users } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import BaseSelect from '../components/BaseSelect.vue'
+import ResponsibilityPanel from '../components/ResponsibilityPanel.vue'
 import ManagedPasswordReset from '../components/ManagedPasswordReset.vue'
 import { currentUser } from '../stores/auth'
-import type { FoundationAudit, FoundationCatalog, FoundationClass, FoundationDepartment, FoundationMajor, ManagedAccount, Paged } from '../foundation'
+import type { FoundationAudit, FoundationCatalog, FoundationClass, FoundationDepartment, FoundationMajor, ManagedAccount, Paged, ResponsibilityImpact, ResponsibilityException } from '../foundation'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 
 const route = useRoute(), router = useRouter()
 const root = '/admin/foundation'
-const tab = computed(() => route.query.tab === 'organization' ? 'organization' : route.query.tab === 'audit' ? 'audit' : 'accounts')
+const tab = computed(() => route.query.tab === 'responsibility' ? 'responsibility' : route.query.tab === 'organization' ? 'organization' : route.query.tab === 'audit' ? 'audit' : 'accounts')
 const foundationNavRef = ref<HTMLElement | null>(null)
 const { indicatorStyle: foundationIndicatorStyle } = useSlidingIndicator(
   foundationNavRef,
@@ -42,9 +43,11 @@ const organizationRows = computed(() => orgType.value === 'departments' ? catalo
 const shownPage = computed(() => tab.value === 'audit' ? audits.value : accounts.value)
 const totalPages = computed(() => Math.max(1, Math.ceil(shownPage.value.total / shownPage.value.pageSize)))
 const confirmation = ref(''), confirmationDialog = ref<HTMLDialogElement | null>(null), keepButton = ref<HTMLButtonElement | null>(null)
+const impact = ref<ResponsibilityImpact | null>(null), impactAccount = ref<ManagedAccount | null>(null)
+const exceptions = ref<ResponsibilityException[]>([]), emergency = ref(false)
 const stateCandidate = ref<ManagedAccount | null>(null), stateReason = ref('')
 let resolveConfirmation: ((accept: boolean) => void) | null = null
-const actionNames: Record<string, string> = { VENUE_CREATE: '新增预约资源', USER_PASSWORD_CHANGE: '本人修改密码', USER_PASSWORD_RESET: '管理员重置密码', USER_CREATE: '新建账号', USER_UPDATE: '修改账号与岗位', USER_ENABLE: '启用账号', USER_DISABLE: '停用账号', DEPARTMENT_CREATE: '新建学院或部门', DEPARTMENT_UPDATE: '修改学院或部门', MAJOR_CREATE: '新建专业', MAJOR_UPDATE: '修改专业', CLASS_GROUP_CREATE: '新建行政班', CLASS_GROUP_UPDATE: '修改行政班', LOCATION_CREATE: '新增报修地点', LOCATION_UPDATE: '修改报修地点', LOCATION_ENABLE: '开放报修地点', LOCATION_DISABLE: '停用报修地点', SCOPE_CREATE: '新增后勤负责范围', SCOPE_UPDATE: '修改后勤负责范围', SCOPE_ENABLE: '启用后勤负责范围', SCOPE_DISABLE: '停用后勤负责范围' }
+const actionNames: Record<string, string> = { USER_EMERGENCY_DISABLE: '紧急停用账号', VENUE_ROOM_LINK: '关联教学教室', VENUE_CREATE: '新增预约资源', USER_PASSWORD_CHANGE: '本人修改密码', USER_PASSWORD_RESET: '管理员重置密码', USER_CREATE: '新建账号', USER_UPDATE: '修改账号与岗位', USER_ENABLE: '启用账号', USER_DISABLE: '停用账号', DEPARTMENT_CREATE: '新建学院或部门', DEPARTMENT_UPDATE: '修改学院或部门', MAJOR_CREATE: '新建专业', MAJOR_UPDATE: '修改专业', CLASS_GROUP_CREATE: '新建行政班', CLASS_GROUP_UPDATE: '修改行政班', LOCATION_CREATE: '新增报修地点', LOCATION_UPDATE: '修改报修地点', LOCATION_ENABLE: '开放报修地点', LOCATION_DISABLE: '停用报修地点', SCOPE_CREATE: '新增后勤负责范围', SCOPE_UPDATE: '修改后勤负责范围', SCOPE_ENABLE: '启用后勤负责范围', SCOPE_DISABLE: '停用后勤负责范围' }
 const typeNames: Record<string, string> = { USER: '账号', DEPARTMENT: '学院与部门', MAJOR: '专业', CLASS_GROUP: '行政班', REPAIR_LOCATION: '报修地点', REPAIR_SCOPE: '后勤负责范围', VENUE: '预约资源' }
 const filterRoleOptions = computed(() => [
   { value: '', label: '全部身份' },
@@ -102,7 +105,7 @@ function organizationParent(row: FoundationDepartment | FoundationMajor | Founda
 }
 async function ask(message: string, candidate: ManagedAccount | null = null) {
   if (resolveConfirmation) finishConfirmation(false)
-  confirmation.value = message; stateCandidate.value = candidate; stateReason.value = ''
+  confirmation.value = message; stateCandidate.value = candidate; stateReason.value = ''; emergency.value = false
   return new Promise<boolean>(resolve => {
     resolveConfirmation = resolve
     void nextTick(() => { confirmationDialog.value?.showModal(); keepButton.value?.focus() })
@@ -146,6 +149,9 @@ async function load() {
       for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value)
       const result = await api<Paged<ManagedAccount>>(root + '/users?' + params)
       if (request === sequence) accounts.value = result
+    } else if (tab.value === 'responsibility') {
+      const result = await api<ResponsibilityException[]>(root + '/responsibility-exceptions')
+      if (request === sequence) exceptions.value = result
     } else if (tab.value === 'audit') {
       auditType.value = String(route.query.entityType ?? '')
       const params = new URLSearchParams({ page: String(page), pageSize: '20' })
@@ -183,12 +189,25 @@ async function saveAccount() {
   } catch (cause) { error.value = errorMessage(cause) }
   finally { busy.value = false }
 }
+async function inspectResponsibilities(account: ManagedAccount, scroll = true) {
+  error.value = ''; impact.value = null; impactAccount.value = null
+  try {
+    const result = await api<ResponsibilityImpact>(root + '/users/' + account.id + '/responsibilities')
+    if (result.version !== account.version) throw new Error('账号资料已变化，请刷新列表后重新检查。')
+    impact.value = result; impactAccount.value = account
+    if (scroll) { await nextTick(); document.getElementById('responsibility-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+    return true
+  } catch (cause) { error.value = errorMessage(cause); return false }
+}
 async function changeState(account: ManagedAccount) {
+  if (busy.value) return
+  if (account.enabled && !await inspectResponsibilities(account, false)) return
+
   if (busy.value || !await ask(`${account.enabled ? '停用' : '启用'}${account.fullName}的账号。${account.enabled ? '停用后所有旧会话将失效，业务历史继续保留。' : '启用后需重新登录，旧会话不会恢复。'}`, account)) return
   busy.value = true; error.value = ''; success.value = ''
   try {
-    await api(root + '/users/' + account.id + '/state', { method: 'POST', body: JSON.stringify({ enabled: !account.enabled, version: account.version, reason: stateReason.value }) })
-    await load(); success.value = `${account.fullName}的账号已${account.enabled ? '停用' : '启用'}，修改记录已保存。`
+    await api(root + '/users/' + account.id + '/state', { method: 'POST', body: JSON.stringify({ enabled: !account.enabled, version: account.version, reason: stateReason.value, emergency: emergency.value }) })
+    impact.value = null; impactAccount.value = null; await load(); success.value = `${account.fullName}的账号已${account.enabled ? '停用' : '启用'}，修改记录已保存。`
   } catch (cause) { error.value = errorMessage(cause) }
   finally { busy.value = false }
 }
@@ -229,14 +248,20 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
     <dialog ref="confirmationDialog" class="draft-confirm" aria-labelledby="foundation-confirm-title" @cancel.prevent="finishConfirmation(false)">
       <form @submit.prevent="finishConfirmation(true)">
 <h2 id="foundation-confirm-title">{{ stateCandidate ? '确认账号状态变更' : '处理未保存的内容' }}</h2><p>{{ confirmation }}</p>
+        <template v-if="stateCandidate?.enabled && impact">
+          <ResponsibilityPanel :impact="impact" compact />
+          <label class="emergency-choice"><input v-model="emergency" type="checkbox" />紧急停用：立即撤销访问，保留负责关系并在责任异常中安排接任</label>
+          <p v-if="impact.blockingCount && !emergency" class="alert">尚有负责范围或独有待办，完成交接后可正常停用。</p>
+        </template>
         <label v-if="stateCandidate">变更原因<input v-model="stateReason" required maxlength="200" placeholder="说明此次启用或停用的原因" /></label>
-        <div class="form-actions"><button ref="keepButton" type="button" class="button compact" @click="finishConfirmation(false)">{{ stateCandidate ? '取消' : '继续编辑' }}</button><button class="button primary compact">{{ stateCandidate ? '确认变更' : '放弃修改并继续' }}</button></div>
+        <div class="form-actions"><button ref="keepButton" type="button" class="button compact" @click="finishConfirmation(false)">{{ stateCandidate ? '取消' : '继续编辑' }}</button><button class="button primary compact" :disabled="!!(stateCandidate?.enabled && impact?.blockingCount && !emergency)">{{ stateCandidate ? '确认变更' : '放弃修改并继续' }}</button></div>
       </form>
     </dialog>
     <div class="manager-heading"><span class="portal-context">管理员服务</span><h1>账号与组织管理</h1><p class="muted">维护校园人员、学院专业和行政班，查看身份与归属的修改记录。</p></div>
     <nav ref="foundationNavRef" class="learning-tabs" aria-label="基础管理栏目">
       <RouterLink :to="{ path: root, query: { tab: 'accounts' } }" :class="{ selected: tab === 'accounts' }"><Users :size="16" />账号与岗位</RouterLink>
       <RouterLink :to="{ path: root, query: { tab: 'organization' } }" :class="{ selected: tab === 'organization' }"><Building2 :size="16" />组织目录</RouterLink>
+      <RouterLink :to="{ path: root, query: { tab: 'responsibility' } }" :class="{ selected: tab === 'responsibility' }"><ShieldCheck :size="16" />责任异常</RouterLink>
       <RouterLink :to="{ path: root, query: { tab: 'audit' } }" :class="{ selected: tab === 'audit' }"><History :size="16" />修改记录</RouterLink>
       <div class="learning-tabs-indicator" :style="foundationIndicatorStyle" aria-hidden="true"></div>
     </nav>
@@ -244,10 +269,11 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
     <p v-if="loading && !catalog" class="loading-state" role="status">正在读取管理信息…</p>
     <button v-else-if="!catalog" class="button compact" @click="load">重新读取管理信息</button>
     <template v-else-if="catalog && tab === 'accounts'">
+      <section v-if="impact && impactAccount" class="portal-panel"><div class="section-heading"><h2 id="responsibility-heading">{{ impactAccount.fullName }} · 岗位交接检查</h2><button class="text-button" @click="impact = null; impactAccount = null">收起</button></div><ResponsibilityPanel :impact="impact" /></section>
       <section class="portal-panel">
         <div class="section-heading"><div><h2>校园人员账号</h2><p class="muted">共 {{ accounts.total }} 个符合条件的账号</p></div><button class="button primary compact" :disabled="busy" @click="openAccount(null)"><Plus :size="15" />新建账号</button></div>
         <form class="foundation-filters" @submit.prevent="searchAccounts"><label class="filter-search">搜索人员<input v-model="filters.q" maxlength="100" placeholder="姓名、账号或学工号" /></label><label>身份与岗位<BaseSelect v-model="filters.role" :options="filterRoleOptions" /></label><label>所属组织<BaseSelect v-model="filters.departmentId" :options="filterDepartmentOptions" /></label><label>账号状态<BaseSelect v-model="filters.enabled" :options="filterEnabledOptions" /></label><button class="button compact" :disabled="busy"><Search :size="15" />查询</button></form>
-        <div v-if="accounts.items.length" class="table-scroll" :class="{ 'is-loading': loading }"><table class="campus-table foundation-table"><thead><tr><th>人员</th><th>组织与行政班</th><th>身份与岗位</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="a in accounts.items" :key="a.id"><td><strong>{{ a.fullName }}</strong><small>账号 {{ a.username }}</small><small>学工号 {{ a.identityNumber }}</small></td><td>{{ a.departmentName ?? '未设置' }}<small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small></td><td><span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span></td><td><span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span><small v-if="a.passwordChangeRequired">下次登录须改密</small></td><td><div class="foundation-row-actions"><button class="text-button" :disabled="busy" @click="openAccount(a)">编辑账号</button><button class="text-button" :disabled="busy || accountOpen || a.id === currentUser?.id" :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined" @click="changeState(a)">{{ a.enabled ? '停用' : '启用' }}</button><button class="text-button" :disabled="busy || !a.enabled || a.id === currentUser?.id" @click="openPasswordReset(a)">重置密码</button><button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button></div></td></tr></tbody></table></div>
+        <div v-if="accounts.items.length" class="table-scroll" :class="{ 'is-loading': loading }"><table class="campus-table foundation-table"><thead><tr><th>人员</th><th>组织与行政班</th><th>身份与岗位</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="a in accounts.items" :key="a.id"><td><strong>{{ a.fullName }}</strong><small>账号 {{ a.username }}</small><small>学工号 {{ a.identityNumber }}</small></td><td>{{ a.departmentName ?? '未设置' }}<small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small></td><td><span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span></td><td><span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span><small v-if="a.passwordChangeRequired">下次登录须改密</small></td><td><div class="foundation-row-actions"><button class="text-button" :disabled="busy || loading" @click="inspectResponsibilities(a)">交接检查</button><button class="text-button" :disabled="busy" @click="openAccount(a)">编辑账号</button><button class="text-button" :disabled="busy || accountOpen || a.id === currentUser?.id" :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined" @click="changeState(a)">{{ a.enabled ? '停用' : '启用' }}</button><button class="text-button" :disabled="busy || !a.enabled || a.id === currentUser?.id" @click="openPasswordReset(a)">重置密码</button><button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button></div></td></tr></tbody></table></div>
         <p v-else class="empty-state">没有符合条件的账号，请调整搜索或筛选条件。</p>
       </section>
       <section v-if="accountOpen" class="portal-panel foundation-editor">
@@ -272,13 +298,29 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
       </section>
       <section v-if="orgOpen" class="portal-panel foundation-editor"><h2 id="organization-form-heading">{{ orgId ? '编辑' : '新建' }}{{ orgType === 'departments' ? '学院或部门' : orgLabel }}</h2><p class="muted">已有人员或班级关联时，所属关系的调整会先进行校验。</p><form class="editor-form" @submit.prevent="saveOrganization"><fieldset :disabled="busy" class="foundation-fields"><label>名称<input v-model="organization.name" required maxlength="100" /></label><label v-if="orgType === 'departments'">组织类型<BaseSelect v-model="organization.kind" :options="orgKindOptions" /></label><label v-else>所属{{ orgType === 'majors' ? '学院' : '专业' }}<BaseSelect v-model="organization.parentId" :options="orgParentOptions" /></label></fieldset><div class="form-actions"><button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存组织信息' }}</button><button type="button" class="text-button" :disabled="busy" @click="closeForms">取消编辑</button></div></form></section>
     </template>
+    <section v-else-if="catalog && tab === 'responsibility'" class="portal-panel">
+      <div class="section-heading"><div><h2>责任异常</h2><p class="muted">按当前账号、岗位和负责范围检查；接任后刷新即可重新确认。</p></div><button class="button compact" :disabled="loading" @click="load">刷新检查</button></div>
+      <p class="content-context-note">请先给接任人员分配所需岗位，再由对应配置人员调整负责范围。维修在办任务还需由有效派工人员重新派单。此处仅显示汇总数量。</p>
+      <div class="responsibility-exceptions"><article v-for="item in exceptions" :key="item.code" class="responsibility-exception" :class="{ warning: item.count > 0 }"><div><strong>{{ item.name }}</strong><p class="muted">{{ item.count }} {{ item.unit }}</p></div><RouterLink v-if="currentUser?.permissions.includes(item.permission)" :to="item.path" class="text-button">前往配置</RouterLink><small v-else class="muted">需由具备 {{ item.permission }} 权限的人员配置</small></article></div>
+    </section>
     <section v-else-if="catalog && tab === 'audit'" class="portal-panel">
       <div class="section-heading"><div><h2>人员与组织修改记录</h2><p class="muted">保留操作人员、变更前后信息和原因；共 {{ audits.total }} 条记录。</p></div></div>
       <form class="foundation-filters audit-filters" @submit.prevent="navigate('audit', { entityType: auditType, page: 1 })"><label>记录类型<BaseSelect v-model="auditType" :options="auditTypeOptions" /></label><button class="button compact">查询</button><RouterLink v-if="route.query.entityId" :to="{ path: root, query: { tab: 'audit' } }" class="text-button">查看全部修改记录</RouterLink></form>
       <p v-if="!audits.items.length" class="empty-state">当前没有对应的修改记录。</p><div :class="{ 'is-loading': loading }"><article v-for="record in audits.items" :key="record.id" class="foundation-audit"><div class="notice-heading"><h3>{{ actionNames[record.action] ?? '管理操作' }}</h3><span class="status-label">{{ typeNames[record.entityType] }}</span></div><p class="preserve-lines">{{ record.summary }}</p><p class="muted">原因：{{ record.reason }}</p><small>{{ record.actorName }} · {{ record.createdAt.slice(0, 16).replace('T', ' ') }}</small></article></div>
     </section>
-    <div v-if="catalog && tab !== 'organization' && shownPage.total > 0" class="foundation-pagination"><span>第 {{ shownPage.page }} / {{ totalPages }} 页</span><div><button class="button compact" :disabled="busy || loading || shownPage.page <= 1" @click="changePage(shownPage.page - 1)">上一页</button><button class="button compact" :disabled="busy || loading || shownPage.page >= totalPages" @click="changePage(shownPage.page + 1)">下一页</button></div></div>
+    <div v-if="catalog && ['accounts', 'audit'].includes(tab) && shownPage.total > 0" class="foundation-pagination"><span>第 {{ shownPage.page }} / {{ totalPages }} 页</span><div><button class="button compact" :disabled="busy || loading || shownPage.page <= 1" @click="changePage(shownPage.page - 1)">上一页</button><button class="button compact" :disabled="busy || loading || shownPage.page >= totalPages" @click="changePage(shownPage.page + 1)">下一页</button></div></div>
     <ManagedPasswordReset v-if="passwordResetAccount" :account="passwordResetAccount" @close="passwordResetAccount = null" @saved="passwordResetSaved" />
     <p class="data-note">当前人员资料为毕业设计演示数据。账号停用保留业务历史，角色分配不自动授予其他岗位的业务权限。</p>
   </div>
 </template>
+
+<style scoped>
+.emergency-choice { display: flex; gap: 8px; align-items: flex-start; margin: 16px 0; }
+.emergency-choice input { width: auto; margin-top: 4px; }
+.draft-confirm { width: min(740px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; }
+.responsibility-exceptions { display: grid; gap: 10px; }
+.responsibility-exception { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--line, #dfe5ec); border-radius: 8px; }
+.responsibility-exception.warning { border-left: 3px solid #b57c28; background: #fffcf5; }
+.responsibility-exception p { margin: 6px 0 0; }
+@media(max-width: 640px) { .responsibility-exception { align-items: flex-start; flex-direction: column; } }
+</style>

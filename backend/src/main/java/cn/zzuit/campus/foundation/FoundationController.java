@@ -10,8 +10,11 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/admin/foundation")
 public class FoundationController {
     private final FoundationService service;
+    private final ResponsibilityService responsibilities;
     private final cn.zzuit.campus.identity.CredentialService credentials;
-    public FoundationController(FoundationService service,cn.zzuit.campus.identity.CredentialService credentials) { this.service=service; this.credentials=credentials; }
+    public FoundationController(FoundationService service,cn.zzuit.campus.identity.CredentialService credentials,ResponsibilityService responsibilities) { this.service=service; this.credentials=credentials; this.responsibilities=responsibilities; }
+    @GetMapping("/users/{id}/responsibilities") ResponsibilityService.Impact responsibilities(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id) { return responsibilities.preview(u,id); }
+    @GetMapping("/responsibility-exceptions") java.util.List<ResponsibilityService.ExceptionGroup> exceptions(@AuthenticationPrincipal CampusPrincipal u) { return responsibilities.exceptions(u); }
     @GetMapping("/catalog") Catalog catalog(@AuthenticationPrincipal CampusPrincipal u) { return service.catalog(u); }
     @GetMapping("/users") Page<Account> users(@AuthenticationPrincipal CampusPrincipal u,@RequestParam(defaultValue="") String q,
         @RequestParam(required=false) String role,@RequestParam(required=false) Long departmentId,@RequestParam(required=false) Boolean enabled,

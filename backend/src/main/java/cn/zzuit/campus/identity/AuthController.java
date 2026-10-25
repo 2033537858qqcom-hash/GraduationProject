@@ -32,14 +32,16 @@ public class AuthController {
     private final HttpSessionCsrfTokenRepository csrf;
     private final IdentityService identities;
     private final LoginThrottle throttle;
+    private final CredentialService credentials;
 
     public AuthController(AuthenticationManager authentication, SecurityContextRepository contexts,
-                          HttpSessionCsrfTokenRepository csrf, IdentityService identities, LoginThrottle throttle) {
+                          HttpSessionCsrfTokenRepository csrf, IdentityService identities, LoginThrottle throttle,CredentialService credentials) {
         this.authentication = authentication;
         this.contexts = contexts;
         this.csrf = csrf;
         this.identities = identities;
         this.throttle = throttle;
+        this.credentials = credentials;
     }
 
     @GetMapping("/api/auth/csrf")
@@ -84,6 +86,20 @@ public class AuthController {
     @GetMapping("/api/me")
     IdentityService.Profile me(@AuthenticationPrincipal CampusPrincipal user) {
         return identities.profile(user.id());
+    }
+
+    @PostMapping("/api/auth/password")
+    org.springframework.http.ResponseEntity<Void> changePassword(@AuthenticationPrincipal CampusPrincipal user,
+            @Valid @RequestBody CredentialService.ChangePassword input,HttpServletRequest request) {
+        String key="password:"+user.id()+":"+request.getRemoteAddr();
+        throttle.check(key);
+        try { credentials.change(user,input); }
+        catch (ApiException ex) { if (ex.code().equals("INVALID_CURRENT_PASSWORD")) throttle.failed(key); throw ex; }
+        throttle.succeeded(key);
+        var session=request.getSession(false);
+        if (session!=null) session.invalidate();
+        SecurityContextHolder.clearContext();
+        return org.springframework.http.ResponseEntity.noContent().build();
     }
 
     public record LoginRequest(@NotBlank @Size(max = 64) String username,

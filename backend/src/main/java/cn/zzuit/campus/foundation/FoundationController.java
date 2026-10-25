@@ -10,7 +10,8 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/admin/foundation")
 public class FoundationController {
     private final FoundationService service;
-    public FoundationController(FoundationService service) { this.service=service; }
+    private final cn.zzuit.campus.identity.CredentialService credentials;
+    public FoundationController(FoundationService service,cn.zzuit.campus.identity.CredentialService credentials) { this.service=service; this.credentials=credentials; }
     @GetMapping("/catalog") Catalog catalog(@AuthenticationPrincipal CampusPrincipal u) { return service.catalog(u); }
     @GetMapping("/users") Page<Account> users(@AuthenticationPrincipal CampusPrincipal u,@RequestParam(defaultValue="") String q,
         @RequestParam(required=false) String role,@RequestParam(required=false) Long departmentId,@RequestParam(required=false) Boolean enabled,
@@ -18,6 +19,7 @@ public class FoundationController {
     @PostMapping("/users") Account create(@AuthenticationPrincipal CampusPrincipal u,@Valid @RequestBody NewAccount input) { return service.create(u,input); }
     @PutMapping("/users/{id}") Account update(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id,@Valid @RequestBody AccountUpdate input) { return service.update(u,id,input); }
     @PostMapping("/users/{id}/state") Account state(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id,@Valid @RequestBody StateChange input) { return service.state(u,id,input); }
+    @PostMapping("/users/{id}/password") cn.zzuit.campus.identity.CredentialService.ResetResult resetPassword(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id,@Valid @RequestBody cn.zzuit.campus.identity.CredentialService.ResetPassword input) { return credentials.reset(u,id,input); }
     @PostMapping("/departments") Department department(@AuthenticationPrincipal CampusPrincipal u,@Valid @RequestBody DepartmentInput input) { return service.department(u,null,input); }
     @PutMapping("/departments/{id}") Department department(@AuthenticationPrincipal CampusPrincipal u,@PathVariable long id,@Valid @RequestBody DepartmentInput input) { return service.department(u,id,input); }
     @PostMapping("/majors") Major major(@AuthenticationPrincipal CampusPrincipal u,@Valid @RequestBody MajorInput input) { return service.major(u,null,input); }

@@ -26,7 +26,7 @@ public class FoundationService {
     private final PasswordEncoder passwords;
     private final TeachingService teaching;
     private static final String ACCOUNT_SELECT="""
-        SELECT u.id,u.username,u.full_name,u.identity_number,u.campus_id,u.department_id,u.class_group_id,u.enabled,u.demo,u.version,
+        SELECT u.id,u.username,u.full_name,u.identity_number,u.campus_id,u.department_id,u.class_group_id,u.enabled,u.demo,u.version,u.must_change_password,
             cp.name campus_name,d.name department_name,cg.name class_name
         FROM app_user u LEFT JOIN campus cp ON cp.id=u.campus_id LEFT JOIN department d ON d.id=u.department_id
         LEFT JOIN class_group cg ON cg.id=u.class_group_id
@@ -80,10 +80,9 @@ public class FoundationService {
     }
     @Transactional public Account create(CampusPrincipal user,NewAccount input) {
         lock(user); validateAssignment(input.campusId(),input.departmentId(),input.classGroupId(),input.roles());
-        if(input.initialPassword().getBytes(StandardCharsets.UTF_8).length>72) bad("初始密码不能超过 72 个 UTF-8 字节");
-        if(!input.initialPassword().matches("(?s).*[A-Za-z].*") || !input.initialPassword().matches("(?s).*[0-9].*")) bad("初始密码至少十位，并包含字母和数字");
+        cn.zzuit.campus.identity.PasswordPolicy.validate(input.initialPassword());
         var key=new GeneratedKeyHolder();
-        jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id,class_group_id,demo) VALUES(:name,:hash,:full,:number,:campus,:department,:group,TRUE)")
+        jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id,class_group_id,demo,must_change_password) VALUES(:name,:hash,:full,:number,:campus,:department,:group,TRUE,TRUE)")
             .param("name",input.username()).param("hash",passwords.encode(input.initialPassword())).param("full",input.fullName().trim()).param("number",input.identityNumber().trim())
             .param("campus",input.campusId()).param("department",input.departmentId()).param("group",input.classGroupId()).update(key,"id");
         long id=key.getKey().longValue(); roles(id,input.roles()); var created=account(id);
@@ -153,7 +152,7 @@ public class FoundationService {
     private Account accountRow(ResultSet r,int n) throws SQLException {
         long id=r.getLong("id");
         return new Account(id,r.getString("username"),r.getString("full_name"),r.getString("identity_number"),r.getObject("campus_id",Long.class),r.getString("campus_name"),
-            r.getObject("department_id",Long.class),r.getString("department_name"),r.getObject("class_group_id",Long.class),r.getString("class_name"),r.getBoolean("enabled"),r.getBoolean("demo"),r.getInt("version"),identities.roles(id));
+            r.getObject("department_id",Long.class),r.getString("department_name"),r.getObject("class_group_id",Long.class),r.getString("class_name"),r.getBoolean("enabled"),r.getBoolean("demo"),r.getInt("version"),identities.roles(id),r.getBoolean("must_change_password"));
     }
     @Transactional public Department department(CampusPrincipal user,Long id,DepartmentInput input) {
         lock(user); Department old=null;

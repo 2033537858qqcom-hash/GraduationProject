@@ -32,6 +32,13 @@ public class LiveIdentityFilter extends OncePerRequestFilter {
                 var fresh=UsernamePasswordAuthenticationToken.authenticated(current.get(),null,current.get().getAuthorities());
                 fresh.setDetails(authentication.getDetails()); context.setAuthentication(fresh);
                 SecurityContextHolder.setContext(context); contexts.saveContext(context,request,response);
+                String path=request.getRequestURI();
+                if (identities.passwordChangeRequired(prior.id()) && path.startsWith("/api/")
+                    && !path.startsWith("/api/public/") && !List.of("/api/me","/api/health","/api/auth/csrf","/api/auth/login","/api/auth/logout","/api/auth/password").contains(path)) {
+                    response.setStatus(403); response.setContentType("application/json;charset=UTF-8");
+                    response.getWriter().write("{\"code\":\"PASSWORD_CHANGE_REQUIRED\",\"message\":\"请先在个人资料中修改初始密码\"}");
+                    return;
+                }
             }
         }
         chain.doFilter(request,response);

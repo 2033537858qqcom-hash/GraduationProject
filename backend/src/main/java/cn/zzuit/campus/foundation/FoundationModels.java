@@ -14,7 +14,7 @@ public final class FoundationModels {
     public record Role(String code,String name,String scope,List<Permission> permissions) {}
     public record Catalog(List<Campus> campuses,List<Department> departments,List<Major> majors,List<ClassGroup> classGroups,List<Role> roles) {}
     public record Account(long id,String username,String fullName,String identityNumber,Long campusId,String campusName,
-                          Long departmentId,String departmentName,Long classGroupId,String className,boolean enabled,boolean demo,int version,List<String> roles) {}
+                          Long departmentId,String departmentName,Long classGroupId,String className,boolean enabled,boolean demo,int version,List<String> roles,boolean passwordChangeRequired) {}
     public record Page<T>(List<T> items,long total,int page,int pageSize) {}
     public record Audit(long id,String actorName,String action,String entityType,long entityId,String summary,String reason,LocalDateTime createdAt) {}
     public record NewAccount(@NotBlank @Pattern(regexp="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}") String username,

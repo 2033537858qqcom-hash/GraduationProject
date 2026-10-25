@@ -31,7 +31,7 @@ const pages = {
 }
 
 // Use client setup semantics: SSR deliberately skips non-immediate watchers.
-export async function checkPageSetup(path: string) {
+export async function checkPageSetup(path: string, destination?: string) {
   const page = pages[path as keyof typeof pages]
   const errors: unknown[] = []
   const probe = defineComponent({
@@ -64,6 +64,11 @@ export async function checkPageSetup(path: string) {
   await router.isReady()
   app.mount({})
   await nextTick()
+  if (destination) {
+    for (let n = 0; n < 20; n++) { await Promise.resolve(); await nextTick() }
+    await router.push(destination)
+    for (let n = 0; n < 30; n++) { await Promise.resolve(); await nextTick() }
+  }
   app.unmount()
   return errors
 }

@@ -60,3 +60,22 @@ test('personal schedule catches unavailable sources during initial load without 
  const errors = await checkPageSetup('/portal/schedule')
  assert.ifError(errors[0])
 })
+
+async function reservationNavigationRequests(destination) {
+ const old = globalThis.fetch, paths=[]
+ globalThis.fetch = async path => {
+  paths.push(String(path))
+  const body=String(path).includes('/reservations/mine')?{items:[],total:0,page:1,pageSize:20}:String(path)==='/api/reservations/3'?{id:3,status:'SUBMITTED',version:0,actions:[]}:[]
+  return Response.json(body)
+ }
+ try {const errors=await checkPageSetup('/portal/reservations',destination);assert.ifError(errors[0]);return paths}
+ finally {globalThis.fetch=old}
+}
+test('a detail link on the current reservation page fetches the selected application', async()=>{
+ const paths=await reservationNavigationRequests('/portal/reservations?id=3&tab=details')
+ assert.ok(paths.includes('/api/reservations/3'),JSON.stringify(paths))
+})
+test('a same-page mine list link applies the requested reservation status',async()=>{
+ const paths=await reservationNavigationRequests('/portal/reservations?tab=mine&status=APPROVED')
+ assert.ok(paths.some(path=>path.includes('/reservations/mine?')&&path.includes('status=APPROVED')),JSON.stringify(paths))
+})

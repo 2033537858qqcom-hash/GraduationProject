@@ -38,7 +38,7 @@ public class AgentService {
         try {
             rate(user.id());
             String question=input.message().trim();
-            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|发布|停用|开证明|派单|改派|验收|接单)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿)").matcher(question).find()) {
+            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|取消|核销|发布|停用|开证明|派单|改派|验收|接单)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿|日程|预约|借用)").matcher(question).find()) {
                 outcome="REFUSED"; return new Answer(run,input.mode(),false,"第一期仅查询本人或当前岗位获授权的信息。不能查询无关人员资料，也不能代替提交或审批，请通过原业务页面办理。",List.of(),now(),null,null);
             }
             Plan plan=input.mode()==Mode.DEEPSEEK?model.plan(question,tools.schemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
@@ -55,7 +55,7 @@ public class AgentService {
             }
             identities.requirePermission(user,"agent:query");
             outcome=results.isEmpty()?"NO_MATCH":results.stream().allMatch(x->x.status().equals("OK"))?"SUCCESS":"PARTIAL";
-            String summary=results.isEmpty()?"没有匹配到可用查询。可问请假、证明或报修办理规则、本人课表、成绩考试、办事进度、报修进度或未读消息。"
+            String summary=results.isEmpty()?"没有匹配到可用查询。可问请假、证明或报修办理规则、本人日程、课表、成绩考试、预约进度、空闲场地、报修进度或未读消息。"
                 :outcome.equals("SUCCESS")?"已按当前账号范围完成 "+results.size()+" 项查询，结果以本地业务和当前有效指南为准。"
                 :"已尝试 "+results.size()+" 项查询，其中有未完成的项目，请查看各项提示。";
             return new Answer(run,input.mode(),input.mode()==Mode.DEEPSEEK,summary,List.copyOf(results),now(),prompt,completion);
@@ -166,6 +166,8 @@ public class AgentService {
         if(bucket.count()>30) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"QUERY_RATE_LIMIT","查询较频繁，请稍后重试");
     }
     private Plan local(CampusPrincipal user,String q,Context context) {
+        var planning=tools.localPlanning(q,context);
+        if(planning!=null && !planning.isEmpty())return new Plan(planning,null,null);
         var names=tools.capabilities(user).stream().map(Capability::name).toList();
         var result=new ArrayList<Call>();
         if(context!=null && context.type().equals("HOUSING_MINE") && q.matches(".*(这条|当前|这个|状态|进度).*")) result.add(tools.call("housing_transfer_status",Map.of()));

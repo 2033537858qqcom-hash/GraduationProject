@@ -30,6 +30,8 @@ import {
 } from '@lucide/vue'
 import { currentUser } from '../stores/auth'
 import { api, ApiError, errorMessage } from '../lib/api'
+import { createReservationConflictChecker, reservationSearchSelection } from '../lib/reservationSearch'
+import type { ReservationSearchSelection } from '../lib/reservationSearch'
 import { useEditProtection } from '../composables/useEditProtection'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 import AffairTimeline from '../components/AffairTimeline.vue'
@@ -219,7 +221,7 @@ function applyQuickTime(slot: 'tomorrow-am' | 'tomorrow-pm' | 'afternoon' | 'wee
 }
 
 // Initial default dates for booking form
-function initBookingForm(venue?: VenueSummary) {
+function initBookingForm(venue?: VenueSummary, conditions?: ReservationSearchSelection) {
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
   const dateStr = tomorrow.toISOString().slice(0, 10)
@@ -229,10 +231,10 @@ function initBookingForm(venue?: VenueSummary) {
   bookingForm.venueId = venue?.id ?? (venues.value[0]?.id || 1)
   bookingForm.activityTheme = ''
   bookingForm.activityType = 'ACADEMIC'
-  bookingForm.expectedParticipants = venue?.capacity ? Math.min(venue.capacity, 30) : 30
+  bookingForm.expectedParticipants = conditions?.participants ?? (venue?.capacity ? Math.min(venue.capacity, 30) : 30)
   bookingForm.borrowEquipment = ''
-  bookingForm.startsAt = `${dateStr}T14:30`
-  bookingForm.endsAt = `${dateStr}T17:00`
+  bookingForm.startsAt = conditions?.startsAt ?? `${dateStr}T14:30`
+  bookingForm.endsAt = conditions?.endsAt ?? `${dateStr}T17:00`
   bookingForm.contactPhone = '13800000000'
 
   conflictCheck.value = null
@@ -260,33 +262,24 @@ function editExistingReservation(res: ReservationDetail) {
   void runConflictCheck()
 }
 
-// Real-time conflict checking
-async function runConflictCheck() {
-  if (!bookingForm.venueId || !bookingForm.startsAt || !bookingForm.endsAt) {
-    conflictCheck.value = null
-    return
-  }
-  if (bookingForm.startsAt >= bookingForm.endsAt) {
-    conflictCheck.value = {
-      hasConflict: true,
-      message: '预约结束时间必须晚于开始时间',
-      conflictingSlots: [],
-    }
-    return
-  }
-  checkingConflict.value = true
-  try {
-    conflictCheck.value = await checkConflict({
-      venueId: bookingForm.venueId,
-      startsAt: `${bookingForm.startsAt}:00`,
-      endsAt: `${bookingForm.endsAt}:00`,
-      excludeId: editingReservationId.value ?? undefined,
-    })
-  } catch {
-    // Ignore transient check failure
-  } finally {
-    checkingConflict.value = false
-  }
+// Recheck the current form snapshot; stale or failed requests cannot leave an availability claim.
+const checkCurrentConflict = createReservationConflictChecker(checkConflict, state => {
+  conflictCheck.value = state.result; checkingConflict.value = state.checking
+})
+function runConflictCheck() {
+  return checkCurrentConflict(!bookingForm.venueId || !bookingForm.startsAt || !bookingForm.endsAt ? null : {
+    venueId: bookingForm.venueId, startsAt: `${bookingForm.startsAt}:00`, endsAt: `${bookingForm.endsAt}:00`, excludeId: editingReservationId.value ?? undefined,
+  })
+}
+let lastSearchSelection = ''
+function applySearchSelection() {
+  const conditions = reservationSearchSelection(route.fullPath)
+  if (!conditions || reviewMode.value || lastSearchSelection === route.fullPath) return
+  lastSearchSelection = route.fullPath
+  const venue = venues.value.find(item => item.id === conditions.venueId)
+  if (!venue || !venue.enabled) { error.value = '该资源已暂停开放或不在当前目录中，请刷新后重新选择。'; return }
+  activeTab.value = 'venues'
+  initBookingForm(venue, conditions)
 }
 
 // Load Venue Catalog
@@ -709,6 +702,8 @@ onMounted(async () => {
     filterStatus.value = String(route.query.status || 'SUBMITTED')
   } else if (route.query.tab === 'mine') {
     activeTab.value = 'mine'
+    const status = String(route.query.status ?? '')
+    filterStatus.value = status in reservationStatuses ? status : ''
   } else if (route.query.venue) {
     activeTab.value = 'venues'
   }
@@ -719,6 +714,8 @@ onMounted(async () => {
   } else if (activeTab.value !== 'venues') {
     await loadReservations()
   }
+
+  applySearchSelection()
 
   // Pre-load specific reservation if id passed in route query
   if (route.query.id) {
@@ -733,6 +730,8 @@ onMounted(async () => {
 watch(() => [bookingForm.venueId, bookingForm.startsAt, bookingForm.endsAt], () => {
   void runConflictCheck()
 })
+
+watch(() => route.fullPath, () => { applySearchSelection() })
 
 watch(() => route.query.venue, () => {
   if (activeTab.value === 'venues') void loadVenues()
@@ -1386,7 +1385,7 @@ watch(() => route.query.venue, () => {
               </div>
               <div v-else-if="conflictCheck && !conflictCheck.hasConflict" class="conflict-clear">
                 <CheckCircle2 :size="15" />
-                <span>该场地此时段完全空闲，可放心提交申请。</span>
+                <span>当前时段未发现系统占用，提交时将再次校验资源及审批条件。</span>
               </div>
             </div>
           </div>

@@ -293,7 +293,7 @@ onBeforeUnmount(() => {
             <h3>{{ result.title }}</h3><p>{{ result.message }}</p>
             <RouterLink v-for="item in result.items" :key="item.key" :to="safeAssistantDestination(item.targetPath) ?? '#'" class="assistant-fact" :class="{ 'no-target': !safeAssistantDestination(item.targetPath) }"><strong>{{ item.title }}</strong><span>{{ item.description }}</span><ArrowUpRight v-if="safeAssistantDestination(item.targetPath)" :size="13" /></RouterLink>
             <div v-for="source in result.sources" :key="source.slug" class="assistant-source"><strong>{{ source.title }}</strong><p>{{ source.body.slice(0, 220) }}{{ source.body.length > 220 ? '…' : '' }}</p><RouterLink v-if="safeAssistantDestination(source.targetPath)" :to="source.targetPath">来源 · V{{ source.version }} · 查看完整指南 <ArrowUpRight :size="12" /></RouterLink></div>
-            <RouterLink v-if="safeAssistantDestination(result.targetPath) && !result.items.length" :to="result.targetPath!" class="assistant-more">查看业务页面 <ArrowUpRight :size="13" /></RouterLink>
+            <RouterLink v-if="safeAssistantDestination(result.targetPath) && (!result.items.length || result.total > result.items.length)" :to="result.targetPath!" class="assistant-more">{{ result.items.length ? '查看完整业务列表' : '查看业务页面' }} <ArrowUpRight :size="13" /></RouterLink>
           </section>
           <small class="assistant-time">{{ entry.answer.modelUsed ? 'DeepSeek 规划 · 本地执行' : entry.answer.mode === 'LOCAL' ? '本地查询' : '本地边界检查 · 未调用模型' }} · {{ entry.answer.queriedAt.replace('T', ' ').slice(0, 19) }}</small>
         </article>

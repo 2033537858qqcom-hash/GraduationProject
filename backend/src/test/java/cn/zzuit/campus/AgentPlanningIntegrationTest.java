@@ -104,6 +104,40 @@ class AgentPlanningIntegrationTest {
   var plan=agentTools.localPlanning("东校区20人09:00-11:00查找空闲场地",null);
   assertThat(plan.get(0).arguments().has("startsAt")).isFalse();
  }
+ @ParameterizedTest @ValueSource(strings={"campus","participants","startsAt","endsAt"})
+ void missingAvailabilityFieldsAlwaysAskRatherThanAssume(String field)throws Exception{
+  var f=fixture();long v=venue(f,"EAST",30);var a=args(v,"2029-04-02T12:00","2029-04-02T14:00");a.remove(field);assertThat(planned(login(f.username()),"find_available_venues",a).path("status").asText()).isEqualTo("NEEDS_INPUT");
+ }
+ @ParameterizedTest @ValueSource(strings={"PAST","REVERSED","SHORT","LONG","BAD_DATE","SECONDS"})
+ void invalidWindowsAreExplicitAndNeverTreatedAsEmptyAvailability(String kind)throws Exception{
+  var f=fixture();long v=venue(f,"EAST",30);var a=args(v,"2029-04-02T12:00","2029-04-02T14:00");switch(kind){case "PAST"->a.put("startsAt","2020-04-02T12:00");case "REVERSED"->a.put("endsAt","2029-04-02T11:00");case "SHORT"->a.put("endsAt","2029-04-02T12:15");case "LONG"->a.put("endsAt","2029-04-03T12:00");case "BAD_DATE"->a.put("startsAt","2029-02-30T12:00");case "SECONDS"->a.put("startsAt","2029-04-02T12:00:01");}
+  assertThat(planned(login(f.username()),"find_available_venues",a).path("status").asText()).isEqualTo("NEEDS_INPUT");
+ }
+ @Test void reservationStatusRefreshAndModelNumbersRemainStrict()throws Exception{
+  var f=fixture();var b=login(f.username());long id=booking(f);assertThat(planned(b,"my_reservations",Map.of("status","APPROVED")).path("total").asLong()).isZero();
+  jdbc.sql("UPDATE venue_reservation SET status='WITHDRAWN',version=version+1 WHERE id=:id").param("id",id).update();var row=planned(b,"my_reservations",Map.of("id",id));assertThat(row.toString()).contains("已撤回","V1");
+  for(Object value:java.util.List.of(-1,1.5,"20",10001)){long v=venue(f,"EAST",30);var a=args(v,"2029-04-02T12:00","2029-04-02T14:00");a.put("participants",value);assertThat(planned(b,"find_available_venues",a).path("status").asText()).isEqualTo("ERROR");}
+ }
+ @Test void explicitCrossDayTimesRemainIntactAndKeywordsAreLiteral()throws Exception{
+  var f=fixture();long v=venue(f,"EAST",30);var b=login(f.username());var result=find(b,v,"2029-04-02T23:00","2029-04-03T01:00");assertThat(result.path("total").asLong()).isEqualTo(1);assertThat(result.path("items").path(0).path("targetPath").asText()).contains("ends=2029-04-03T01:00");
+  var a=args(v,"2029-04-02T12:00","2029-04-02T14:00");a.put("keyword","%_");assertThat(planned(b,"find_available_venues",a).path("total").asLong()).isZero();
+ }
+ @Test void linkedClassroomCapacityAndUnknownVenueCapacityCannotBeInferred()throws Exception{
+  var f=fixture();long v=venue(f,"EAST",30);long room=TestRooms.ensure(jdbc,"容量计划教室-"+v);jdbc.sql("UPDATE venue_resource SET classroom_resource_id=:r WHERE id=:v").param("r",room).param("v",v).update();jdbc.sql("UPDATE classroom_resource SET teaching_capacity=5,exam_capacity=5 WHERE id=:r").param("r",room).update();var b=login(f.username());assertThat(find(b,v,"2029-04-02T12:00","2029-04-02T14:00").path("total").asLong()).isZero();
+  jdbc.sql("UPDATE venue_resource SET capacity=NULL WHERE id=:v").param("v",v).update();assertThat(find(b,v,"2029-04-02T12:00","2029-04-02T14:00").path("total").asLong()).isZero();
+ }
+ @Test void tooBroadDirectoriesAskForNarrowerConditionsInsteadOfSilentlySkipping()throws Exception{
+  var f=fixture();long v=venue(f,"EAST",30);String name=venueName(v);for(int n=0;n<200;n++)jdbc.sql("INSERT INTO venue_resource(campus_id,code,name,category,building_name,location_detail,capacity) VALUES(1,:c,:n,'VENUE','教学楼','101',30)").param("c",UUID.randomUUID().toString()).param("n",name).update();assertThat(find(login(f.username()),v,"2029-04-02T12:00","2029-04-02T14:00").path("status").asText()).isEqualTo("NEEDS_INPUT");
+ }
+ @Test void dayWeekAndAmbiguousScheduleQueriesKeepClearBoundaries()throws Exception{
+  var f=fixture();var b=login(f.username());assertThat(planned(b,"my_schedule",Map.of("date","2029-04-02","range","WEEK")).path("targetPath").asText()).isEqualTo("/portal/schedule?week=2029-04-02");
+  assertThat(planned(b,"my_schedule",Map.of("date","周一","range","DAY")).path("status").asText()).isEqualTo("NEEDS_INPUT");assertThat(planned(b,"my_schedule",Map.of("range","ALL")).path("status").asText()).isEqualTo("ERROR");
+ }
+ @Test void sessionHistoryCanRequeryReservationContextWithoutKeepingOldResults()throws Exception{
+  var f=fixture();var b=login(f.username());var session=ok(b.send("POST","/api/assistant/sessions",Map.of("requestKey",UUID.randomUUID().toString())));long id=session.path("id").asLong();long booking=booking(f);
+  ok(b.send("POST","/api/assistant/sessions/"+id+"/query",Map.of("requestKey",UUID.randomUUID().toString(),"input",Map.of("message","当前预约进度","mode","LOCAL","externalConsent",false,"context",Map.of("type","RESERVATION_MINE","id",booking)))));
+  var restored=ok(b.get("/api/assistant/sessions/"+id));assertThat(restored.toString()).contains("RESERVATION_MINE").doesNotContain("contact_phone","本人预约活动");
+ }
  private JsonNode find(Browser b,long v,String start,String end)throws Exception{return planned(b,"find_available_venues",args(v,start,end));}
  private java.util.HashMap<String,Object> args(long v,String start,String end){var a=new java.util.HashMap<String,Object>();a.put("campus","EAST");a.put("participants",20);a.put("startsAt",start);a.put("endsAt",end);a.put("keyword",venueName(v));return a;}
  private JsonNode planned(Browser b,String tool,Map<String,?> args)throws Exception{doReturn(true).when(model).ready();doReturn(new Plan(java.util.List.of(new Call(tool,json.valueToTree(args))),1,1)).when(model).plan(anyString(),anyList(),nullable(String.class));var response=b.send("POST","/api/assistant/query",Map.of("message","查询当前业务","mode","DEEPSEEK","externalConsent",true));if(response.statusCode()!=200)return json.readTree(response.body());return ok(response).path("results").path(0);}

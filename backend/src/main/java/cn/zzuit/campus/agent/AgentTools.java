@@ -26,6 +26,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Service
 public class AgentTools {
     private final IdentityService identities;
+    private final AgentPlanningQueries planning;
     private final AgentGuides guides;
     private final TeachingService teaching;
     private final LeaveService leaves;
@@ -37,10 +38,10 @@ public class AgentTools {
     private final cn.zzuit.campus.portal.TaskAggregationService taskAggregator;
     private final JsonMapper json=JsonMapper.builder().build();
     private static final List<String> REPAIR_STATUSES=List.of("ALL","DRAFT","SUBMITTED","RETURNED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","COMPLETED","REJECTED","WITHDRAWN","CANCELLED");
-    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers,cn.zzuit.campus.portal.TaskAggregationService taskAggregator) {
-        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;this.taskAggregator=taskAggregator;
+    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers,cn.zzuit.campus.portal.TaskAggregationService taskAggregator,AgentPlanningQueries planning) {
+        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;this.taskAggregator=taskAggregator;this.planning=planning;
     }
-    private static final Map<String,String> TITLES=Map.ofEntries(Map.entry("search_guides","查找办理指南"),Map.entry("my_timetable","查看本人课表"),Map.entry("my_grades","查看本人已发布成绩"),
+    private static final Map<String,String> TITLES=Map.ofEntries(Map.entry("my_schedule","查看本人综合日程"),Map.entry("my_reservations","查看本人借用进度"),Map.entry("find_available_venues","查找空闲场地"),Map.entry("search_guides","查找办理指南"),Map.entry("my_timetable","查看本人课表"),Map.entry("my_grades","查看本人已发布成绩"),
         Map.entry("my_exams","查看本人已发布考试"),Map.entry("my_affairs","查看本人办事进度"),Map.entry("my_notice_summary","查看本人未读消息"),Map.entry("my_review_pending","查看岗位待办"),
         Map.entry("application_status","查看当前申请"),Map.entry("my_repairs","查看本人报修进度"),Map.entry("repair_dispatch_queue","查看派单范围报修"),
         Map.entry("repair_work_queue","查看当前维修任务"),Map.entry("repair_status","查看当前报修"),Map.entry("my_housing","查看本人住宿"),Map.entry("my_housing_transfers","查看本人调宿进度"),
@@ -50,7 +51,8 @@ public class AgentTools {
         var p=identities.permissions(user.id()); var names=new ArrayList<>(List.of("search_guides","my_notice_summary","campus_navigation"));
         if(p.contains("learning:read") || p.contains("teaching:manage")) names.add("my_timetable");
         if(p.contains("learning:read")) names.addAll(List.of("my_grades","my_exams"));
-        if(p.contains("portal:read")) names.add("my_affairs");
+        if(p.contains("portal:read")) names.addAll(List.of("my_affairs","my_schedule"));
+        if(p.contains("reservation:apply")) names.addAll(List.of("my_reservations","find_available_venues"));
         if(p.stream().anyMatch(x->List.of("leave:review","certificate:review","reservation:review","housing:review","housing:assign","repair:dispatch","repair:work","content:review").contains(x))) names.add("my_review_pending");
         if(p.stream().anyMatch(x->List.of("leave:apply","leave:review","certificate:apply","certificate:review").contains(x))) names.add("application_status");
         if(p.contains("repair:apply")) names.add("my_repairs");
@@ -64,6 +66,7 @@ public class AgentTools {
         return capabilities(user).stream().map(cap-> {
             Map<String,Object> properties=new LinkedHashMap<>();
             switch(cap.name()) {
+                case "my_schedule","my_reservations","find_available_venues" -> AgentPlanningQueries.schema(cap.name(),properties);
                 case "search_guides" -> properties.put("query",Map.of("type","string","description","办理事项关键词，1—200 字"));
                 case "my_timetable" -> { properties.put("week",Map.of("type","string","description","可选 ISO 日期；查询该日期所在的周，不明确时省略")); properties.put("termId",Map.of("type","integer","minimum",1,"description","可选；只在用户明确选择学期编号时提供")); }
                 case "my_grades","my_exams" -> properties.put("termId",Map.of("type","integer","minimum",1,"description","可选；省略时选择覆盖今天的唯一学期"));
@@ -85,7 +88,8 @@ public class AgentTools {
     }
     public void validateContext(CampusPrincipal user,Context context) {
         if(context==null) return;
-        if(context.type().equals("HOUSING_MINE"))housingTransfer(user,context.id());
+        if(context.type().equals("RESERVATION_MINE"))planning.validateReservation(user,context.id());
+        else if(context.type().equals("HOUSING_MINE"))housingTransfer(user,context.id());
         else if(context.type().startsWith("REPAIR_")) repairApplication(user,repairView(context.type()),context.id());
         else application(user,context.type().startsWith("LEAVE")?"LEAVE":"CERTIFICATE",context.id(),context.type().endsWith("REVIEW")?"REVIEW":"MINE");
     }
@@ -94,6 +98,7 @@ public class AgentTools {
         if(!capabilities(user).stream().anyMatch(c->c.name().equals(call.name()))) throw new ApiException(HttpStatus.FORBIDDEN,"TOOL_NOT_ALLOWED","当前身份不能使用这项查询");
         var a=call.arguments();
         Set<String> fields=switch(call.name()) {
+            case "my_schedule","my_reservations","find_available_venues" -> AgentPlanningQueries.fields(call.name());
             case "search_guides" -> Set.of("query"); case "my_timetable" -> Set.of("week","termId"); case "my_grades","my_exams" -> Set.of("termId");
             case "my_affairs" -> Set.of("kind","status"); case "application_status" -> Set.of("kind","id","view");
             case "my_repairs","repair_dispatch_queue","repair_work_queue" -> Set.of("status"); case "repair_status" -> Set.of("id","view"); case "housing_transfer_status" -> Set.of("id");
@@ -101,6 +106,7 @@ public class AgentTools {
         };
         if(a==null || !a.isObject() || a.properties().stream().anyMatch(e->!fields.contains(e.getKey()))) throw invalid();
         return switch(call.name()) {
+            case "my_schedule","my_reservations","find_available_venues" -> planning.execute(user,call,context);
             case "search_guides" -> knowledge(text(a,"query",null,200));
             case "my_timetable" -> timetable(user,text(a,"week",null,10),number(a,"termId"));
             case "my_grades","my_exams" -> learning(user,call.name(),number(a,"termId"));
@@ -135,6 +141,7 @@ public class AgentTools {
             default -> throw invalid();
         };
     }
+    public List<Call> localPlanning(String question,Context context) { return planning.local(question,context); }
     private ToolResult housing(CampusPrincipal user) {
         var stay=housing.currentForAssistant(user);
         return result("my_housing",stay==null?"NO_DATA":"OK",stay==null?"暂无本人当前入住记录，请联系宿管核对。":"以下为本人当前房间，床位和负责人请进入我的住宿核对。",stay==null?0:1,

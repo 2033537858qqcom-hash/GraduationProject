@@ -1,16 +1,21 @@
-export interface AssistantContext { type: 'LEAVE_MINE' | 'LEAVE_REVIEW' | 'CERTIFICATE_MINE' | 'CERTIFICATE_REVIEW' | 'REPAIR_MINE' | 'REPAIR_DISPATCH' | 'REPAIR_WORK' | 'HOUSING_MINE'; id: number }
+import { reservationSearchSelection } from './reservationSearch.ts'
+import { reservationStatuses } from '../reservations.ts'
+export interface AssistantContext { type: 'LEAVE_MINE' | 'LEAVE_REVIEW' | 'CERTIFICATE_MINE' | 'CERTIFICATE_REVIEW' | 'REPAIR_MINE' | 'REPAIR_DISPATCH' | 'REPAIR_WORK' | 'HOUSING_MINE' | 'RESERVATION_MINE'; id: number }
 export interface AssistantGuide { slug: string; title: string; body: string; version: number; updatedAt: string; targetPath: string }
 export interface AssistantFact { key: string; title: string; description: string; targetPath: string | null }
 export interface AssistantResult { name: string; title: string; status: string; message: string; total: number; items: AssistantFact[]; sources: AssistantGuide[]; targetPath: string | null }
 export interface AssistantAnswer { runId: string; mode: 'LOCAL' | 'DEEPSEEK'; modelUsed: boolean; summary: string; results: AssistantResult[]; queriedAt: string; promptTokens: number | null; completionTokens: number | null }
 export interface AssistantCapabilities { deepseekReady: boolean; model: string; tools: { name: string; title: string }[]; message: string }
 export function assistantContext(path: string, id: unknown): AssistantContext | null {
-  const types: Record<string, AssistantContext['type']> = { '/portal/leave': 'LEAVE_MINE', '/portal/certificates': 'CERTIFICATE_MINE', '/student-affairs/leave': 'LEAVE_REVIEW', '/student-affairs/certificates': 'CERTIFICATE_REVIEW', '/housing/transfer': 'HOUSING_MINE', '/repairs/mine': 'REPAIR_MINE', '/logistics/repairs/dispatch': 'REPAIR_DISPATCH', '/logistics/repairs/tasks': 'REPAIR_WORK' }
+  const types: Record<string, AssistantContext['type']> = { '/portal/reservations': 'RESERVATION_MINE', '/portal/leave': 'LEAVE_MINE', '/portal/certificates': 'CERTIFICATE_MINE', '/student-affairs/leave': 'LEAVE_REVIEW', '/student-affairs/certificates': 'CERTIFICATE_REVIEW', '/housing/transfer': 'HOUSING_MINE', '/repairs/mine': 'REPAIR_MINE', '/logistics/repairs/dispatch': 'REPAIR_DISPATCH', '/logistics/repairs/tasks': 'REPAIR_WORK' }
   if (!types[path] || typeof id !== 'string' || !/^[1-9]\d{0,14}$/.test(id) || !Number.isSafeInteger(Number(id))) return null
   return { type: types[path], id: Number(id) }
 }
 export function safeAssistantDestination(value: unknown): string | null {
   if (typeof value !== 'string') return null
+  if (reservationSearchSelection(value)) return value
+  if (/^\/portal\/reservations\?tab=mine(?:&status=[A-Z_]+)?$/.test(value)) { const status = new URL(value, 'https://campus.invalid').searchParams.get('status'); return !status || status in reservationStatuses ? value : null }
+  if (/^\/portal\/schedule(?:\?week=\d{4}-\d{2}-\d{2}(?:&day=\d{4}-\d{2}-\d{2})?)?$/.test(value)) return value
   if (/^\/housing\/(?:mine|transfer)$/.test(value) || /^\/housing\/transfer\?id=[1-9]\d*&tab=details$/.test(value)) return value
   if (/^\/assistant\/guides\/[a-z0-9][a-z0-9-]{0,79}$/.test(value)) return value
   if (/^\/(?:portal(?:\/(?:affairs|notices|reservations|learning(?:\/(?:timetable|grades|exams))?))?|workbench|profile|notices|teaching(?:\/timetable)?|academic|admin\/content|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(value)) return value
@@ -22,6 +27,7 @@ export function safeAssistantDestination(value: unknown): string | null {
 }
 export function assistantContextLabel(context: AssistantContext | null) {
   if (!context) return ''
+  if (context.type === 'RESERVATION_MINE') return `预约 #${context.id} · 本人范围`
   if (context.type === 'HOUSING_MINE') return `调宿申请 #${context.id} · 本人范围`
   if (context.type.startsWith('REPAIR_')) {
     const scope = context.type.endsWith('DISPATCH') ? '派单范围' : context.type.endsWith('WORK') ? '维修范围' : '本人范围'
@@ -30,6 +36,9 @@ export function assistantContextLabel(context: AssistantContext | null) {
   return `${context.type.startsWith('LEAVE') ? '请假' : '证明'}申请 #${context.id}${context.type.endsWith('REVIEW') ? ' · 岗位范围' : ' · 本人范围'}`
 }
 export function assistantSuggestions(path: string, tools: string[], context: AssistantContext | null): string[] {
+  if (context?.type === 'RESERVATION_MINE' && tools.includes('my_reservations')) return ['当前预约的进度', '查找空闲场地']
+  if (path === '/portal/schedule' && tools.includes('my_schedule')) return ['本周日程', '下周日程']
+  if (path === '/portal/reservations' && tools.includes('my_reservations')) return ['我的预约进度', '查找空闲场地']
   if (path === '/campus/explore' && tools.includes('campus_navigation')) return ['去图书馆怎么走', '去毓秀楼怎么走', '去红体馆怎么走', '去锦绣餐厅怎么走']
   if (context?.type === 'HOUSING_MINE' && tools.includes('housing_transfer_status')) return ['当前调宿的处理进度', '调宿怎么办理']
   if (path.startsWith('/housing') && tools.includes('my_housing')) return ['我的住宿', '我的调宿进度', '调宿怎么办理']

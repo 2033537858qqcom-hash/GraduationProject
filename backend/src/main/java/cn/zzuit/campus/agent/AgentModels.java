@@ -9,7 +9,7 @@ import tools.jackson.databind.JsonNode;
 public final class AgentModels {
     private AgentModels() {}
     public enum Mode { LOCAL, DEEPSEEK }
-    public record Context(@NotBlank @Pattern(regexp="LEAVE_MINE|LEAVE_REVIEW|CERTIFICATE_MINE|CERTIFICATE_REVIEW|REPAIR_MINE|REPAIR_DISPATCH|REPAIR_WORK|HOUSING_MINE") String type,@Positive long id) {}
+    public record Context(@NotBlank @Pattern(regexp="LEAVE_MINE|LEAVE_REVIEW|CERTIFICATE_MINE|CERTIFICATE_REVIEW|REPAIR_MINE|REPAIR_DISPATCH|REPAIR_WORK|HOUSING_MINE|RESERVATION_MINE") String type,@Positive long id) {}
     public record Query(@NotBlank @Size(max=1000) String message,@NotNull Mode mode,boolean externalConsent,@Valid Context context) {}
     public record LeaveFields(@Size(max=20) String reasonType,@Size(max=2000) String reason,@Size(max=80) String contact,
         @Size(max=10) String startDate,@Size(max=5) String startTime,@Size(max=10) String endDate,@Size(max=5) String endTime) {}

@@ -54,6 +54,11 @@ public class ReservationController {
         return reservations.createVenue(user,input);
     }
 
+    @PutMapping("/venues/{id}/classroom")
+    public VenueSummary linkClassroom(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@jakarta.validation.Valid @RequestBody RoomLinkCommand input) {
+        return reservations.linkClassroom(user,id,input);
+    }
+
     @GetMapping("/venues")
     public List<VenueSummary> listVenues(
         @RequestParam(required = false) String category,

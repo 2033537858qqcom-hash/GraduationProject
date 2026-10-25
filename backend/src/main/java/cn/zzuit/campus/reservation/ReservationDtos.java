@@ -18,7 +18,10 @@ public class ReservationDtos {
         Integer capacity,
         String availableEquipment,
         String rules,
-        boolean enabled
+        boolean enabled,
+        Long classroomResourceId,
+        String classroomName,
+        int version
     ) {}
 
     public record TimeSlot(
@@ -148,10 +151,13 @@ public class ReservationDtos {
         @jakarta.validation.constraints.Size(max=500) String availableEquipment,
         @jakarta.validation.constraints.Size(max=1000) String rules,
         @jakarta.validation.constraints.NotNull Boolean enabled,
-        @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=20) List<@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Long> managerUserIds
+        @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Size(max=20) List<@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Positive Long> managerUserIds,
+        @jakarta.validation.constraints.Positive Long classroomResourceId
     ) {}
     public record CampusChoice(long id,String code,String name) {}
-    public record CreationCatalog(List<CampusChoice> campuses,List<ReservationPlaceCatalog.Place> places) {}
+    public record ClassroomChoice(long id,long campusId,String name,String buildingName,String roomNumber,int capacity,boolean enabled) {}
+    public record CreationCatalog(List<CampusChoice> campuses,List<ReservationPlaceCatalog.Place> places,List<ClassroomChoice> classrooms) {}
+    public record RoomLinkCommand(@jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Min(0) Integer version,@jakarta.validation.constraints.Positive Long classroomResourceId,@jakarta.validation.constraints.NotBlank @jakarta.validation.constraints.Size(max=200) String reason) {}
 
     public record ReservationPage(
         List<ReservationItem> items,
@@ -189,7 +195,10 @@ public class ReservationDtos {
         long unattendedReviewCount,
         long pendingUsageCount,
         long activeUseCount,
-        long unattendedTaskCount
+        long unattendedTaskCount,
+        Long classroomResourceId,
+        String classroomName,
+        int version
     ) {}
 
     public record AssignManagerCommand(

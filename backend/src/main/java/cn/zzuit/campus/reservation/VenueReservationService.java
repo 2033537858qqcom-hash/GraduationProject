@@ -41,13 +41,14 @@ public class VenueReservationService {
     private final IdentityService identities;
     private final NoticeWriter noticeWriter;
     private final ReservationPlaceCatalog placeCatalog;
-    private static final String VENUE_SELECT="SELECT v.*,c.name campus_name FROM venue_resource v JOIN campus c ON c.id=v.campus_id";
+    private final cn.zzuit.campus.resource.PhysicalRoomService physicalRooms;
+    private static final String VENUE_SELECT="SELECT v.*,c.name campus_name,cr.name classroom_name FROM venue_resource v JOIN campus c ON c.id=v.campus_id LEFT JOIN classroom_resource cr ON cr.id=v.classroom_resource_id";
 
-    public VenueReservationService(JdbcClient jdbc, IdentityService identities, NoticeWriter noticeWriter,ReservationPlaceCatalog placeCatalog) {
+    public VenueReservationService(JdbcClient jdbc, IdentityService identities, NoticeWriter noticeWriter,ReservationPlaceCatalog placeCatalog,cn.zzuit.campus.resource.PhysicalRoomService physicalRooms) {
         this.jdbc = jdbc;
         this.identities = identities;
         this.noticeWriter = noticeWriter;
-        this.placeCatalog = placeCatalog;
+        this.placeCatalog = placeCatalog; this.physicalRooms=physicalRooms;
     }
 
     private void lock() {
@@ -120,7 +121,7 @@ public class VenueReservationService {
             r.getObject("capacity", Integer.class),
             r.getString("available_equipment"),
             r.getString("rules"),
-            r.getBoolean("enabled")
+            r.getBoolean("enabled"),r.getObject("classroom_resource_id",Long.class),r.getString("classroom_name"),r.getInt("version")
         )).list();
     }
 
@@ -137,14 +138,15 @@ public class VenueReservationService {
                 r.getObject("capacity", Integer.class),
                 r.getString("available_equipment"),
                 r.getString("rules"),
-                r.getBoolean("enabled")
+                r.getBoolean("enabled"),r.getObject("classroom_resource_id",Long.class),r.getString("classroom_name"),r.getInt("version")
             )).optional().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "VENUE_NOT_FOUND", "借用场地或设备资源不存在"));
     }
 
     public CreationCatalog creationCatalog(CampusPrincipal user) {
         identities.requirePermission(user,"reservation:manage");
         return new CreationCatalog(jdbc.sql("SELECT id,code,name FROM campus ORDER BY id")
-            .query((r,n)->new CampusChoice(r.getLong(1),r.getString(2),r.getString(3))).list(),placeCatalog.places());
+            .query((r,n)->new CampusChoice(r.getLong(1),r.getString(2),r.getString(3))).list(),placeCatalog.places(),jdbc.sql("SELECT * FROM classroom_resource WHERE building_name IS NOT NULL AND room_number IS NOT NULL AND teaching_capacity IS NOT NULL AND exam_capacity IS NOT NULL ORDER BY campus_id,code")
+            .query((r,n)->new ClassroomChoice(r.getLong("id"),r.getLong("campus_id"),r.getString("name"),r.getString("building_name"),r.getString("room_number"),r.getInt("teaching_capacity"),r.getBoolean("enabled"))).list());
     }
 
     @Transactional public VenueSummary createVenue(CampusPrincipal user,VenueCreateCommand input) {
@@ -152,6 +154,8 @@ public class VenueReservationService {
         String campusCode=jdbc.sql("SELECT code FROM campus WHERE id=:id").param("id",input.campusId()).query(String.class).optional()
             .orElseThrow(()->new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CAMPUS","所选校区不存在"));
         String place=placeCatalog.validatedId(campusCode,input.placeId());
+        physicalRooms.validateBinding(input.campusId(),input.category(),input.capacity(),input.classroomResourceId());
+        requireUniqueClassroom(input.classroomResourceId(),0);
         var owners=input.managerUserIds();
         if (new java.util.HashSet<>(owners).size()!=owners.size()) throw new ApiException(HttpStatus.BAD_REQUEST,"DUPLICATE_VENUE_OWNER","负责人不能重复");
         if (input.enabled() && owners.isEmpty()) throw new ApiException(HttpStatus.BAD_REQUEST,"NO_VENUE_REVIEWER","开放资源前请至少配置一名有效办理人员");
@@ -166,12 +170,12 @@ public class VenueReservationService {
             throw new ApiException(HttpStatus.CONFLICT,"VENUE_CODE_EXISTS","同一校区的资源编号已存在");
         var key=new GeneratedKeyHolder();
         jdbc.sql("""
-            INSERT INTO venue_resource(campus_id,code,name,category,place_id,building_name,location_detail,capacity,available_equipment,rules,enabled)
-            VALUES(:campus,:code,:name,:category,:place,:building,:location,:capacity,:equipment,:rules,:enabled)
+            INSERT INTO venue_resource(campus_id,code,name,category,place_id,building_name,location_detail,capacity,available_equipment,rules,enabled,classroom_resource_id)
+            VALUES(:campus,:code,:name,:category,:place,:building,:location,:capacity,:equipment,:rules,:enabled,:room)
             """).param("campus",input.campusId()).param("code",input.code()).param("name",input.name().trim()).param("category",input.category())
             .param("place",place).param("building",input.buildingName().trim()).param("location",input.locationDetail().trim()).param("capacity",input.capacity())
             .param("equipment",input.availableEquipment()==null?"":input.availableEquipment().trim()).param("rules",input.rules()==null?"":input.rules().trim())
-            .param("enabled",input.enabled()).update(key,"id");
+            .param("enabled",input.enabled()).param("room",input.classroomResourceId()).update(key,"id");
         long id=key.getKey().longValue();
         for(long owner:owners) addVenueManager(user,id,owner);
         jdbc.sql("INSERT INTO foundation_audit(actor_id,actor_name,action,entity_type,entity_id,summary,reason) VALUES(:actor,:name,'VENUE_CREATE','VENUE',:id,:summary,'资源人员建档')")
@@ -186,6 +190,7 @@ public class VenueReservationService {
         var venue = getVenue(id);
         if (Boolean.TRUE.equals(cmd.enabled()) && getVenueReviewerIds(id).isEmpty())
             throw new ApiException(HttpStatus.CONFLICT,"NO_VENUE_REVIEWER","开放资源前请先配置有效办理人员");
+        if (cmd.capacity()!=null) physicalRooms.requireUsable(id,cmd.capacity());
         if (cmd.capacity()!=null && cmd.capacity()<1) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CAPACITY","容量须大于零");
         if (cmd.name()!=null && (cmd.name().isBlank() || cmd.name().length()>150)) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_VENUE_NAME","请填写有效场地名称");
         if (Boolean.FALSE.equals(cmd.enabled()) && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND status='IN_USE'").param("v",id).query(Long.class).single()>0)
@@ -282,7 +287,7 @@ public class VenueReservationService {
                 pending[1],
                 pending[2],
                 pending[3],
-                pending[4]
+                pending[4],v.classroomResourceId(),v.classroomName(),v.version()
             );
         }).toList();
     }
@@ -381,7 +386,7 @@ public class VenueReservationService {
     public List<TimeSlot> getVenueSchedule(long venueId, LocalDate date) {
         var startOfDay = date.atStartOfDay();
         var endOfDay = date.atTime(LocalTime.MAX);
-        return jdbc.sql("""
+        var slots=jdbc.sql("""
             SELECT starts_at, ends_at, activity_theme, status
             FROM venue_reservation
             WHERE venue_id = :venueId
@@ -398,6 +403,33 @@ public class VenueReservationService {
                 r.getString("activity_theme"),
                 r.getString("status")
             )).list();
+        return withTeachingSlots(venueId,startOfDay,endOfDay,slots);
+    }
+
+    private List<TimeSlot> withTeachingSlots(long venue,LocalDateTime start,LocalDateTime end,List<TimeSlot> reservations) {
+        var result=new java.util.ArrayList<>(reservations);
+        for(var slot:physicalRooms.teachingSlots(physicalRooms.linkedRoom(venue),start,end))
+            result.add(new TimeSlot(slot.startsAt(),slot.endsAt(),slot.kind().equals("LESSON")?"教学课程占用":"已发布考试占用",slot.kind()));
+        result.sort(java.util.Comparator.comparing(TimeSlot::startsAt));return List.copyOf(result);
+    }
+
+    private void requireUniqueClassroom(Long room,long excludingVenue) {
+        if(room!=null && jdbc.sql("SELECT COUNT(*) FROM venue_resource WHERE classroom_resource_id=:room AND id<>:id")
+            .param("room",room).param("id",excludingVenue).query(Long.class).single()>0)
+            throw new ApiException(HttpStatus.CONFLICT,"CLASSROOM_ALREADY_LINKED","该教室已关联其他预约资源，请使用原资源，避免重复建档");
+    }
+    @Transactional public VenueSummary linkClassroom(CampusPrincipal user,long id,RoomLinkCommand input) {
+        lock(user,"reservation:manage");var old=getVenue(id);
+        if(old.version()!=input.version())throw new ApiException(HttpStatus.CONFLICT,"VENUE_VERSION_CHANGED","资源配置已变化，请刷新后核对");
+        if(java.util.Objects.equals(old.classroomResourceId(),input.classroomResourceId()))return old;
+        if(jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:id AND (status='IN_USE' OR (status IN ('SUBMITTED','APPROVED') AND ends_at>CURRENT_TIMESTAMP))").param("id",id).query(Long.class).single()>0)
+            throw new ApiException(HttpStatus.CONFLICT,"VENUE_LINK_HAS_WORK","该资源仍有未完成预约，请先处理后再调整物理教室关联");
+        physicalRooms.validateBinding(old.campusId(),old.category(),old.capacity(),input.classroomResourceId());requireUniqueClassroom(input.classroomResourceId(),id);
+        jdbc.sql("UPDATE venue_resource SET classroom_resource_id=:room,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id")
+            .param("room",input.classroomResourceId()).param("id",id).update();
+        jdbc.sql("INSERT INTO foundation_audit(actor_id,actor_name,action,entity_type,entity_id,summary,reason) VALUES(:actor,:name,'VENUE_ROOM_LINK','VENUE',:id,:summary,:reason)")
+            .param("actor",user.id()).param("name",identities.profile(user.id()).fullName()).param("id",id).param("summary",old.code()+" / 教学教室关联 "+old.classroomResourceId()+" → "+input.classroomResourceId()).param("reason",input.reason().trim()).update();
+        return getVenue(id);
     }
 
     public ConflictResult checkConflict(CheckConflictCommand cmd) {
@@ -418,6 +450,7 @@ public class VenueReservationService {
             return new ConflictResult(true, "单次借用预约时长不得超过14小时", List.of());
         }
 
+        physicalRooms.requireUsable(cmd.venueId(),null);
         var conflicting = jdbc.sql("""
             SELECT starts_at, ends_at, activity_theme, status
             FROM venue_reservation
@@ -438,8 +471,9 @@ public class VenueReservationService {
                 r.getString("status")
             )).list();
 
-        if (!conflicting.isEmpty()) {
-            return new ConflictResult(true, "所选时段已被其他预约申请占用，请选择其他时段或场地", conflicting);
+        var all=withTeachingSlots(cmd.venueId(),cmd.startsAt(),cmd.endsAt(),conflicting);
+        if (!all.isEmpty()) {
+            return new ConflictResult(true, "所选时段已有预约、课程或已发布考试占用，请选择其他时段或场地", all);
         }
         return new ConflictResult(false, "该时段可预约借用", List.of());
     }
@@ -1063,6 +1097,7 @@ public class VenueReservationService {
     }
 
     private void validateCapacity(VenueSummary venue,int participants) {
+        physicalRooms.requireUsable(venue.id(),participants);
         if (participants<1) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_PARTICIPANTS","预计人数须大于零");
         if (venue.category().equals("VENUE") && venue.capacity()!=null && participants>venue.capacity())
             throw new ApiException(HttpStatus.CONFLICT,"VENUE_CAPACITY_EXCEEDED","预计人数超过场地容量（"+venue.capacity()+" 人），请选择合适场地或调整人数");
@@ -1081,6 +1116,7 @@ public class VenueReservationService {
             if (jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND id<>:id AND status='IN_USE'")
                     .param("v",detail.venueId()).param("id",id).query(Long.class).single()>0)
                 throw new ApiException(HttpStatus.CONFLICT,"VENUE_STILL_IN_USE","上一场使用尚未结束核销，请先完成现场交接");
+            physicalRooms.requireNoTeaching(detail.venueId(),detail.startsAt(),detail.endsAt());
             var now=LocalDateTime.now();
             if (now.isBefore(detail.startsAt()) || !now.isBefore(detail.endsAt())) throw new ApiException(HttpStatus.CONFLICT,"OUTSIDE_USAGE_TIME","请在批准的使用时段内登记入场");
             var venue=getVenue(detail.venueId());

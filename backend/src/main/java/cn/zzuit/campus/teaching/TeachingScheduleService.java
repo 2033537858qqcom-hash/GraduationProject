@@ -18,9 +18,11 @@ public class TeachingScheduleService {
         """;
     private final JdbcClient jdbc;
     private final TeachingService teaching;
-    public TeachingScheduleService(JdbcClient jdbc,TeachingService teaching) { this.jdbc=jdbc; this.teaching=teaching; }
+    private final cn.zzuit.campus.resource.PhysicalRoomService physicalRooms;
+    public TeachingScheduleService(JdbcClient jdbc,TeachingService teaching,cn.zzuit.campus.resource.PhysicalRoomService physicalRooms) { this.jdbc=jdbc; this.teaching=teaching; this.physicalRooms=physicalRooms; }
 
     public void requireAvailable(long classId,long teacherId,long roomId,LocalDateTime start,LocalDateTime end,long ignoredExamId) {
+        physicalRooms.requireNoReservations(roomId,start,end);
         long conflicts=jdbc.sql("SELECT COUNT(*) FROM "+OCCUPANCY+"""
             o WHERE o.starts_at<:end AND o.ends_at>:start AND (o.kind<>'EXAM' OR o.id<>:exam)
             AND (o.class_id=:c OR o.teacher_id=:teacher OR o.room_id=:room

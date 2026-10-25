@@ -215,7 +215,10 @@ public class TeachingService {
             .param("c",classId).param("u",user).param("a",action).param("o",object).param("d",detail).update();
     }
     // A database row lock coordinates relationship revocation and scheduling/publication across instances.
-    public void lockWrites() { jdbc.sql("UPDATE teaching_write_lock SET revision=revision+1 WHERE id=1").update(); }
+    public void lockWrites() {
+        jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update();
+        jdbc.sql("UPDATE teaching_write_lock SET revision=revision+1 WHERE id=1").update();
+    }
     private void capture(long id) {
         jdbc.sql("""
             INSERT INTO course_material_revision(material_id,version,title,body,status,file_name,file_type,file_bytes)

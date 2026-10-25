@@ -21,20 +21,21 @@ public class RoomService {
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final TeachingService teaching;
+    private final PhysicalRoomService physicalRooms;
     private static final String READY="r.enabled=TRUE AND r.building_name IS NOT NULL AND r.room_number IS NOT NULL AND r.teaching_capacity IS NOT NULL AND r.exam_capacity IS NOT NULL";
     private static final String SELECT="""
         SELECT r.*,cp.name campus_name,
           (SELECT COUNT(*) FROM teaching_lesson l WHERE l.room_id=r.id AND l.ends_at>CURRENT_TIMESTAMP) lesson_count,
           (SELECT COUNT(*) FROM academic_exam e WHERE e.room_id=r.id AND e.ends_at>CURRENT_TIMESTAMP AND e.status='PUBLISHED') exam_count,
           (SELECT COUNT(*) FROM academic_exam e WHERE e.room_id=r.id AND e.ends_at>CURRENT_TIMESTAMP AND e.status='DRAFT') draft_count,
-          CASE WHEN EXISTS(SELECT 1 FROM teaching_lesson l WHERE l.room_id=r.id) OR EXISTS(SELECT 1 FROM academic_exam e WHERE e.room_id=r.id) THEN TRUE ELSE FALSE END referenced
+          CASE WHEN EXISTS(SELECT 1 FROM teaching_lesson l WHERE l.room_id=r.id) OR EXISTS(SELECT 1 FROM academic_exam e WHERE e.room_id=r.id) OR EXISTS(SELECT 1 FROM venue_resource v WHERE v.classroom_resource_id=r.id) THEN TRUE ELSE FALSE END referenced
         FROM classroom_resource r JOIN campus cp ON cp.id=r.campus_id
         """;
     private static final String OCCUPANCY="""
         (SELECT id,class_id,room_id,classroom,starts_at,ends_at,'LESSON' kind FROM teaching_lesson
          UNION ALL SELECT id,class_id,room_id,classroom,starts_at,ends_at,'EXAM' kind FROM academic_exam WHERE status='PUBLISHED')
         """;
-    public RoomService(JdbcClient jdbc,IdentityService identities,TeachingService teaching) { this.jdbc=jdbc; this.identities=identities; this.teaching=teaching; }
+    public RoomService(JdbcClient jdbc,IdentityService identities,TeachingService teaching,PhysicalRoomService physicalRooms) { this.jdbc=jdbc; this.identities=identities; this.teaching=teaching; this.physicalRooms=physicalRooms; }
     private void manage(CampusPrincipal user) { identities.requirePermission(user,"foundation:manage"); }
     public Catalog catalog(CampusPrincipal user) {
         manage(user); return new Catalog(jdbc.sql("SELECT id,name FROM campus ORDER BY id").query((r,n)->new Campus(r.getLong(1),r.getString(2))).list());
@@ -69,6 +70,7 @@ public class RoomService {
     }
     @Transactional public Room update(CampusPrincipal user,long id,RoomInput input) {
         teaching.lockWrites(); manage(user); var old=find(id); version(old.version(),input.version()); validate(input);
+        physicalRooms.requireCapacity(id,input.teachingCapacity());
         if(old.referenced() && (old.campusId()!=input.campusId() || !old.code().equals(input.code().trim())
             || (old.buildingName()!=null && !old.buildingName().equals(input.buildingName().trim()))
             || (old.roomNumber()!=null && !old.roomNumber().equals(input.roomNumber().trim())))) conflict("教室已有教学引用，校区、编号和已确定的楼栋房间不可移动；迁移记录允许补录未知楼栋及房间号");
@@ -82,7 +84,7 @@ public class RoomService {
     @Transactional public Room state(CampusPrincipal user,long id,StateInput input) {
         teaching.lockWrites(); manage(user); var old=find(id); version(old.version(),input.version());
         if(old.enabled()==input.enabled()) conflict("教室已经处于目标状态");
-        if(!input.enabled() && old.upcomingLessonCount()+old.publishedExamCount()>0) conflict("教室仍有未结束的课程或已发布考试，不能停用；可在未来占用中核对");
+        if(!input.enabled() && (old.upcomingLessonCount()+old.publishedExamCount()>0 || physicalRooms.hasReservations(id))) conflict("教室仍有课程、已发布考试或未完成预约，不能停用；请在未来占用中核对");
         if(jdbc.sql("UPDATE classroom_resource SET enabled=:enabled,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v").param("enabled",input.enabled()).param("id",id).param("v",input.version()).update()!=1) stale();
         var changed=find(id); audit(user,changed,input.enabled()?"ENABLED":"DISABLED",input.reason(),snapshot(old)+" → "+snapshot(changed)); return changed;
     }
@@ -102,10 +104,24 @@ public class RoomService {
     }
     public Page<Occupancy> occupancy(CampusPrincipal user,long id,int page,int size) {
         manage(user); find(id); pagination(page,size);
-        String where=" WHERE o.room_id=:room AND o.ends_at>CURRENT_TIMESTAMP";
-        long total=jdbc.sql("SELECT COUNT(*) FROM "+OCCUPANCY+" o"+where).param("room",id).query(Long.class).single();
-        var items=jdbc.sql("SELECT o.*,tc.name class_name,c.name course_name,(SELECT COUNT(*) FROM teaching_member m WHERE m.class_id=o.class_id AND m.active=TRUE) member_count FROM "+OCCUPANCY+" o JOIN teaching_class tc ON tc.id=o.class_id JOIN course c ON c.id=tc.course_id"+where+" ORDER BY o.starts_at,o.kind,o.id LIMIT :limit OFFSET :offset")
-            .param("room",id).param("limit",size).param("offset",((long)page-1)*size).query((r,n)->new Occupancy(r.getLong("id"),r.getString("kind"),r.getLong("class_id"),r.getString("class_name"),r.getString("course_name"),r.getString("classroom"),r.getTimestamp("starts_at").toLocalDateTime(),r.getTimestamp("ends_at").toLocalDateTime(),r.getLong("member_count"))).list();
+        String all="""
+            (SELECT id,class_id,room_id,classroom,starts_at,ends_at,'LESSON' kind FROM teaching_lesson
+             UNION ALL SELECT id,class_id,room_id,classroom,starts_at,ends_at,'EXAM' kind FROM academic_exam WHERE status='PUBLISHED'
+             UNION ALL SELECT r.id,0 class_id,v.classroom_resource_id room_id,v.name classroom,r.starts_at,r.ends_at,
+               CASE WHEN r.status='IN_USE' THEN 'RESERVATION_IN_USE' ELSE 'RESERVATION' END kind
+             FROM venue_reservation r JOIN venue_resource v ON v.id=r.venue_id
+             WHERE v.classroom_resource_id IS NOT NULL AND r.status IN ('SUBMITTED','APPROVED','IN_USE'))
+            """;
+        String where=" WHERE o.room_id=:room AND (o.ends_at>CURRENT_TIMESTAMP OR o.kind='RESERVATION_IN_USE')";
+        long total=jdbc.sql("SELECT COUNT(*) FROM "+all+" o"+where).param("room",id).query(Long.class).single();
+        var items=jdbc.sql("""
+            SELECT o.*,COALESCE(tc.name,'校园场地预约') class_name,COALESCE(c.name,'预约占用') course_name,
+              CASE WHEN o.kind LIKE 'RESERVATION%' THEN (SELECT expected_participants FROM venue_reservation WHERE id=o.id)
+                ELSE (SELECT COUNT(*) FROM teaching_member m WHERE m.class_id=o.class_id AND m.active=TRUE) END member_count
+            FROM
+            """+all+" o LEFT JOIN teaching_class tc ON tc.id=o.class_id LEFT JOIN course c ON c.id=tc.course_id"+where+" ORDER BY o.starts_at,o.kind,o.id LIMIT :limit OFFSET :offset")
+            .param("room",id).param("limit",size).param("offset",((long)page-1)*size)
+            .query((r,n)->new Occupancy(r.getLong("id"),r.getString("kind"),r.getLong("class_id"),r.getString("class_name"),r.getString("course_name"),r.getString("classroom"),r.getTimestamp("starts_at").toLocalDateTime(),r.getTimestamp("ends_at").toLocalDateTime(),r.getLong("member_count"))).list();
         return new Page<>(items,total,page,size);
     }
     public Page<Audit> history(CampusPrincipal user,long id,int page,int size) {

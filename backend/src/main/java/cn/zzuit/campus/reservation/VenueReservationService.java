@@ -184,6 +184,8 @@ public class VenueReservationService {
     public void updateVenue(CampusPrincipal user, long id, VenueUpdateCommand cmd) {
         lock(user, "reservation:manage");
         var venue = getVenue(id);
+        if (Boolean.TRUE.equals(cmd.enabled()) && getVenueReviewerIds(id).isEmpty())
+            throw new ApiException(HttpStatus.CONFLICT,"NO_VENUE_REVIEWER","开放资源前请先配置有效办理人员");
         if (cmd.capacity()!=null && cmd.capacity()<1) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_CAPACITY","容量须大于零");
         if (cmd.name()!=null && (cmd.name().isBlank() || cmd.name().length()>150)) throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_VENUE_NAME","请填写有效场地名称");
         if (Boolean.FALSE.equals(cmd.enabled()) && jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE venue_id=:v AND status='IN_USE'").param("v",id).query(Long.class).single()>0)

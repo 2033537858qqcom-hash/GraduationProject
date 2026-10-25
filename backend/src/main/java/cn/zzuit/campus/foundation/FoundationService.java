@@ -111,13 +111,13 @@ public class FoundationService {
     @Transactional public Account state(CampusPrincipal user,long id,StateChange input) {
         lock(user); var old=account(id); version(old.version(),input.version()); protectAdmin(user,old,input.enabled(),old.roles());
         if(old.enabled()==input.enabled()) conflict("账号已经处于目标状态");
-        if(input.enabled() && input.emergency()) bad("紧急停用不能用于启用账号");
-        if(!input.enabled() && !input.emergency()) responsibilities.requireNormalDisable(user,id);
-        if(!input.enabled() && !input.emergency() && hasCounselorAssignments(id)) conflict("该人员仍负责行政班，请先移交或清空负责关系，再停用账号");
-        if(!input.enabled() && !input.emergency() && old.roles().contains("STUDENT_AFFAIRS")) protectCertificateReviewer(id,old.departmentId());
+        if(input.enabled() && input.emergencyRequested()) bad("紧急停用不能用于启用账号");
+        if(!input.enabled() && !input.emergencyRequested()) responsibilities.requireNormalDisable(user,id);
+        if(!input.enabled() && !input.emergencyRequested() && hasCounselorAssignments(id)) conflict("该人员仍负责行政班，请先移交或清空负责关系，再停用账号");
+        if(!input.enabled() && !input.emergencyRequested() && old.roles().contains("STUDENT_AFFAIRS")) protectCertificateReviewer(id,old.departmentId());
         if(jdbc.sql("UPDATE app_user SET enabled=:enabled,version=version+1,security_version=security_version+1 WHERE id=:id AND version=:v")
             .param("enabled",input.enabled()).param("id",id).param("v",input.version()).update()!=1) stale();
-        var updated=account(id); audit(user,input.enabled()?"USER_ENABLE":input.emergency()?"USER_EMERGENCY_DISABLE":"USER_DISABLE","USER",id,snapshot(old)+" → "+snapshot(updated),input.reason().trim()); return updated;
+        var updated=account(id); audit(user,input.enabled()?"USER_ENABLE":input.emergencyRequested()?"USER_EMERGENCY_DISABLE":"USER_DISABLE","USER",id,snapshot(old)+" → "+snapshot(updated),input.reason().trim()); return updated;
     }
     private void validateAssignment(long campus,long department,Long group,List<String> roles) {
         if(new HashSet<>(roles).size()!=roles.size()) bad("角色不能重复");

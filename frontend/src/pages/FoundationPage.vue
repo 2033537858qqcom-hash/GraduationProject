@@ -97,6 +97,7 @@ const auditTypeOptions = computed(() => [
   { value: '', label: '全部记录' },
   ...Object.entries(typeNames).map(([key, name]) => ({ value: key, label: name })),
 ])
+function configurationOwner(permission: string) { return ({ 'reservation:manage': '场地资源配置人员', 'repair:configure': '后勤配置人员', 'housing:configure': '宿舍资源配置人员', 'foundation:manage': '账号管理员' } as Record<string, string>)[permission] ?? '对应业务配置人员' }
 function roleName(code: string) { return catalog.value?.roles.find(role => role.code === code)?.name ?? code }
 function organizationParent(row: FoundationDepartment | FoundationMajor | FoundationClass) {
   if ('departmentId' in row) return catalog.value?.departments.find(d => d.id === row.departmentId)?.name ?? '未设置学院'
@@ -250,7 +251,7 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
 <h2 id="foundation-confirm-title">{{ stateCandidate ? '确认账号状态变更' : '处理未保存的内容' }}</h2><p>{{ confirmation }}</p>
         <template v-if="stateCandidate?.enabled && impact">
           <ResponsibilityPanel :impact="impact" compact />
-          <label class="emergency-choice"><input v-model="emergency" type="checkbox" />紧急停用：立即撤销访问，保留负责关系并在责任异常中安排接任</label>
+          <label class="emergency-choice"><input v-model="emergency" type="checkbox" /><span>紧急停用：立即撤销访问，保留负责关系并在责任异常中安排接任</span></label>
           <p v-if="impact.blockingCount && !emergency" class="alert">尚有负责范围或独有待办，完成交接后可正常停用。</p>
         </template>
         <label v-if="stateCandidate">变更原因<input v-model="stateReason" required maxlength="200" placeholder="说明此次启用或停用的原因" /></label>
@@ -301,7 +302,7 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
     <section v-else-if="catalog && tab === 'responsibility'" class="portal-panel">
       <div class="section-heading"><div><h2>责任异常</h2><p class="muted">按当前账号、岗位和负责范围检查；接任后刷新即可重新确认。</p></div><button class="button compact" :disabled="loading" @click="load">刷新检查</button></div>
       <p class="content-context-note">请先给接任人员分配所需岗位，再由对应配置人员调整负责范围。维修在办任务还需由有效派工人员重新派单。此处仅显示汇总数量。</p>
-      <div class="responsibility-exceptions"><article v-for="item in exceptions" :key="item.code" class="responsibility-exception" :class="{ warning: item.count > 0 }"><div><strong>{{ item.name }}</strong><p class="muted">{{ item.count }} {{ item.unit }}</p></div><RouterLink v-if="currentUser?.permissions.includes(item.permission)" :to="item.path" class="text-button">前往配置</RouterLink><small v-else class="muted">需由具备 {{ item.permission }} 权限的人员配置</small></article></div>
+      <div class="responsibility-exceptions"><article v-for="item in exceptions" :key="item.code" class="responsibility-exception" :class="{ warning: item.count > 0 }"><div><strong>{{ item.name }}</strong><p class="muted">{{ item.count }} {{ item.unit }}</p></div><RouterLink v-if="currentUser?.permissions.includes(item.permission)" :to="item.path" class="text-button">前往配置</RouterLink><small v-else class="muted">请联系{{ configurationOwner(item.permission) }}</small></article></div>
     </section>
     <section v-else-if="catalog && tab === 'audit'" class="portal-panel">
       <div class="section-heading"><div><h2>人员与组织修改记录</h2><p class="muted">保留操作人员、变更前后信息和原因；共 {{ audits.total }} 条记录。</p></div></div>
@@ -315,8 +316,8 @@ onBeforeUnmount(() => { sequence++; finishConfirmation(false); form.initialPassw
 </template>
 
 <style scoped>
-.emergency-choice { display: flex; gap: 8px; align-items: flex-start; margin: 16px 0; }
-.emergency-choice input { width: auto; margin-top: 4px; }
+.draft-confirm .emergency-choice { display: flex; flex-direction: row; gap: 8px; align-items: flex-start; margin: 16px 0; }
+.draft-confirm .emergency-choice input { width: auto; flex: 0 0 auto; margin-top: 4px; }
 .draft-confirm { width: min(740px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); overflow: auto; }
 .responsibility-exceptions { display: grid; gap: 10px; }
 .responsibility-exception { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px; border: 1px solid var(--line, #dfe5ec); border-radius: 8px; }

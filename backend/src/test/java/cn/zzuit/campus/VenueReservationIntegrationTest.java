@@ -132,6 +132,7 @@ class VenueReservationIntegrationTest {
 
         // 4. 审核人员退回补正
         var returned = ok(reviewer.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "version", ok(reviewer.get("/api/reservations/" + resId)).path("version").asInt(),
             "action", "RETURN",
             "comment", "请明确现场安保负责人及观众席卫生维护方案"
         )));
@@ -153,6 +154,7 @@ class VenueReservationIntegrationTest {
 
         // 6. 审核人员审批通过
         var approved = ok(reviewer.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "version", ok(reviewer.get("/api/reservations/" + resId)).path("version").asInt(),
             "action", "APPROVE",
             "comment", "方案完备，准予借用"
         )));
@@ -295,6 +297,7 @@ class VenueReservationIntegrationTest {
 
         // 2. affairs1001 尝试审核该记录 -> 403 Forbidden
         var reviewResp = affairs.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "version", submitted.path("version").asInt(),
             "action", "APPROVE",
             "comment", "尝试越权审核非管辖场地"
         ));
@@ -313,6 +316,7 @@ class VenueReservationIntegrationTest {
         assertThat(found).isTrue();
 
         var academicApprove = ok(academic.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "version", ok(academic.get("/api/reservations/" + resId)).path("version").asInt(),
             "action", "APPROVE",
             "comment", "管辖负责人正常审批通过"
         )));
@@ -362,6 +366,7 @@ class VenueReservationIntegrationTest {
 
         // 尝试自己审批自己 -> 403 Forbidden 包含 CANNOT_SELF_REVIEW
         var selfReviewResp = affairs.send("POST", "/api/reservations/" + resId + "/review", Map.of(
+            "version", ok(affairs.get("/api/reservations/" + resId)).path("version").asInt(),
             "action", "APPROVE",
             "comment", "自己审批自己"
         ));

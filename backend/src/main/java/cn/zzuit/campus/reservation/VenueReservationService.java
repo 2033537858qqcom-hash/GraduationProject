@@ -30,6 +30,13 @@ public class VenueReservationService {
               AND review_permission.permission_code = 'reservation:review')
         """;
 
+    // r is a reservation row. In-use bookings always need a human handover,
+    // including after their planned end; unused expired approvals do not.
+    private static final String NEEDS_OWNER = """
+        (r.status = 'SUBMITTED' OR (r.status = 'APPROVED' AND r.ends_at > CURRENT_TIMESTAMP)
+            OR r.status = 'IN_USE')
+        """;
+
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final NoticeWriter noticeWriter;
@@ -197,15 +204,22 @@ public class VenueReservationService {
                     r.getBoolean("eligible")
                 )).list();
             var pending = jdbc.sql("""
-                SELECT COUNT(*) AS pending_count,
-                    COALESCE(SUM(CASE WHEN NOT EXISTS (
+                SELECT COALESCE(SUM(CASE WHEN status = 'SUBMITTED' THEN 1 ELSE 0 END), 0) AS pending_review,
+                       COALESCE(SUM(CASE WHEN status = 'SUBMITTED' THEN unattended ELSE 0 END), 0) AS unattended_review,
+                       COALESCE(SUM(CASE WHEN status = 'APPROVED' THEN 1 ELSE 0 END), 0) AS pending_usage,
+                       COALESCE(SUM(CASE WHEN status = 'IN_USE' THEN 1 ELSE 0 END), 0) AS active_use,
+                       COALESCE(SUM(unattended), 0) AS unattended_tasks
+                FROM (
+                    SELECT r.status, CASE WHEN EXISTS (
                         SELECT 1 FROM venue_manager vm
                         WHERE vm.venue_id = r.venue_id AND vm.user_id <> r.applicant_id AND
                 """ + ELIGIBLE_REVIEWER + """
-                    ) THEN 1 ELSE 0 END), 0) AS unattended_count
-                FROM venue_reservation r WHERE r.venue_id = :venueId AND r.status = 'SUBMITTED'
-                """).param("venueId", v.id())
-                .query((r, n) -> new long[] {r.getLong("pending_count"), r.getLong("unattended_count")}).single();
+                    ) THEN 0 ELSE 1 END AS unattended
+                    FROM venue_reservation r WHERE r.venue_id = :venueId AND
+                """ + NEEDS_OWNER + ") responsibility")
+                .param("venueId", v.id())
+                .query((r, n) -> new long[] {r.getLong("pending_review"), r.getLong("unattended_review"),
+                    r.getLong("pending_usage"), r.getLong("active_use"), r.getLong("unattended_tasks")}).single();
             return new VenueManagementItem(
                 v.id(),
                 v.code(),
@@ -221,7 +235,10 @@ public class VenueReservationService {
                 managers,
                 (int) managers.stream().filter(VenueManagerItem::eligible).count(),
                 pending[0],
-                pending[1]
+                pending[1],
+                pending[2],
+                pending[3],
+                pending[4]
             );
         }).toList();
     }
@@ -271,16 +288,21 @@ public class VenueReservationService {
                 .param("vid", venueId)
                 .param("uid", managerUserId)
                 .update();
-            // New responsibility includes existing pending work. Never notify a
+            // New responsibility includes every unfinished stage. Never notify a
             // person about approving their own application or on an idempotent add.
             var pending = jdbc.sql("""
-                SELECT id, venue_name, activity_theme FROM venue_reservation
-                WHERE venue_id = :vid AND status = 'SUBMITTED' AND applicant_id <> :uid
-                """).param("vid", venueId).param("uid", managerUserId)
-                .query((r, n) -> Map.of("id", r.getLong("id"), "message",
+                SELECT r.id, r.venue_name, r.activity_theme, r.status FROM venue_reservation r
+                WHERE r.venue_id = :vid AND r.applicant_id <> :uid AND
+                """ + NEEDS_OWNER).param("vid", venueId).param("uid", managerUserId)
+                .query((r, n) -> Map.of("id", r.getLong("id"), "status", r.getString("status"), "message",
                     "【" + r.getString("venue_name") + "】" + r.getString("activity_theme"))).list();
             for (var task : pending) {
-                noticeWriter.write(managerUserId, "新增负责场地有待审批申请", "RESERVATION",
+                String title = switch ((String) task.get("status")) {
+                    case "APPROVED" -> "新增负责场地有待使用预约";
+                    case "IN_USE" -> "新增负责场地有使用中预约待核销";
+                    default -> "新增负责场地有待审批申请";
+                };
+                noticeWriter.write(managerUserId, title, "RESERVATION",
                     (Long) task.get("id"), "REVIEW", (String) task.get("message"));
             }
         }
@@ -293,7 +315,8 @@ public class VenueReservationService {
         if (!isVenueManager(managerUserId, venueId)) return;
         long stranded = jdbc.sql("""
             SELECT COUNT(*) FROM venue_reservation r
-            WHERE r.venue_id = :vid AND r.status = 'SUBMITTED'
+            WHERE r.venue_id = :vid AND
+            """ + NEEDS_OWNER + """
               AND NOT EXISTS (SELECT 1 FROM venue_manager vm
                 WHERE vm.venue_id = r.venue_id AND vm.user_id <> :uid
                   AND vm.user_id <> r.applicant_id AND
@@ -301,7 +324,7 @@ public class VenueReservationService {
             .param("vid", venueId).param("uid", managerUserId).query(Long.class).single();
         if (stranded > 0) {
             throw new ApiException(HttpStatus.CONFLICT, "REVIEWER_HANDOFF_REQUIRED",
-                "该场地有 " + stranded + " 条待审申请将无人可审，请先添加其他有效责任审批人，再解除指定（申请人本人不能接审）");
+                "该场地有 " + stranded + " 条未完成预约将无人办理，请先添加可接手审批、使用登记及结束核销的有效负责人，再解除指定（申请人本人不能接手）");
         }
         jdbc.sql("DELETE FROM venue_manager WHERE venue_id = :vid AND user_id = :uid")
             .param("vid", venueId)
@@ -890,6 +913,10 @@ public class VenueReservationService {
         // 2. 负责范围校验（AUTH-02）
         if (!isVenueManager(user.id(), detail.venueId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "FORBIDDEN", "无权审批非本人负责的场地与设备借用申请");
+        }
+
+        if (cmd.version() == null || cmd.version() != detail.version()) {
+            throw new ApiException(HttpStatus.CONFLICT, "RESERVATION_VERSION_CHANGED", "申请材料或处理状态已更新，请重新核对最新资料后再作决定");
         }
 
         if (!"SUBMITTED".equals(detail.status())) {

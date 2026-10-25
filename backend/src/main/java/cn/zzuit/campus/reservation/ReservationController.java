@@ -189,7 +189,7 @@ public class ReservationController {
     public ReservationDetail review(
         @AuthenticationPrincipal CampusPrincipal user,
         @PathVariable long id,
-        @RequestBody ReviewReservationCommand cmd
+        @jakarta.validation.Valid @RequestBody ReviewReservationCommand cmd
     ) {
         return reservations.review(user, id, cmd);
     }

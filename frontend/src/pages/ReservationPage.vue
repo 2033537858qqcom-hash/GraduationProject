@@ -29,7 +29,7 @@ import {
   XCircle,
 } from '@lucide/vue'
 import { currentUser } from '../stores/auth'
-import { errorMessage } from '../lib/api'
+import { ApiError, errorMessage } from '../lib/api'
 import { useEditProtection } from '../composables/useEditProtection'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 import AffairTimeline from '../components/AffairTimeline.vue'
@@ -156,6 +156,7 @@ const isFormDirty = computed(() => showBookingModal.value && JSON.stringify(book
 
 // Review comment input
 const reviewComment = ref('')
+const reviewUpdateNotice = ref('')
 
 // Confirmation dialog
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -332,6 +333,7 @@ async function chooseReservation(id: number) {
   loading.value = true
   error.value = ''
   selectedReservation.value = null
+  reviewUpdateNotice.value = ''
   try {
     selectedReservation.value = await getDetail(id)
     reviewComment.value = ''
@@ -486,27 +488,35 @@ async function handleCancel(id: number) {
 
 // Staff Review Decision
 async function handleReview(action: 'APPROVE' | 'RETURN' | 'REJECT') {
-  if (!selectedReservation.value) return
+  const selected = selectedReservation.value
+  if (!selected) return
   const label = action === 'APPROVE' ? '同意借用并签发通行凭证' : action === 'RETURN' ? '退回修改材料' : '驳回借用申请'
   if (!reviewComment.value.trim()) {
     error.value = '请填写审核意见或理由'
     return
   }
-  if (!await ask(`确认对申请 #${selectedReservation.value.id} 执行“${label}”？意见将记录在时间线并通知申请人。`, 'decision')) return
+  const command = { version: selected.version, action, comment: reviewComment.value.trim() }
+  if (!await ask(`确认对申请 #${selected.id} 执行“${label}”？意见将记录在时间线并通知申请人。`, 'decision')) return
   busy.value = true
   error.value = ''
   success.value = ''
   try {
-    await reviewReservation(selectedReservation.value.id, {
-      action,
-      comment: reviewComment.value.trim(),
-    })
+    await reviewReservation(selected.id, command)
     reviewComment.value = ''
     success.value = `处理已完成：已执行【${label}】。`
     await loadReservations()
-    await chooseReservation(selectedReservation.value.id)
+    await chooseReservation(selected.id)
   } catch (cause) {
-    error.value = errorMessage(cause)
+    const message = errorMessage(cause)
+    if (cause instanceof ApiError && cause.code === 'RESERVATION_VERSION_CHANGED') {
+      reviewComment.value = ''
+      await loadReservations()
+      await chooseReservation(selected.id)
+      reviewUpdateNotice.value = selectedReservation.value
+        ? '申请已更新，已重新读取最新资料。本次决定未执行，请核对主题、人数、时段及材料，重新填写审核意见后再作决定。'
+        : '申请已更新，本次决定未执行。最新资料暂时无法读取，请重新打开申请后核对。'
+    }
+    error.value = message
   } finally {
     busy.value = false
   }
@@ -645,7 +655,7 @@ async function handleAddManager() {
 
 async function handleRemoveManager(userId: number) {
   if (!managingVenue.value) return
-  if (!await ask('确认解除该负责人的审批指派？有待审申请时，请先添加接任人员。', 'decision')) return
+  if (!await ask('确认解除该负责人的指派？待审批、待使用及使用中的预约都需要接任人员继续办理，请先完成交接。', 'decision')) return
   busy.value = true
   error.value = ''
   success.value = ''
@@ -906,7 +916,7 @@ watch(() => route.query.venue, () => {
             <div class="managers-box-header">
               <span class="box-label">
                 <ShieldCheck :size="14" />
-                有效审批人员 {{ venue.activeReviewerCount }} / 已配置 {{ venue.managers.length }}
+                有效办理人员 {{ venue.activeReviewerCount }} / 已配置 {{ venue.managers.length }}
               </span>
               <button class="text-button compact" :disabled="busy" @click="openManagerModal(venue)">
                 <UserCheck :size="14" />
@@ -917,11 +927,11 @@ watch(() => route.query.venue, () => {
               <ShieldAlert :size="14" />
               <span>暂无有效审批人，请配置已启用且具备审批权限的人员。</span>
             </div>
-            <div v-if="venue.unattendedReviewCount > 0" class="no-manager-alert" role="status">
+            <div v-if="venue.unattendedTaskCount > 0" class="no-manager-alert" role="status">
               <ShieldAlert :size="14" />
-              <span>{{ venue.unattendedReviewCount }} 条待审申请无人可审，请配置接任人员。</span>
+              <span>{{ venue.unattendedTaskCount }} 条未完成预约无人办理，请配置接任人员。</span>
             </div>
-            <p class="muted">待审申请 {{ venue.pendingReviewCount }} 条</p>
+            <p class="muted">待审批 {{ venue.pendingReviewCount }} 条 · 待使用 {{ venue.pendingUsageCount }} 条 · 使用中 {{ venue.activeUseCount }} 条</p>
             <div v-if="venue.managers.length" class="manager-tags-list">
               <span v-for="m in venue.managers" :key="m.userId" class="manager-tag" :class="{ 'is-inactive': !m.eligible }">
                 <strong>{{ m.fullName }}</strong>
@@ -1050,6 +1060,8 @@ watch(() => route.query.venue, () => {
         </div>
       </div>
 
+      <p v-if="reviewUpdateNotice" class="alert" role="alert">{{ reviewUpdateNotice }}</p>
+
       <!-- APPROVED: ELECTRONIC PASS (入场通行电子凭证) -->
       <div v-if="['APPROVED', 'IN_USE'].includes(selectedReservation.status) && new Date(selectedReservation.endsAt).getTime() > Date.now()" id="venue-access-pass" class="access-pass-card">
         <div class="pass-watermark">郑州工业应用技术学院</div>
@@ -1155,6 +1167,7 @@ watch(() => route.query.venue, () => {
           </div>
           <textarea
             v-model="reviewComment"
+            :disabled="busy"
             rows="3"
             maxlength="1000"
             placeholder="同意时可注明场地安全与钥匙借用指引；退回或驳回时请详述原因或修改建议"
@@ -1518,12 +1531,13 @@ watch(() => route.query.venue, () => {
 
         <div class="modal-body-content" style="display: flex; flex-direction: column; gap: 16px;">
           <p class="muted" style="font-size: 13px; line-height: 1.6;">
-            申请需要至少一位有效且非申请人本人的审批人。添加负责人会通知其接手已有待审申请；请先添加接任人员，再解除原负责人。
+            未完成预约需要至少一位有效且非申请人本人的办理人员。添加负责人会通知其接手待审批、待使用及使用中的预约；请先添加接任人员，再解除原负责人。
           </p>
           <p v-if="error" class="alert" role="alert">{{ error }}</p>
           <p v-if="success" class="success-message" role="status">{{ success }}</p>
-          <p v-if="managingVenue.unattendedReviewCount > 0" class="alert" role="status">
-            当前 {{ managingVenue.unattendedReviewCount }} 条待审申请无人可审，请添加接任人员。
+          <p class="muted">待审批 {{ managingVenue.pendingReviewCount }} 条 · 待使用 {{ managingVenue.pendingUsageCount }} 条 · 使用中 {{ managingVenue.activeUseCount }} 条</p>
+          <p v-if="managingVenue.unattendedTaskCount > 0" class="alert" role="status">
+            当前 {{ managingVenue.unattendedTaskCount }} 条未完成预约无人办理，请添加接任人员。
           </p>
 
           <!-- Current Assigned Reviewers -->

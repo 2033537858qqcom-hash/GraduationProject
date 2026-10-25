@@ -66,8 +66,8 @@ class ReservationResponsibilityIntegrationTest {
         var otherTasks = ok(other.browser().get("/api/reservations/review?status=SUBMITTED&pageSize=1"));
         assertThat(otherTasks.path("total").asLong()).isEqualTo(1);
         assertThat(otherTasks.path("items").get(0).path("id").asLong()).isEqualTo(id);
-        assertThat(applicant.browser().send("POST", "/api/reservations/" + id + "/review", Map.of("action", "APPROVE", "comment", "自审")).statusCode()).isEqualTo(403);
-        assertThat(ok(other.browser().send("POST", "/api/reservations/" + id + "/review", Map.of("action", "APPROVE", "comment", "核验通过"))).path("status").asText()).isEqualTo("APPROVED");
+        assertThat(applicant.browser().send("POST", "/api/reservations/" + id + "/review", Map.of("version", submitted.path("version").asInt(), "action", "APPROVE", "comment", "自审")).statusCode()).isEqualTo(403);
+        assertThat(ok(other.browser().send("POST", "/api/reservations/" + id + "/review", Map.of("version", submitted.path("version").asInt(), "action", "APPROVE", "comment", "核验通过"))).path("status").asText()).isEqualTo("APPROVED");
     }
 
     @Test
@@ -114,7 +114,7 @@ class ReservationResponsibilityIntegrationTest {
         bind(venue, reviewer.id());
         var form = form(venue);
         long id = ok(applicant.send("POST", "/api/reservations/submit", form)).path("id").asLong();
-        var approved = ok(reviewer.browser().send("POST", "/api/reservations/" + id + "/review", Map.of("action", "APPROVE", "comment", "同意")));
+        var approved = ok(reviewer.browser().send("POST", "/api/reservations/" + id + "/review", Map.of("version", ok(reviewer.browser().get("/api/reservations/" + id)).path("version").asInt(), "action", "APPROVE", "comment", "同意")));
         var changed = new java.util.HashMap<String, Object>(form);
         changed.put("startsAt", LocalDateTime.parse(form.get("startsAt").toString()).plusDays(1).toString());
         changed.put("endsAt", LocalDateTime.parse(form.get("endsAt").toString()).plusDays(1).toString());

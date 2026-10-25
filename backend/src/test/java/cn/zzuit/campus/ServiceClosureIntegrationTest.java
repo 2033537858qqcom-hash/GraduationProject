@@ -49,7 +49,7 @@ class ServiceClosureIntegrationTest {
             assertThat(student.send("POST","/api/reservations/submit",booking(venue,6,81)).statusCode()).isEqualTo(409);
             var pending=ok(student.send("POST","/api/reservations/submit",booking(venue,5,82)));
             ok(reviewer.send("PUT","/api/reservations/venues/"+venue,Map.of("capacity",4)));
-            assertThat(reviewer.send("POST","/api/reservations/"+id(pending)+"/review",Map.of("action","APPROVE")).statusCode()).isEqualTo(409);
+            assertThat(reviewer.send("POST","/api/reservations/"+id(pending)+"/review",Map.of("version",pending.path("version").asInt(),"action","APPROVE")).statusCode()).isEqualTo(409);
             assertThat(ok(student.get("/api/reservations/"+id(pending))).path("status").asText()).isEqualTo("SUBMITTED");
             assertThat(reviewer.send("PUT","/api/reservations/venues/"+venue,Map.of("capacity",0)).statusCode()).isEqualTo(400);
         } finally { ok(reviewer.send("PUT","/api/reservations/venues/"+venue,Map.of("capacity",200))); }
@@ -61,7 +61,7 @@ class ServiceClosureIntegrationTest {
         var pending=ok(student.send("POST","/api/reservations/submit",booking(venue,1,83)));
         try {
             jdbc.sql("UPDATE venue_resource SET enabled=FALSE WHERE id=:v").param("v",venue).update();
-            assertThat(reviewer.send("POST","/api/reservations/"+id(pending)+"/review",Map.of("action","APPROVE")).statusCode()).isEqualTo(409);
+            assertThat(reviewer.send("POST","/api/reservations/"+id(pending)+"/review",Map.of("version",pending.path("version").asInt(),"action","APPROVE")).statusCode()).isEqualTo(409);
         } finally { jdbc.sql("UPDATE venue_resource SET enabled=TRUE WHERE id=:v").param("v",venue).update(); }
     }
 
@@ -212,7 +212,7 @@ class ServiceClosureIntegrationTest {
     }
     private JsonNode approve(Browser student,Browser reviewer,long venue,int day) throws Exception {
         var r=ok(student.send("POST","/api/reservations/submit",booking(venue,1,day)));
-        return ok(reviewer.send("POST","/api/reservations/"+id(r)+"/review",Map.of("action","APPROVE")));
+        return ok(reviewer.send("POST","/api/reservations/"+id(r)+"/review",Map.of("version",r.path("version").asInt(),"action","APPROVE")));
     }
     private HttpResponse<String> use(Browser b,long id,JsonNode r,String action) throws Exception {
         return b.send("POST","/api/reservations/"+id+"/usage",Map.of("action",action,"version",r.path("version").asInt(),"comment","Verified by responsible staff"));

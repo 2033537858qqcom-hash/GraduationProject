@@ -108,6 +108,7 @@ export interface ConflictResult {
 }
 
 export interface ReviewReservationCommand {
+  version: number
   action: 'APPROVE' | 'RETURN' | 'REJECT'
   comment: string
 }
@@ -266,6 +267,9 @@ export interface VenueManagementItem {
   activeReviewerCount: number
   pendingReviewCount: number
   unattendedReviewCount: number
+  pendingUsageCount: number
+  activeUseCount: number
+  unattendedTaskCount: number
 }
 
 export interface VenueUpdateCommand {

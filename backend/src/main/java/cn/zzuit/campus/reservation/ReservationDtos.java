@@ -108,6 +108,7 @@ public class ReservationDtos {
     ) {}
 
     public record ReviewReservationCommand(
+        @jakarta.validation.constraints.NotNull @jakarta.validation.constraints.Min(0) Integer version,
         String action,
         String comment
     ) {}
@@ -164,7 +165,10 @@ public class ReservationDtos {
         List<VenueManagerItem> managers,
         int activeReviewerCount,
         long pendingReviewCount,
-        long unattendedReviewCount
+        long unattendedReviewCount,
+        long pendingUsageCount,
+        long activeUseCount,
+        long unattendedTaskCount
     ) {}
 
     public record AssignManagerCommand(

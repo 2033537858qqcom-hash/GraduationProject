@@ -1,5 +1,6 @@
 import { createRenderer, defineComponent, h, nextTick, ssrContextKey } from 'vue'
 import { createMemoryHistory, createRouter, RouterView } from 'vue-router'
+import PersonalSchedulePage from '../../src/pages/PersonalSchedulePage.vue'
 import ReservationPage from '../../src/pages/ReservationPage.vue'
 import WorkbenchPage from '../../src/pages/WorkbenchPage.vue'
 import StudentPortal from '../../src/pages/StudentPortal.vue'
@@ -14,6 +15,7 @@ import FoundationPage from '../../src/pages/FoundationPage.vue'
 import ResourcesPage from '../../src/pages/ResourcesPage.vue'
 
 const pages = {
+  '/portal/schedule': PersonalSchedulePage,
   '/portal/reservations': ReservationPage,
   '/workbench': WorkbenchPage,
   '/portal': StudentPortal,

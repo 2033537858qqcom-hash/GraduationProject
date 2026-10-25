@@ -75,6 +75,24 @@ class PersonalScheduleIntegrationTest {
   var events=ok(login(f.username()).get(RANGE)).path("events");for(var e:events)if(e.path("source").asText().equals("LESSON"))assertThat(e.path("overlapKeys").size()).isZero();
   jdbc.sql("UPDATE teaching_lesson SET starts_at='2029-04-01 22:00:00',ends_at='2029-04-02 00:00:00' WHERE class_id=:c").param("c",f.group()).update();assertThat(ok(login(f.username()).get(RANGE)).path("events").size()).isEqualTo(3);
  }
+ @ParameterizedTest @ValueSource(strings={"APPROVED","IN_USE","COMPLETED"})
+ void acceptedAndCompletedReservationsRemainVisibleWithoutTentativeFlag(String status)throws Exception{
+  var f=fixture();jdbc.sql("UPDATE venue_reservation SET status=:s WHERE applicant_id=:u").param("s",status).param("u",f.user()).update();
+  for(var e:ok(login(f.username()).get(RANGE)).path("events"))if(e.path("source").asText().equals("RESERVATION"))assertThat(e.path("tentative").asBoolean()).isFalse();
+ }
+ @Test void maximumRangeAndUncachedEmptyResponseAreExplicit()throws Exception{
+  var f=fixture();var response=login(f.username()).get("/api/schedule/mine?from=2029-05-01&to=2029-06-12");var data=ok(response);assertThat(data.path("events").size()).isZero();assertThat(data.path("availableSources").size()).isEqualTo(4);assertThat(response.headers().firstValue("Cache-Control").orElse("")).contains("no-store");
+ }
+ @Test void failedSourceDoesNotReturnSuccessfulPartialOrEmptyCalendar()throws Exception{
+  var f=fixture();var browser=login(f.username());jdbc.sql("ALTER TABLE leave_calendar RENAME TO schedule_calendar_probe").update();
+  try { var response=browser.get(RANGE);assertThat(response.statusCode()).isEqualTo(500);assertThat(response.body()).doesNotContain("\"events\""); }
+  finally {jdbc.sql("ALTER TABLE schedule_calendar_probe RENAME TO leave_calendar").update();}
+  assertThat(ok(browser.get(RANGE)).path("events").size()).isEqualTo(4);
+ }
+ @Test void denseRangesAreRejectedRatherThanSilentlyTruncated()throws Exception{
+  var f=fixture();for(int n=0;n<500;n++)jdbc.sql("INSERT INTO venue_reservation(applicant_id,request_key,venue_id,applicant_name,identity_number,contact_phone,department_name,venue_name,location_detail,activity_theme,expected_participants,starts_at,ends_at,status) SELECT applicant_id,:k,venue_id,applicant_name,identity_number,contact_phone,department_name,venue_name,location_detail,activity_theme,expected_participants,starts_at,ends_at,status FROM venue_reservation WHERE applicant_id=:u ORDER BY id LIMIT 1").param("k",UUID.randomUUID().toString()).param("u",f.user()).update();
+  var response=login(f.username()).get(RANGE);assertThat(response.statusCode()).isEqualTo(409);assertThat(response.body()).contains("SCHEDULE_TOO_DENSE");
+ }
  private record Fixture(String username,long user,long group){}
  private Fixture fixture(){String key=UUID.randomUUID().toString();String username="cal_"+key.substring(0,8);
   jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id,class_group_id) SELECT :n,password_hash,'日程学生',:n,1,1,1 FROM app_user WHERE username='20260001'").param("n",username).update();long u=jdbc.sql("SELECT id FROM app_user WHERE username=:n").param("n",username).query(Long.class).single();jdbc.sql("INSERT INTO user_role(user_id,role_code) VALUES(:u,'STUDENT')").param("u",u).update();

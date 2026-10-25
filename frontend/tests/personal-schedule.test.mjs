@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { safeLoginDestination, safeRecoveryDestination } from '../src/lib/navigation.ts'
 import { weekOf, addScheduleDays, splitScheduleDays, safeScheduleDestination, shanghaiDay } from '../src/lib/personalSchedule.ts'
 const event = (start, end, extra={}) => ({ key:'LEAVE:1',source:'LEAVE',sourceId:1,title:'已批准请假',startsAt:start,endsAt:end,location:'离校期间',status:'APPROVED',tentative:false,href:'/portal/leave?id=1&tab=details',overlapKeys:[],...extra })
 test('week navigation is Monday based across year, leap day and Sunday', () => {
@@ -25,4 +26,16 @@ test('deep links return to the correct source and reject injected or mismatched 
  assert.equal(safeScheduleDestination(event('','',{source:'EXAM',href:'/portal/learning/exams?term=1'})), '/portal/learning/exams?term=1')
  for (const href of ['javascript:alert(1)','https://evil.test','//evil.test','/admin/foundation','/portal/reservations?id=1&tab=details','/portal/leave?id=2&tab=details']) assert.equal(safeScheduleDestination(event('','',{href})),null)
  assert.equal(safeScheduleDestination(event('','',{source:'LESSON',href:'/portal/learning/timetable?term=1&week=2026-10-19'})), '/portal/learning/timetable?term=1&week=2026-10-19')
+})
+
+test('schedule links survive login and service recovery without allowing extra routes', () => {
+ const path='/portal/schedule?week=2026-10-19&source=LEAVE'
+ assert.equal(safeLoginDestination(path),path);assert.equal(safeRecoveryDestination(path),path)
+ assert.equal(safeLoginDestination('/portal/schedule/others'),null)
+})
+test('minute-only and fractional midnight timestamps produce the same day boundaries', () => {
+ for(const end of ['2026-10-20T00:00','2026-10-20T00:00:00.000']){
+  const days=splitScheduleDays([event('2026-10-19T09:00',end)],'2026-10-19')
+  assert.equal(days[0].events[0].endLabel,'24:00');assert.equal(days[1].events.length,0)
+ }
 })

@@ -55,3 +55,8 @@ for (const path of ['/portal', '/portal/learning', '/portal/leave', '/portal/cer
     assert.ifError(errors[0])
   })
 }
+
+test('personal schedule catches unavailable sources during initial load without setup errors', async () => {
+ const errors = await checkPageSetup('/portal/schedule')
+ assert.ifError(errors[0])
+})

@@ -68,6 +68,16 @@ class VenueCreationIntegrationTest {
   input.put("campusId",1);input.put("placeId","east-library");assertThat(ok(manager.send("POST","/api/reservations/venues",input)).path("campusId").asLong()).isEqualTo(1);
  }
  private long reviewer(){return jdbc.sql("SELECT id FROM app_user WHERE username='affairs1001'").query(Long.class).single();}
+ @Test void draftCannotOpenUntilAValidOwnerIsAssigned()throws Exception{
+  var input=form();input.put("enabled",false);input.put("managerUserIds",java.util.List.of());var manager=login("affairs1001");
+  var created=ok(manager.send("POST","/api/reservations/venues",input));long id=created.path("id").asLong();
+  var rejected=manager.send("PUT","/api/reservations/venues/"+id,Map.of("enabled",true));
+  assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(409);
+  assertThat(ok(manager.get("/api/reservations/venues/"+id)).path("enabled").asBoolean()).isFalse();
+  ok(manager.send("POST","/api/reservations/venues/"+id+"/managers",Map.of("userId",reviewer())));
+  ok(manager.send("PUT","/api/reservations/venues/"+id,Map.of("enabled",true)));
+  assertThat(ok(manager.get("/api/reservations/venues/"+id)).path("enabled").asBoolean()).isTrue();
+ }
  private java.util.HashMap<String,Object> form(){var input=new java.util.HashMap<String,Object>();input.put("campusId",2);input.put("code","WEST-"+UUID.randomUUID());input.put("name","西校区图书馆研讨室（演示）");input.put("category","VENUE");input.put("placeId","west-library");input.put("buildingName","图书馆");input.put("locationDetail","一层研讨区（演示配置）");input.put("capacity",30);input.put("availableEquipment","投影设备");input.put("rules","现场核对后使用");input.put("enabled",true);input.put("managerUserIds",java.util.List.of(reviewer()));return input;}
     private JsonNode ok(HttpResponse<String> response) throws Exception {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200);

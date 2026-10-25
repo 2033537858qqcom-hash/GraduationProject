@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BedDouble, Bell, BookOpen, Building2, CalendarCheck, ChartColumn, ClipboardCheck, ClipboardList, FileCheck2, House, LogOut, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
+import { BedDouble, Bell, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn, ClipboardCheck, ClipboardList, FileCheck2, House, LogOut, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
 import { currentUser, logout } from '../stores/auth'
 import { errorMessage } from '../lib/api'
 import SchoolIdentity from '../components/SchoolIdentity.vue'
@@ -58,6 +58,7 @@ async function leave() {
       <nav ref="navRef" class="portal-nav page-width" aria-label="校园服务导航">
         <template v-if="student">
           <RouterLink to="/portal" exact-active-class="selected"><House :size="16" aria-hidden="true" />学生首页</RouterLink>
+          <RouterLink to="/portal/schedule" :class="{ selected: route.path === '/portal/schedule' }"><CalendarDays :size="16" aria-hidden="true" />我的日程</RouterLink>
           <RouterLink to="/portal/learning" :class="{ selected: route.path.startsWith('/portal/learning') }"><BookOpen :size="16" aria-hidden="true" />学习与课表</RouterLink>
           <RouterLink to="/portal/affairs" :class="{ selected: ['/portal/affairs','/portal/leave','/portal/certificates'].some(p => route.path.startsWith(p)) }"><ClipboardList :size="16" aria-hidden="true" />我的办事</RouterLink>
           <RouterLink v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" :class="{ selected: route.path.startsWith('/portal/reservations') }"><CalendarCheck :size="16" aria-hidden="true" />场地借用</RouterLink>

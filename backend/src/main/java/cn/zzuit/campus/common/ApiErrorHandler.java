@@ -59,7 +59,8 @@ public class ApiErrorHandler {
             .body(Map.of("code", "DATA_CONFLICT", "message", "内容标识已存在或关联数据发生变化"));
     }
 
-    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
+    @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
+        org.springframework.web.bind.MissingServletRequestParameterException.class})
     ResponseEntity<Map<String, String>> malformedRequest(Exception ex, HttpServletRequest request) {
         LOG.warn("[BAD-REQ | 请求畸变] {} {} -> 参数类型或消息体格式不正确: {}", request.getMethod(), request.getRequestURI(), ex.getMessage());
         return ResponseEntity.badRequest()

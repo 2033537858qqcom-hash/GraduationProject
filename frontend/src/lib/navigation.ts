@@ -5,7 +5,7 @@ export function safeLoginDestination(value: unknown): string | null {
   if (path === '/' || path === '/campus/explore' || path === '/verify/certificate') return value
   if (/^\/content\/[a-z0-9][a-z0-9-]{0,79}$/.test(path)) return value
   if (/^\/assistant\/guides\/[a-z0-9][a-z0-9-]{0,79}$/.test(path)) return value
-  return /^\/(?:portal(?:\/(?:learning(?:\/(?:timetable|grades|exams))?|timetable|affairs|leave|certificates|notices|reservations))?|profile|workbench|notices|admin\/(?:content|foundation|resources|counselors|repair-settings|housing)|logistics\/(?:repair-responsibilities|repairs\/(?:dispatch|tasks|statistics))|repairs(?:\/mine)?|housing(?:\/(?:mine|assignments|transfer))?|teaching(?:\/timetable)?|academic|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(path) ? value : null
+  return /^\/(?:portal(?:\/(?:learning(?:\/(?:timetable|grades|exams))?|timetable|schedule|affairs|leave|certificates|notices|reservations))?|profile|workbench|notices|admin\/(?:content|foundation|resources|counselors|repair-settings|housing)|logistics\/(?:repair-responsibilities|repairs\/(?:dispatch|tasks|statistics))|repairs(?:\/mine)?|housing(?:\/(?:mine|assignments|transfer))?|teaching(?:\/timetable)?|academic|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(path) ? value : null
 }
 export function safeAffairDestination(value: unknown): string | null {
   if (typeof value !== 'string') return null

@@ -261,6 +261,7 @@ onBeforeUnmount(() => { persistDraft(); finishConfirmation(false); detailSequenc
       </div>
     </div>
     <nav ref="navRef" class="learning-tabs" :aria-label="teacher ? '教学服务栏目' : '学习服务栏目'">
+      <RouterLink v-if="!teacher" to="/portal/schedule"><CalendarDays :size="16" aria-hidden="true" />我的日程</RouterLink>
       <RouterLink :to="base" :class="{ selected: tab === 'courses' }"><BookOpen :size="16" aria-hidden="true" />{{ teacher ? '教学班与资料' : '课程与资料' }}</RouterLink>
       <RouterLink :to="base + '/timetable'" :class="{ selected: tab === 'timetable' }"><CalendarDays :size="16" aria-hidden="true" />{{ teacher ? '每周授课安排' : '每周课程表' }}</RouterLink>
       <RouterLink v-if="!teacher" :to="base + '/grades'" :class="{ selected: tab === 'grades' }"><GraduationCap :size="16" aria-hidden="true" />课程成绩查询</RouterLink>

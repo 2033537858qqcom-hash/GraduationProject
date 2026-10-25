@@ -66,6 +66,7 @@ const categories = [
 ]
 
 const services = computed<PortalServiceItem[]>(() => [
+  { to: '/portal/schedule', title: '我的校园日程', description: '汇总课程、考试、请假与预约，核对一周安排和时间重叠', icon: CalendarDays, categoryKey: 'ACADEMIC', category: '学业教学', badge: '统一日程', badgeType: 'primary', theme: 'blue' },
   {
     to: '/portal/reservations',
     title: '公共场地与设备借用',
@@ -265,7 +266,7 @@ onMounted(load)
           <h1>{{ overview.profile.fullName }}，你好。</h1>
           <p>{{ overview.profile.departmentName }} · {{ overview.profile.className }}</p>
           <div class="portal-welcome-actions">
-            <RouterLink to="/portal/learning/timetable" class="button primary compact"><CalendarDays :size="15" />我的课表</RouterLink>
+            <RouterLink to="/portal/schedule" class="button primary compact"><CalendarDays :size="15" />我的日程</RouterLink>
             <RouterLink to="/portal/affairs" class="text-button">查看我的办事 <ArrowUpRight :size="14" /></RouterLink>
           </div>
         </div>

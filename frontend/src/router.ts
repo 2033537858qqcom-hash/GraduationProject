@@ -27,6 +27,7 @@ export const router = createRouter({
       path: '/', component: () => import('./layouts/PortalLayout.vue'), meta: { authenticated: true },
       children: [
         { path: 'portal', component: () => import('./pages/StudentPortal.vue'), meta: { title: '学生服务中心', permission: 'portal:read' } },
+        { path: 'portal/schedule', component: () => import('./pages/PersonalSchedulePage.vue'), meta: { title: '我的日程', permission: 'portal:read' } },
         { path: 'portal/timetable', redirect: '/portal/learning/timetable' },
         { path: 'portal/learning', component: () => import('./pages/LearningPage.vue'), meta: { title: '课程与学习资料', permission: 'learning:read' } },
         { path: 'portal/learning/timetable', component: () => import('./pages/LearningPage.vue'), meta: { title: '每周课程表', permission: 'learning:read' } },

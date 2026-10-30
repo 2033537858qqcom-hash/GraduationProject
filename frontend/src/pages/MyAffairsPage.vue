@@ -65,7 +65,7 @@ function focusServices() {
 onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load() })
 </script>
 <template>
-  <div class="affairs-page">
+  <div class="affairs-page campus-affairs">
     <header class="affairs-heading">
       <div>
         <span class="affairs-eyebrow">学生服务中心</span>

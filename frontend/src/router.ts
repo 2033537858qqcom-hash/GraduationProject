@@ -4,8 +4,12 @@ import { safeLoginDestination } from './lib/navigation'
 
 export const router = createRouter({
   history: createWebHistory(),
-  scrollBehavior: (to, _from, savedPosition) => {
+  scrollBehavior: (to, from, savedPosition) => {
     if (savedPosition) return savedPosition
+    // Picking a campus place updates orientation in the URL without moving the page.
+    if (to.path === '/campus/explore' && from.path === '/campus/explore') return false
+    // Homepage chapter navigation owns its scroll position, including query-only changes.
+    if (to.path === '/' && (to.query.chapter || from.path === '/')) return false
     if (to.hash) return { el: to.hash, behavior: 'smooth' }
     return { top: 0 }
   },

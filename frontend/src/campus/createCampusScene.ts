@@ -1,4 +1,6 @@
 import * as THREE from 'three'
+import { watch } from 'vue'
+import { publicReducedMotion } from '../lib/publicMotion'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { buildCampus } from './buildCampus'
 import type { CampusPlace } from './manifest'
@@ -23,6 +25,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, options.campusId === 'WEST' ? 2500 : 1200)
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, logarithmicDepthBuffer: true })
   let disposed = false, contextLost = false, frame = 0
+  let stopSiteMotion = () => {}
   const resize = new ResizeObserver(size)
   let width = 1, height = 1, view: CampusView = 'overview', current: CampusPlace | undefined
   let transition: { start: number; from: THREE.Vector3; to: THREE.Vector3; targetFrom: THREE.Vector3; targetTo: THREE.Vector3 } | undefined
@@ -39,7 +42,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
   let down = { x: 0, y: 0 }, gesture = false
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.shadowMap.type = THREE.PCFShadowMap
   renderer.shadowMap.autoUpdate = false
   renderer.toneMapping = THREE.ACESFilmicToneMapping
   renderer.toneMappingExposure = 1.18
@@ -129,7 +132,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
     // Flush OrbitControls' residual damping before starting an intentional camera move.
     const damping = controls.enableDamping; controls.enableDamping = false; controls.update(); controls.enableDamping = damping
     setView(nextView)
-    if (instant || reduced.matches) { camera.position.copy(position); controls.target.copy(target); controls.update(); invalidate(); return }
+    if (instant || reduced.matches || publicReducedMotion.value) { camera.position.copy(position); controls.target.copy(target); controls.update(); invalidate(); return }
     transition = { start: performance.now(), from: camera.position.clone(), to: position, targetFrom: controls.target.clone(), targetTo: target }
     callbacks.moving(true); invalidate()
   }
@@ -180,7 +183,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
     move(center.clone().add(new THREE.Vector3(0,distance,0.1)), center, 'top', instant)
   }
   function onReducedMotion() {
-    if (reduced.matches && transition) move(transition.to, transition.targetTo, view, true)
+    if ((reduced.matches || publicReducedMotion.value) && transition) move(transition.to, transition.targetTo, view, true)
   }
   controls.addEventListener('change', invalidate); controls.addEventListener('start', interaction)
   renderer.domElement.addEventListener('pointerdown', pointerDown)
@@ -190,6 +193,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
   renderer.domElement.addEventListener('webglcontextlost', onContextLost)
   document.addEventListener('visibilitychange', visibility)
   reduced.addEventListener('change', onReducedMotion)
+  stopSiteMotion = watch(publicReducedMotion, onReducedMotion)
   resize.observe(host); size()
 
   function dispose() {
@@ -198,6 +202,7 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
     resize?.disconnect()
     document.removeEventListener('visibilitychange', visibility)
     reduced.removeEventListener('change', onReducedMotion)
+    stopSiteMotion()
     controls.removeEventListener('change', invalidate); controls.removeEventListener('start', interaction); controls.dispose()
     renderer.domElement.removeEventListener('pointerdown', pointerDown)
     renderer.domElement.removeEventListener('pointerup', pointerUp)

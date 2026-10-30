@@ -3,8 +3,9 @@ import { ArrowUpRight, MapPin } from '@lucide/vue'
 import { schoolHistory, schoolHistorySource } from '../content/schoolHistory'
 import type { School } from '../types'
 import type { SchoolPhoto } from '../content/schoolMedia'
-import CulturalOrnament from './CulturalOrnament.vue'
-import CulturalFrame from './CulturalFrame.vue'
+import LakeLight from './LakeLight.vue'
+import CampusContour from './CampusContour.vue'
+import { publicContentLink } from '../lib/publicReading'
 
 defineProps<{
   summary: string
@@ -15,28 +16,31 @@ defineProps<{
 
 <template>
   <div class="school-story">
-    <CulturalFrame :bottom="false" />
-    <CulturalOrnament motif="wenmai" class="story-wenmai" preserveAspectRatio="none" />
     <div class="chapter-body page-width school-story-inner">
+      <div class="story-prelude" data-reveal><div class="story-chapter-signature"><span class="cinema-eyebrow">01 / ABOUT ZUIT</span><CampusContour /></div><p>一方校园，<br>承载每一个向前的梦想。</p></div>
       <div class="story-composition">
-        <div class="story-introduction">
+        <div class="story-introduction" data-reveal>
           <span class="eyebrow">ABOUT ZUIT · SINCE 1997</span>
-          <h2 class="chapter-title">文脉相承<br>笃行向新</h2>
+          <h2 class="chapter-title">文脉相承<br><em>笃行向新</em></h2>
           <p class="story-summary">{{ summary }}</p>
           <div v-if="campuses.length" class="story-campuses" aria-label="学校校区">
             <MapPin :size="14" aria-hidden="true" /><span v-for="campus in campuses" :key="campus.id">{{ campus.name }}</span>
           </div>
-          <RouterLink class="chapter-link" to="/content/school-introduction">认识郑州工业应用技术学院 <ArrowUpRight :size="15" aria-hidden="true" /></RouterLink>
+          <RouterLink class="chapter-link" :to="publicContentLink('school-introduction', 'about')">认识郑州工业应用技术学院 <ArrowUpRight :size="15" aria-hidden="true" /></RouterLink>
         </div>
         <figure class="chapter-visual">
           <div class="story-photo-frame campus-photo">
+            <div class="story-image-plane">
             <img :src="media.url" :alt="media.alt" :width="media.width" :height="media.height" :style="{ objectPosition: media.position }" loading="lazy" decoding="async" />
+            <LakeLight :image-aspect="media.width / media.height" />
+            </div>
           </div>
           <figcaption class="campus-caption"><span>{{ media.label }}</span><small><a :href="media.sourceUrl" target="_blank" rel="noopener noreferrer">学校官网影像 <ArrowUpRight :size="12" aria-hidden="true" /></a></small></figcaption>
         </figure>
       </div>
       <div class="story-history">
-        <div class="story-history-heading"><span>时光为序</span><small>HISTORY & MILESTONES</small></div>
+        <div class="story-history-heading" data-reveal><span>时光为序</span><small>HISTORY & MILESTONES</small></div>
+        <span class="story-history-rule" aria-hidden="true"></span>
         <ol class="story-timeline" aria-label="学校历史沿革">
           <li v-for="event in schoolHistory" :key="event.year">
             <span class="story-year">{{ event.year }}</span>

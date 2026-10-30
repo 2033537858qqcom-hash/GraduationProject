@@ -15,7 +15,7 @@ before(async () => {
     configurable: true, value: { getItem: () => null },
   })
   Object.defineProperty(globalThis, 'window', {
-    configurable: true, value: { addEventListener() {}, removeEventListener() {} },
+    configurable: true, value: { location: { search: '' }, addEventListener() {}, removeEventListener() {} },
   })
   globalThis.fetch = async () => { throw new Error('Network disabled in page setup regression') }
   server = await createServer({
@@ -48,7 +48,7 @@ test('workbench initializes its task queue before starting filter watchers', asy
   assert.ifError(errors[0])
 })
 
-for (const path of ['/portal', '/portal/learning', '/portal/leave', '/portal/certificates', '/housing/mine',
+for (const path of ['/campus/explore', '/portal', '/portal/learning', '/portal/leave', '/portal/certificates', '/housing/mine',
   '/repairs/mine', '/academic', '/admin/content', '/admin/foundation', '/admin/resources']) {
   test(`page setup smoke: ${path}`, async () => {
     const errors = await checkPageSetup(path)
@@ -78,4 +78,48 @@ test('a detail link on the current reservation page fetches the selected applica
 test('a same-page mine list link applies the requested reservation status',async()=>{
  const paths=await reservationNavigationRequests('/portal/reservations?tab=mine&status=APPROVED')
  assert.ok(paths.some(path=>path.includes('/reservations/mine?')&&path.includes('status=APPROVED')),JSON.stringify(paths))
+})
+
+test('campus origin filters the venue API by its explicit place identity', async () => {
+ const paths = await reservationNavigationRequests('/portal/reservations?venue=east-library&origin=campus&place=east-library&campus=EAST&view=model&placeName=Library')
+ assert.ok(paths.some(path => path.startsWith('/api/reservations/venues?') && path.includes('placeId=east-library')), JSON.stringify(paths))
+})
+
+test('clearing the campus filter requests the full catalog while preserving the return origin', async () => {
+ const paths = await reservationNavigationRequests('/portal/reservations?origin=campus&place=east-library&campus=EAST&view=model')
+ assert.ok(paths.some(path => path.startsWith('/api/reservations/venues?') && !path.includes('placeId=')), JSON.stringify(paths))
+})
+
+test('repeated campus place query values cannot become a combined venue filter', async () => {
+ const paths = await reservationNavigationRequests('/portal/reservations?venue=east-library&venue=west-library')
+ assert.ok(paths.every(path => !path.includes('placeId=')), JSON.stringify(paths))
+})
+
+test('campus return restores the east library selection without starting a walking route', async () => {
+ let inspected = false
+ const errors = await checkPageSetup('/campus/explore?campus=EAST&view=model&focus=east-library', undefined, async state => {
+  inspected = true
+  assert.equal(state.currentPlace.value?.id, 'east-library')
+  assert.equal(state.mode.value, 'model')
+  assert.equal(state.routeActive.value, false)
+  const target = new URL(state.reservationTarget.value, 'https://campus.invalid')
+  assert.equal(target.searchParams.get('venue'), 'east-library')
+ })
+ assert.ifError(errors[0])
+ assert.equal(inspected, true)
+})
+
+test('west campus return keeps the independent sandbox and selected west library', async () => {
+ let inspected = false
+ const errors = await checkPageSetup('/campus/explore?campus=WEST&view=model&focus=west-library', undefined, async state => {
+  inspected = true
+  assert.equal(state.currentCampus.value, 'WEST')
+  assert.equal(state.currentPlace.value?.id, 'west-library')
+  assert.equal(state.mode.value, 'model')
+  assert.equal(state.routeActive.value, false)
+  const target = new URL(state.reservationTarget.value, 'https://campus.invalid')
+  assert.equal(target.searchParams.get('venue'), 'west-library')
+ })
+ assert.ifError(errors[0])
+ assert.equal(inspected, true)
 })

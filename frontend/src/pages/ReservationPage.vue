@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import ServiceJourney from '../components/ServiceJourney.vue'
+import { campusExploreReturn, campusPlaceId, campusServiceOrigin } from '../lib/campusServiceNavigation'
 import DownloadLink from '../components/DownloadLink.vue'
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   AlertTriangle,
@@ -75,6 +77,9 @@ import {
 
 const route = useRoute()
 const router = useRouter()
+const exploreOrigin = computed(() => campusServiceOrigin(route.query))
+const exploreReturn = computed(() => exploreOrigin.value ? campusExploreReturn(exploreOrigin.value) : null)
+const venueFilter = computed(() => campusPlaceId(route.query.venue))
 
 // Review mode determined by URL path (/student-affairs vs /portal)
 const reviewMode = computed(() => route.path.startsWith('/student-affairs'))
@@ -145,6 +150,12 @@ const scheduleLoading = ref(false)
 
 // Booking form modal & state
 const showBookingModal = ref(false)
+const bookingDialog = ref<HTMLDialogElement>()
+watch(showBookingModal, async open => {
+  if (!open) { bookingDialog.value?.close(); return }
+  await nextTick()
+  if (showBookingModal.value && bookingDialog.value && !bookingDialog.value.open) bookingDialog.value.showModal()
+})
 const editingReservationId = ref<number | null>(null)
 const conflictCheck = ref<ConflictResult | null>(null)
 const checkingConflict = ref(false)
@@ -302,19 +313,23 @@ async function closeBookingForm() {
 }
 
 // Load Venue Catalog
+let venueRequest = 0
 async function loadVenues() {
+  const request = ++venueRequest
   loading.value = true
   error.value = ''
+  venues.value = []
   try {
-    venues.value = await listVenues({
+    const result = await listVenues({
       category: venueCategory.value || undefined,
-      placeId: (route.query.venue as string) || undefined,
+      placeId: venueFilter.value || undefined,
       keyword: venueKeyword.value || undefined,
     })
+    if (request === venueRequest && activeTab.value === 'venues') venues.value = result
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (request === venueRequest && activeTab.value === 'venues') error.value = errorMessage(cause)
   } finally {
-    loading.value = false
+    if (request === venueRequest && activeTab.value === 'venues') loading.value = false
   }
 }
 
@@ -787,7 +802,7 @@ watch(() => [route.query.id, route.query.tab, route.query.status], async () => {
     }
   }
 })
-onBeforeUnmount(() => { detailRequest++; reservationNavigation++; void checkCurrentConflict(null) })
+onBeforeUnmount(() => { venueRequest++; bookingDialog.value?.close(); detailRequest++; reservationNavigation++; void checkCurrentConflict(null) })
 watch(() => route.fullPath, () => { if (!reservationSearchSelection(route.fullPath)) lastSearchSelection = ''; void applySearchSelection() })
 
 watch(() => route.query.venue, () => {
@@ -796,7 +811,7 @@ watch(() => route.query.venue, () => {
 </script>
 
 <template>
-  <div class="reservation-page">
+  <div class="reservation-page service-workflow service-reservation">
     <!-- Confirmation Dialog -->
     <dialog ref="dialog" class="foundation-dialog" aria-labelledby="res-dialog-heading" @cancel.prevent="finish(false)">
       <h2 id="res-dialog-heading">{{ confirmKind === 'leave' ? '处理未保存的内容' : '操作确认' }}</h2>
@@ -874,13 +889,14 @@ watch(() => route.query.venue, () => {
         </div>
       </div>
 
-      <div v-if="route.query.venue" class="filter-tag-tip">
-        <span>当前筛选三维校园地点：<strong>{{ route.query.venue }}</strong></span>
-        <button class="text-button" @click="router.replace({ query: { ...route.query, venue: undefined } }); loadVenues()">清除地点筛选</button>
+      <div v-if="exploreOrigin && exploreReturn" class="campus-return-banner"><div><small>来自校园探索</small><strong>{{ exploreOrigin.name }} · {{ exploreOrigin.campus === 'WEST' ? '西校区' : '东校区' }}</strong><p>{{ venueFilter ? '查看此地点关联的可借用资源，时段与办理条件以当前校验为准。' : '已清除地点筛选，当前显示全部可见资源。' }}</p></div><RouterLink :to="exploreReturn">返回所选地点 <MapPin :size="14" /></RouterLink></div>
+      <div v-if="venueFilter" class="filter-tag-tip">
+        <span>{{ exploreOrigin ? '已按所选地点筛选' : '已启用地点筛选' }}</span>
+        <button class="text-button" @click="router.replace({ query: { ...route.query, venue: undefined } })">清除地点筛选</button>
       </div>
 
       <p v-if="loading && !venues.length" class="loading-state" role="status">正在读取场地与设备资源…</p>
-      <p v-else-if="!loading && !venues.length" class="empty-state">未查询到符合条件的场地或设备资源。</p>
+      <p v-else-if="!loading && !venues.length" class="empty-state">{{ venueFilter ? '此地点暂无匹配的可借用资源，可清除地点筛选后查找其他场地。' : '未查询到符合条件的场地或设备资源。' }}</p>
 
       <div v-else class="venue-cards-grid" :class="{ 'is-loading': loading }">
         <article v-for="venue in venues" :key="venue.id" class="venue-card">
@@ -1135,6 +1151,7 @@ watch(() => route.query.venue, () => {
       </div>
 
       <p v-if="reviewUpdateNotice" class="alert" role="alert">{{ reviewUpdateNotice }}</p>
+      <ServiceJourney kind="RESERVATION" :status="selectedReservation.status" :reviewer="!isOwnReservation" />
 
       <!-- APPROVED: ELECTRONIC PASS (入场通行电子凭证) -->
       <div v-if="['APPROVED', 'IN_USE'].includes(selectedReservation.status) && new Date(selectedReservation.endsAt).getTime() > Date.now()" id="venue-access-pass" class="access-pass-card">
@@ -1315,18 +1332,19 @@ watch(() => route.query.venue, () => {
     </section>
 
     <!-- ==================== BOOKING MODAL (DRAWER/POPUP) ==================== -->
-    <div v-if="showBookingModal" class="modal-overlay" @click.self="closeBookingForm">
-      <div class="modal-card booking-modal-card" role="dialog" aria-labelledby="booking-modal-title">
+    <dialog v-if="showBookingModal" ref="bookingDialog" class="modal-overlay booking-dialog" aria-labelledby="booking-modal-title" @cancel.prevent="closeBookingForm" @click.self="closeBookingForm">
+      <div class="modal-card booking-modal-card">
         <div class="modal-header">
           <h2 id="booking-modal-title">
             <CalendarCheck :size="18" />
             {{ editingReservationId ? `修改借用申请 #${editingReservationId}` : '新建公共场地与设备借用' }}
           </h2>
-          <button class="close-icon-btn" @click="closeBookingForm">
+          <button type="button" class="close-icon-btn" aria-label="关闭借用申请表单" @click="closeBookingForm">
             <X :size="18" />
           </button>
         </div>
 
+        <ServiceJourney kind="RESERVATION" preparing />
         <form class="editor-form booking-form" @submit.prevent="handleSubmit">
           <div class="form-grid-two">
             <label>
@@ -1478,7 +1496,7 @@ watch(() => route.query.venue, () => {
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
 
     <!-- ==================== SCHEDULE VIEWER MODAL ==================== -->
     <div v-if="showScheduleModal && scheduleVenue" class="modal-overlay" @click.self="showScheduleModal = false">

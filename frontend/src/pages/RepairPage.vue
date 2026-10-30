@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DownloadLink from '../components/DownloadLink.vue'
+import ServiceJourney from '../components/ServiceJourney.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { Component } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router'
@@ -638,7 +639,7 @@ onBeforeUnmount(() => { sequence++; locationSequence++; clearPendingFaultFiles()
 </script>
 
 <template>
-  <div class="repair-workflow" :class="{ 'is-detail-open': mobileDetailOpen, 'is-editing': editing }">
+  <div class="repair-workflow service-workflow service-repair" :class="{ 'is-detail-open': mobileDetailOpen, 'is-editing': editing }">
     <header class="repair-page-heading">
       <div class="repair-page-title"><span class="repair-page-symbol"><Wrench :size="22" /></span><div><span class="eyebrow">校园设施服务</span><h1>{{ title }}</h1><p>{{ intro }}</p></div></div>
       <div class="repair-inline-actions"><RouterLink v-if="mode === 'dispatch'" class="button compact" to="/logistics/repairs/statistics">报修统计</RouterLink><button class="button compact repair-refresh" :disabled="busy || loading" @click="refresh"><RefreshCw :size="15" :class="{ 'is-refreshing': loading }" />刷新</button><button v-if="mode === 'mine' && !editing" class="button primary compact" :disabled="busy" @click="newDraft"><Plus :size="15" />新建报修</button></div>
@@ -669,6 +670,7 @@ onBeforeUnmount(() => { sequence++; locationSequence++; clearPendingFaultFiles()
       <section class="portal-panel repair-request-detail" aria-label="报修资料与处理" :aria-busy="loading">
         <button v-if="!editing" class="text-button repair-mobile-back" :disabled="busy" @click="showList"><ArrowLeft :size="16" />工单列表</button>
         <form v-if="editing" class="repair-workflow-form" @submit.prevent="save">
+          <ServiceJourney kind="REPAIR" :status="selected?.status" preparing />
           <div class="section-heading"><h2>{{ selected ? '编辑报修资料' : '新建校园报修' }}</h2><button type="button" class="text-button" :disabled="busy" @click="showList"><ArrowLeft :size="14" />工单列表</button></div>
           <p class="muted">先保存资料，核对后再提交。提交后地点与类别固定，联系方式仅对相关经办人员可见。</p>
           <fieldset :disabled="busy">

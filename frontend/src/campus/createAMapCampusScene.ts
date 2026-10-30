@@ -1,4 +1,5 @@
 import { loadAMap } from './amapSdk'
+import { publicReducedMotion } from '../lib/publicMotion'
 import type { LngLat, MapClick } from './amapSdk'
 import { campusPlaces } from './manifest'
 import type { CampusPlace } from './manifest'
@@ -46,7 +47,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     showBuildingBlock: !options.onCalibration,
     showLabel: true,
     resizeEnable: true,
-    animateEnable: !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    animateEnable: !publicReducedMotion.value && !window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     dragEnable: true,
     rotateEnable: true,
     pitchEnable: true,
@@ -135,7 +136,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       overlay.setEvening(night)
       overlay.visible(overlayModelActive)
       const next = frame()
-      map.setZoomAndCenter(next.zoom, next.center, false, 950)
+      map.setZoomAndCenter(next.zoom, next.center, publicReducedMotion.value, 950)
       map.setPitch(is25D ? defaultPitch : 0, false, 600)
       callbacks.view(is25D ? 'overview' : 'top')
       scheduleLabels()
@@ -154,7 +155,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       const overview = frame()
       const target = place ? getPlaceLngLat(place) : overview.center
       if (target) {
-        map.setZoomAndCenter(place ? 18.2 : overview.zoom, target, false, 650)
+        map.setZoomAndCenter(place ? 18.2 : overview.zoom, target, publicReducedMotion.value, 650)
         if (is25D) {
           map.setPitch(place ? 42 : defaultPitch, false, 500)
         }
@@ -185,7 +186,7 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
         map.setMapStyle(`amap://styles/${theme}`)
       }
     },
-    zoom(direction: 'in' | 'out') { overviewActive = false; map.setZoom(map.getZoom() + (direction === 'in' ? 0.5 : -0.5)); callbacks.view('free') },
+    zoom(direction: 'in' | 'out') { overviewActive = false; map.setZoom(map.getZoom() + (direction === 'in' ? 0.5 : -0.5), publicReducedMotion.value); callbacks.view('free') },
     setEvening(evening: boolean) {
       if (evening !== night) {
         night = evening

@@ -155,7 +155,12 @@ function handleKeydown(e: KeyboardEvent) {
       }
       break
     }
-    case 'Escape':
+    case 'Escape': {
+      e.preventDefault()
+      e.stopPropagation()
+      closeDropdown()
+      break
+    }
     case 'Tab': {
       closeDropdown()
       break

@@ -7,4 +7,5 @@ export const chapters = [
   { id: 'disclosure', name: '信息公开' },
 ]
 export const activeChapter = ref('home')
+export const chapterReadingProgress = ref(0)
 export const requestedChapter = ref({ id: 'home', sequence: 0 })

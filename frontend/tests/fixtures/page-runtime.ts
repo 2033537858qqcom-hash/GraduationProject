@@ -13,8 +13,10 @@ import AcademicPage from '../../src/pages/AcademicPage.vue'
 import ContentManager from '../../src/pages/ContentManager.vue'
 import FoundationPage from '../../src/pages/FoundationPage.vue'
 import ResourcesPage from '../../src/pages/ResourcesPage.vue'
+import CampusExplore from '../../src/pages/CampusExplore.vue'
 
 const pages = {
+  '/campus/explore': CampusExplore,
   '/portal/schedule': PersonalSchedulePage,
   '/portal/reservations': ReservationPage,
   '/workbench': WorkbenchPage,
@@ -31,12 +33,14 @@ const pages = {
 }
 
 // Use client setup semantics: SSR deliberately skips non-immediate watchers.
-export async function checkPageSetup(path: string, destination?: string) {
-  const page = pages[path as keyof typeof pages]
+export async function checkPageSetup(path: string, destination?: string, inspect?: (bindings: Record<string, unknown>) => Promise<void>) {
+  const basePath = path.split('?')[0]!
+  const page = pages[basePath as keyof typeof pages]
   const errors: unknown[] = []
+  let bindings: Record<string, unknown> | undefined
   const probe = defineComponent({
     setup(props, context) {
-      page.setup?.(props, context)
+      bindings = page.setup?.(props, context) as Record<string, unknown> | undefined
       return () => h('div')
     },
   })
@@ -54,7 +58,7 @@ export async function checkPageSetup(path: string, destination?: string) {
   })
   const router = createRouter({
     history: createMemoryHistory(),
-    routes: [{ path, component: probe }],
+    routes: [{ path: basePath, component: probe }],
   })
   const app = renderer.createApp(RouterView).use(router)
   // Vite's SFC module adds SSR metadata; setup itself still runs as a client.
@@ -69,6 +73,7 @@ export async function checkPageSetup(path: string, destination?: string) {
     await router.push(destination)
     for (let n = 0; n < 30; n++) { await Promise.resolve(); await nextTick() }
   }
-  app.unmount()
+  try { if (inspect && bindings) await inspect(bindings) }
+  finally { app.unmount() }
   return errors
 }

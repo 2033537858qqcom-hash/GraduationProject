@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
-  BedDouble, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn,
+  ArrowUpRight, RefreshCw, BedDouble, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn,
   ClipboardCheck, FileCheck2, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench
 } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
@@ -95,10 +95,14 @@ const repairResponsibilities = computed(() => currentUser.value?.permissions.som
 const housingConfiguration = computed(() => currentUser.value?.permissions.includes('housing:configure'))
 const housingDesk = computed(() => currentUser.value?.permissions.includes('housing:assign'))
 
-onMounted(async () => {
+let overviewRequest = 0
+async function loadOverview() {
+  const request = ++overviewRequest
   loading.value = true
+  error.value = ''
   try {
     const res = await api<WorkbenchOverview>('/workbench/overview')
+    if (request !== overviewRequest) return
     workspaces.value = res.workspaces || []
     initializeTasks(res)
 
@@ -109,21 +113,23 @@ onMounted(async () => {
       if (preferred) selectWorkspace(preferred.code)
     }
   } catch (cause) {
-    error.value = errorMessage(cause)
+    if (request === overviewRequest) error.value = errorMessage(cause)
   } finally {
-    loading.value = false
+    if (request === overviewRequest) loading.value = false
   }
-})
-onBeforeUnmount(invalidate)
+}
+onMounted(() => { void loadOverview() })
+onBeforeUnmount(() => { overviewRequest++; invalidate() })
 </script>
 
 <template>
-  <div class="workbench-page">
+  <div class="workbench-page campus-workbench">
+    <div class="workbench-toolbar"><span>WORKSPACE / 校园事务办理</span><button class="button compact" :disabled="loading || taskLoading" @click="loadOverview"><RefreshCw :size="14" />刷新工作台</button></div>
     <!-- 1. 工作空间切换栏 (R03: 多岗位显式切换) -->
     <div v-if="workspaces.length > 1" class="workspace-switch-wrap">
       <div class="workspace-switcher-header">
         <span class="switcher-label">当前工作空间：</span>
-        <div ref="workspaceControlRef" class="service-segmented-control" role="tablist" aria-label="工作空间切换">
+        <div ref="workspaceControlRef" class="service-segmented-control" role="group" aria-label="工作空间切换">
           <div class="service-segment-pill" :style="workspacePillStyle" aria-hidden="true"></div>
           <button
             v-for="ws in workspaces"
@@ -131,8 +137,7 @@ onBeforeUnmount(invalidate)
             type="button"
             class="service-segment-btn"
             :class="{ active: activeWorkspaceCode === ws.code }"
-            role="tab"
-            :aria-selected="activeWorkspaceCode === ws.code"
+            :aria-pressed="activeWorkspaceCode === ws.code"
             @click="selectWorkspace(ws.code)"
           >
             {{ ws.name }}
@@ -145,7 +150,7 @@ onBeforeUnmount(invalidate)
     <section class="student-welcome workbench-welcome">
       <div>
         <span class="portal-context">{{ activeWorkspace?.roleTitle ?? '岗位工作台' }} · {{ activeWorkspace?.name ?? '工作空间' }}</span>
-        <h1>{{ currentUser?.fullName }}，你好。</h1>
+        <h1>{{ activeWorkspace?.name ?? '岗位工作台' }}</h1>
         <p>
           <span v-if="currentUser?.departmentName && !activeWorkspace?.scopeNote.includes(currentUser.departmentName)">{{ currentUser.departmentName }} · </span>
           <span>{{ activeWorkspace?.scopeNote }}</span>
@@ -158,7 +163,7 @@ onBeforeUnmount(invalidate)
       </div>
     </section>
 
-    <p v-if="error" class="alert" role="alert">{{ error }}</p>
+    <p v-if="error" class="alert" role="alert">{{ error }} <button class="text-button" :disabled="loading" @click="loadOverview">重新读取工作台</button></p>
 
     <div class="workbench-dashboard">
     <div class="workbench-primary">
@@ -176,9 +181,9 @@ onBeforeUnmount(invalidate)
           <span v-else-if="totalPending > 0" class="service-badge badge-warning">共 {{ totalPending }} 项待处理</span>
           <span v-else class="service-badge badge-success">暂无待处理事项</span>
         </div>
-        <div v-if="!loading && !error && (totalPending > 0 || sourceErrors.length)" ref="taskFilterPillsRef" class="task-filter-pills" role="tablist" aria-label="待办任务分类筛选">
+        <div v-if="!loading && !error && (totalPending > 0 || sourceErrors.length)" ref="taskFilterPillsRef" class="task-filter-pills" role="group" aria-label="待办任务分类筛选">
           <button v-for="category in taskCategories" :key="category.domain" type="button" class="task-pill-btn"
-            role="tab" :aria-selected="taskFilter === category.domain" :class="{ active: taskFilter === category.domain }"
+            :aria-pressed="taskFilter === category.domain" :class="{ active: taskFilter === category.domain }"
             :disabled="taskLoading" @click="loadTasks(category.domain)">
             {{ category.label }} ({{ category.count }})
           </button>
@@ -211,7 +216,7 @@ onBeforeUnmount(invalidate)
             <span v-if="task.urgency === 'URGENT'" class="task-urgency-badge">
               紧急
             </span>
-            <span class="task-status-pill">{{ task.statusText }}</span>
+            <span class="task-status-pill" :data-status="task.status">{{ task.statusText }}</span>
           </div>
 
           <h3 class="task-title">{{ task.title }}</h3>
@@ -226,9 +231,9 @@ onBeforeUnmount(invalidate)
           </div>
 
           <div class="task-card-footer">
-            <span class="task-time">{{ formatTime(task.createdAt) }}</span>
+            <time class="task-time" :datetime="task.createdAt">{{ formatTime(task.createdAt) }}</time>
             <RouterLink :to="task.targetPath" class="task-action-btn">
-              去处理
+              查看并处理 <ArrowUpRight :size="13" />
             </RouterLink>
           </div>
         </article>

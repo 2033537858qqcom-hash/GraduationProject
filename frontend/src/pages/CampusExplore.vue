@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, ArrowRight, BedDouble, Boxes, Building2, CalendarCheck, Check, CloudSun, Compass, Dumbbell, Layers, LocateFixed, MapPin, Minus, Moon, Plus, Search, Stethoscope, Sun, Tag, Trees, Utensils, X } from '@lucide/vue'
 import { campusCategories, campusPlaces, campusTour } from '../campus/manifest'
@@ -11,18 +11,20 @@ import { westCampusMeta, eastCampusMeta, westCampusPlaces, westCampusTour, westU
 import { westPlanEvidence } from '../campus/westCampusPlan'
 import { createAMapCampusScene } from '../campus/createAMapCampusScene'
 import { loadAMap } from '../campus/amapSdk'
+import { campusPlaceId, campusReservationLink } from '../lib/campusServiceNavigation'
+import { publicReducedMotion } from '../lib/publicMotion'
 
 const route = useRoute()
 const router = useRouter()
 const surface = ref<HTMLDivElement>()
 const mapKey = import.meta.env.VITE_AMAP_KEY ?? ''
 const mapConfigured = /^[a-f\d]{32}$/i.test(mapKey)
-const requestedNavigation = typeof route.query.navigate === 'string' ? route.query.navigate : ''
+const requestedNavigation = typeof route.query.navigate === 'string' ? route.query.navigate : typeof route.query.focus === 'string' ? route.query.focus : ''
 const referenceOnlyNavigation = westCampusPlaces.some(p=>p.id===requestedNavigation) && !westMapPlaces.some(p=>p.id===requestedNavigation)
 const mode = ref<'map' | 'model'>(mapConfigured && route.query.view !== 'model' && !referenceOnlyNavigation ? 'map' : 'model')
 
 // Dual campus state
-const initialQueryCampus = (route.query.campus === 'WEST' || (typeof route.query.navigate === 'string' && route.query.navigate.startsWith('west-'))) ? 'WEST' : 'EAST'
+const initialQueryCampus = (route.query.campus === 'WEST' || requestedNavigation.startsWith('west-')) ? 'WEST' : 'EAST'
 const currentCampus = ref<'EAST' | 'WEST'>(initialQueryCampus)
 const activeMeta = computed(() => currentCampus.value === 'WEST' ? westCampusMeta : eastCampusMeta)
 const activeWestPlaces = computed(() => mode.value === 'model' ? westCampusPlaces : westMapPlaces)
@@ -62,7 +64,7 @@ async function surveyPlaces() {
 }
 const error = ref(''), loading = ref(true), search = ref('')
 const category = ref<CampusCategory | 'all'>('all')
-const selected = ref<string | null>(null)
+const selected = ref<string | null>(campusPlaceId(requestedNavigation))
 const view = ref<CampusView>('overview'), moving = ref(false), showLabels = ref(true), evening = ref(false)
 const labels = ref<PlaceLabel[]>([])
 const tourStep = ref<number | null>(null)
@@ -75,6 +77,8 @@ let generation = 0
 let sceneAbort: AbortController | undefined
 
 const currentPlace = computed(() => allPlaces.value.find(place => place.id === selected.value))
+const placeDetail = ref<HTMLElement>()
+const reservationTarget = computed(() => currentPlace.value ? campusReservationLink(currentPlace.value, currentCampus.value, mode.value) : null)
 const filteredPlaces = computed(() => activeCampusPlaces.value.filter(place =>
   (category.value === 'all' || place.category === category.value) &&
   `${place.name}${place.description}${place.features.join('')}`.includes(search.value.trim()),
@@ -93,17 +97,27 @@ function placeIcon(place: CampusPlace) {
 
 const tourPlace = computed(() => tourStep.value === null ? undefined : allPlaces.value.find(place => place.id === activeTour.value[tourStep.value!]))
 
-function locate(id: string, fromTour = false) {
+function locate(id: string, fromTour = false, syncQuery = true) {
   if (!fromTour) tourStep.value = null
   selected.value = id
   scene?.select(id)
   if (routeActive.value) {
     scene?.planRoute?.(id)
   }
+  if (syncQuery && (route.query.focus !== id || route.query.navigate)) void router.replace({ query: { ...route.query, campus: currentCampus.value, view: mode.value, focus: id, navigate: undefined } })
+}
+async function choosePlace(id: string) {
+  locate(id)
+  await nextTick()
+  if (window.innerWidth <= 600) {
+    placeDetail.value?.scrollIntoView({ behavior: publicReducedMotion.value ? 'auto' : 'smooth', block: 'start' })
+    placeDetail.value?.focus({ preventScroll: true })
+  }
 }
 
 function overview() {
   tourStep.value = null; selected.value = null; scene?.select(null)
+  void router.replace({ query: { ...route.query, focus: undefined, navigate: undefined } })
   if (routeActive.value) {
     routeActive.value = false
     scene?.clearRoute?.()
@@ -113,7 +127,7 @@ function overview() {
 function switchCampus(campus: 'EAST' | 'WEST', preserveNavigation = false) {
   if (currentCampus.value === campus) return
   currentCampus.value = campus
-  void router.replace({ query: { ...route.query, campus, navigate: preserveNavigation ? route.query.navigate : undefined } })
+  void router.replace({ query: { ...route.query, campus, navigate: preserveNavigation ? route.query.navigate : undefined, focus: preserveNavigation ? route.query.focus : undefined } })
   selected.value = null
   tourStep.value = null
   category.value = 'all'
@@ -139,7 +153,7 @@ function toggleRoute() {
   }
 }
 
-function applyNavigation(navId: string | null) {
+function applyNavigation(navId: string | null, walking = true) {
   if (!navId) return
   const referencePlace=westCampusPlaces.some(p=>p.id===navId), mapPlace=westMapPlaces.some(p=>p.id===navId)
   if(mode.value==='map' && referencePlace && !mapPlace) { changeMode('model',true); return }
@@ -150,8 +164,9 @@ function applyNavigation(navId: string | null) {
       switchCampus(place.campusId, true)
       if (mode.value === 'model') { selected.value = place.id; return }
     }
-    locate(place.id)
-    routeActive.value = mode.value === 'map'
+    if (!walking && routeActive.value) { scene?.clearRoute?.(); routeActive.value = false }
+    locate(place.id, false, false)
+    routeActive.value = walking && mode.value === 'map'
     if (routeActive.value) scene?.planRoute?.(place.id)
   }
 }
@@ -176,7 +191,7 @@ function changeMode(next: 'map' | 'model', preserveNavigation = false) {
   if (next !== mode.value) {
     routeActive.value = false; selected.value = null; tourStep.value = null; search.value = ''; mode.value = next
     void router.replace({ query: { ...route.query, campus: currentCampus.value, view: next === 'model' ? 'model' : undefined,
-      navigate:preserveNavigation?route.query.navigate:undefined } })
+      navigate:preserveNavigation?route.query.navigate:undefined, focus:preserveNavigation?route.query.focus:undefined } })
     void initScene()
   }
 }
@@ -217,6 +232,8 @@ async function initScene() {
     const initialNav = typeof route.query.navigate === 'string' ? route.query.navigate : null
     if (initialNav) {
       applyNavigation(initialNav)
+    } else if (typeof route.query.focus === 'string') {
+      applyNavigation(route.query.focus, false)
     } else if (selected.value) {
       scene.select(selected.value)
       if (routeActive.value) scene.planRoute?.(selected.value)
@@ -236,6 +253,9 @@ watch(() => route.query.navigate, newNav => {
     applyNavigation(newNav)
   }
 })
+watch(() => route.query.focus, focus => {
+  if (typeof focus === 'string' && focus !== selected.value) applyNavigation(focus, false)
+})
 
 watch(() => route.query.campus, newCampus => {
   if (newCampus === 'WEST' || newCampus === 'EAST') {
@@ -252,7 +272,8 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
 </script>
 
 <template>
-  <div class="explore-page page-width">
+  <div class="explore-page page-width campus-explore">
+    <div class="explore-context-bar"><RouterLink to="/?chapter=life"><ArrowLeft :size="13" />返回校园生活</RouterLink><span>SPACE / LEARNING / EVERYDAY</span></div>
     <div class="exploration-heading">
       <div class="heading-meta">
         <span class="eyebrow">{{ activeMeta.englishName }} · 郑州工业应用技术学院</span>
@@ -418,10 +439,10 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
         <label class="exploration-search"><Search :size="16" /><input v-model="search" aria-label="搜索校园地点" placeholder="搜索建筑、景观或设施" /><button v-if="search" aria-label="清空搜索" @click="search = ''"><X :size="14" /></button></label>
         <div class="place-categories" role="group" aria-label="地点分类"><button v-for="item in campusCategories" :key="item.id" :aria-pressed="category === item.id" @click="category = item.id">{{ item.label }}</button></div>
         <div class="place-results" aria-label="地点搜索结果">
-          <button v-for="place in filteredPlaces" :key="place.id" class="place-directory-item" :class="{ selected: selected === place.id }" :aria-pressed="selected === place.id" @click="locate(place.id)"><component :is="placeIcon(place)" :size="17" /><span>{{ place.name }}</span><MapPin v-if="selected === place.id" :size="14" /><ArrowRight v-else :size="13" class="place-arrow" /></button>
+          <button v-for="place in filteredPlaces" :key="place.id" class="place-directory-item" :class="{ selected: selected === place.id }" :aria-pressed="selected === place.id" @click="choosePlace(place.id)"><component :is="placeIcon(place)" :size="17" /><span>{{ place.name }}</span><MapPin v-if="selected === place.id" :size="14" /><ArrowRight v-else :size="13" class="place-arrow" /></button>
           <div v-if="!filteredPlaces.length" class="place-empty"><Search :size="22" /><p>没有找到匹配地点</p><button @click="search = ''; category = 'all'">查看全部地点</button></div>
         </div>
-        <div v-if="currentPlace" class="place-detail" aria-live="polite">
+        <div v-if="currentPlace" ref="placeDetail" class="place-detail" aria-live="polite" tabindex="-1">
           <span class="place-category-label">{{ categoryNames[currentPlace.category] }}</span>
           <h3>{{ currentPlace.name }}</h3>
           <p>{{ currentPlace.description }}</p>
@@ -434,7 +455,7 @@ onUnmounted(() => { generation++; sceneAbort?.abort(); scene?.dispose() })
             <span>{{ routeActive ? '清除校内路线' : (currentCampus === 'WEST' ? '从校区停车场规划步行路线' : '从正门规划步行路线') }}</span>
           </button>
           <button v-if="relatedPlace" class="related-place" @click="locate(relatedPlace.id)">同组团地点：{{ relatedPlace.name }}<ArrowRight :size="12" /></button>
-          <router-link to="/portal/reservations" class="reserve-btn"><CalendarCheck :size="13" /><span>场地预约服务</span><ArrowRight :size="12" /></router-link>
+          <RouterLink v-if="reservationTarget" :to="reservationTarget" class="reserve-btn"><CalendarCheck :size="13" /><span>查找此地点的可借用资源</span><ArrowRight :size="12" /></RouterLink>
           <small>{{ currentPlace.campusId === 'WEST' ? mode === 'model' ? '名称与位置关系依据校内平面示意图，楼体为图示块体；不是测绘轮廓，未赋予精确地图坐标。' : '位置依据高德收录，可能含历史或重名记录；请同时对照校内平面图。' : currentPlace.locationType === 'point' ? '符号表示图示位置，未确认独立楼体轮廓、楼层或入口。' : '建筑轮廓与功能分区为示意，高度和楼层未实测；可用场地以预约服务中的清单为准。' }}</small>
           <a class="place-source" :href="currentPlace.sourceUrl" target="_blank" rel="noopener noreferrer">{{ currentPlace.campusId === 'WEST' ? mode === 'model' ? '对照西校区平面图' : '查看高德地点来源' : currentPlace.verification === 'reference-located' ? '查看高德地图定位' : '对照实景地图轮廓' }}<ArrowRight :size="12" /></a>
         </div>

@@ -1,39 +1,63 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { BedDouble, Bell, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn, ClipboardCheck, ClipboardList, FileCheck2, House, LogOut, NotebookPen, Newspaper, UserRound, Users, UsersRound, Wrench } from '@lucide/vue'
+import { ArrowUpRight, Bell, LogOut, Menu, X } from '@lucide/vue'
 import { currentUser, logout } from '../stores/auth'
 import { errorMessage } from '../lib/api'
+import { currentPortalNavigation, portalNavigation } from '../lib/portalNavigation'
 import SchoolIdentity from '../components/SchoolIdentity.vue'
-import CulturalFrame from '../components/CulturalFrame.vue'
-import CulturalOrnament from '../components/CulturalOrnament.vue'
+import CampusContour from '../components/CampusContour.vue'
+import PortalNavigation from '../components/PortalNavigation.vue'
 import AssistantChat from '../components/AssistantChat.vue'
 import UserAvatar from '../components/UserAvatar.vue'
-import { useSlidingIndicator } from '../composables/useSlidingIndicator'
+import { initializePublicMotion, publicMotionPreference, publicReducedMotion, setPublicMotionPreference } from '../lib/publicMotion'
 
 const router = useRouter()
 const route = useRoute()
 const error = ref('')
 const leaving = ref(false)
-const navRef = ref<HTMLElement | null>(null)
-const { indicatorStyle } = useSlidingIndicator(navRef, () => route.fullPath)
+const opened = ref(false)
+const drawer = ref<HTMLDialogElement>()
+const menuButton = ref<HTMLButtonElement>()
+const groups = computed(() => portalNavigation(currentUser.value?.permissions ?? []))
+const selected = computed(() => currentPortalNavigation(groups.value, route.path))
 const student = computed(() => currentUser.value?.permissions.includes('portal:read'))
-const content = computed(() => currentUser.value?.permissions.some(p => p.startsWith('content:')))
-const foundation = computed(() => currentUser.value?.permissions.includes('foundation:manage'))
-const counselor = computed(() => currentUser.value?.permissions.includes('leave:review'))
-const affairs = computed(() => currentUser.value?.permissions.includes('certificate:review'))
-const reservationReviewer = computed(() => currentUser.value?.permissions.includes('reservation:review'))
-const repairConfiguration = computed(() => currentUser.value?.permissions.includes('repair:configure'))
-const repairResponsibilities = computed(() => currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work'))
-const housingConfiguration = computed(() => currentUser.value?.permissions.includes('housing:configure'))
-const housingDesk = computed(() => currentUser.value?.permissions.includes('housing:assign'))
-const hasStaffCapabilities = computed(() => currentUser.value?.permissions.some(p => 
-  ['teaching:manage', 'academic:manage', 'leave:review', 'certificate:review', 'reservation:review',
-   'housing:review', 'housing:assign', 'housing:configure', 'repair:dispatch', 'repair:work',
-   'repair:configure', 'foundation:manage', 'content:edit', 'content:review'].includes(p)
-))
-const workspace = computed(() => foundation.value ? '管理员工作台' : counselor.value ? '辅导员工作台' : affairs.value ? '学生事务工作台' : currentUser.value?.permissions.includes('teaching:manage') ? '教师工作台' : currentUser.value?.permissions.includes('academic:manage') ? '教务工作台' : currentUser.value?.permissions.includes('repair:dispatch') ? '后勤工作台' : currentUser.value?.permissions.includes('repair:work') ? '维修工作台' : housingDesk.value ? '宿管工作台' : '岗位工作台')
-const identity = computed(() => (student.value && hasStaffCapabilities.value) ? '多岗位协同' : foundation.value ? '管理员入口' : student.value ? '学生入口' : counselor.value ? '辅导员入口' : affairs.value ? '学生事务入口' : currentUser.value?.permissions.includes('teaching:manage') ? '教师入口' : currentUser.value?.permissions.includes('academic:manage') ? '教务入口' : currentUser.value?.permissions.includes('repair:dispatch') ? '后勤入口' : currentUser.value?.permissions.includes('repair:work') ? '维修入口' : housingDesk.value ? '宿管入口' : '岗位入口')
+let previousOverflow: string | undefined
+let desktop: MediaQueryList | undefined
+let releaseMotion = () => {}
+function unlockScroll() {
+  if (previousOverflow === undefined) return
+  document.body.style.overflow = previousOverflow
+  previousOverflow = undefined
+}
+async function openMenu() {
+  if (!drawer.value || drawer.value.open) return
+  drawer.value?.showModal()
+  previousOverflow = document.body.style.overflow
+  document.body.style.overflow = 'hidden'
+  opened.value = true
+  await nextTick()
+  drawer.value?.querySelector<HTMLAnchorElement>('[aria-current="page"]')?.focus()
+}
+function closeMenu() { drawer.value?.close() }
+function menuClosed() {
+  unlockScroll()
+  opened.value = false
+  if (menuButton.value?.getClientRects().length) menuButton.value.focus({ preventScroll: true })
+}
+function desktopChanged() { if (desktop?.matches) closeMenu() }
+watch(() => route.fullPath, closeMenu)
+onMounted(() => {
+  releaseMotion = initializePublicMotion()
+  desktop = window.matchMedia('(min-width: 1025px)')
+  desktop.addEventListener('change', desktopChanged)
+})
+onBeforeUnmount(() => {
+  releaseMotion()
+  closeMenu()
+  unlockScroll()
+  desktop?.removeEventListener('change', desktopChanged)
+})
 async function leave() {
   leaving.value = true
   error.value = ''
@@ -41,68 +65,33 @@ async function leave() {
   finally { leaving.value = false }
 }
 </script>
+
 <template>
-  <div class="portal-shell">
-    <header class="portal-header">
-      <CulturalFrame class="brand-frame" />
-      <CulturalOrnament motif="landscape" class="portal-header-landscape" preserveAspectRatio="none" />
-      <CulturalOrnament motif="birds" class="portal-header-birds" />
-      <div class="page-width portal-top">
-        <RouterLink to="/" class="portal-school" aria-label="郑州工业应用技术学院官网"><SchoolIdentity /><small>校园综合服务平台 · {{ identity }}</small></RouterLink>
-        <div class="account-controls">
-          <RouterLink :to="student ? '/portal/notices' : '/notices'" class="account-action"><Bell :size="17" aria-hidden="true" /><span>消息通知</span></RouterLink>
-          <RouterLink to="/profile" class="account-action"><UserAvatar :src="currentUser?.avatarUrl" :name="currentUser?.fullName ?? ''" size="sm" /><span class="account-name">{{ currentUser?.fullName }}</span><span>个人资料</span></RouterLink>
-          <button class="account-action" :disabled="leaving" @click="leave"><LogOut :size="17" aria-hidden="true" /><span>{{ leaving ? '正在退出…' : '退出登录' }}</span></button>
+  <div class="portal-shell campus-portal" :class="{ 'public-motion-reduced': publicReducedMotion }">
+    <a class="portal-skip-link" href="#portal-main">跳到主要内容</a>
+    <aside class="portal-sidebar" aria-label="校园服务侧栏">
+      <RouterLink to="/" class="portal-sidebar-brand" aria-label="郑州工业应用技术学院官网"><SchoolIdentity /><span>校园综合服务平台</span></RouterLink>
+      <PortalNavigation :groups="groups" :active="selected?.item.to" label="校园服务导航" />
+      <div class="portal-sidebar-foot"><CampusContour /><p>励学敦行 · 明理至善</p><RouterLink to="/">访问学校官网 <ArrowUpRight :size="13" /></RouterLink></div>
+    </aside>
+    <div class="portal-workspace">
+      <header class="portal-header portal-toolbar">
+        <button ref="menuButton" class="portal-menu-button" aria-label="打开服务导航" aria-haspopup="dialog" aria-controls="portal-mobile-navigation" :aria-expanded="opened" @click="openMenu"><Menu :size="21" /></button>
+        <div class="portal-location"><span>{{ selected?.group.label ?? '校园服务' }}</span><strong>{{ selected?.item.label ?? route.meta.title ?? '校园综合服务平台' }}</strong></div>
+        <div class="portal-account-controls">
+          <button class="portal-motion-toggle" :aria-pressed="publicMotionPreference === 'reduce'" @click="setPublicMotionPreference(publicMotionPreference === 'reduce' ? 'auto' : 'reduce')"><span aria-hidden="true"></span>减少动态</button>
+          <RouterLink :to="student ? '/portal/notices' : '/notices'" class="portal-account-action" aria-label="消息通知"><Bell :size="18" /><span>消息</span></RouterLink>
+          <RouterLink to="/profile" class="portal-account-action portal-profile-action" :aria-label="'个人资料：' + (currentUser?.fullName ?? '')"><UserAvatar :src="currentUser?.avatarUrl" :name="currentUser?.fullName ?? ''" size="sm" /><span>{{ currentUser?.fullName }}</span></RouterLink>
+          <button class="portal-account-action portal-logout" :disabled="leaving" :aria-label="leaving ? '正在退出登录' : '退出登录'" @click="leave"><LogOut :size="17" /><span>{{ leaving ? '退出中…' : '退出' }}</span></button>
         </div>
-      </div>
-      <nav ref="navRef" class="portal-nav page-width" aria-label="校园服务导航">
-        <template v-if="student">
-          <RouterLink to="/portal" exact-active-class="selected"><House :size="16" aria-hidden="true" />学生首页</RouterLink>
-          <RouterLink to="/portal/schedule" :class="{ selected: route.path === '/portal/schedule' }"><CalendarDays :size="16" aria-hidden="true" />我的日程</RouterLink>
-          <RouterLink to="/portal/learning" :class="{ selected: route.path.startsWith('/portal/learning') }"><BookOpen :size="16" aria-hidden="true" />学习与课表</RouterLink>
-          <RouterLink to="/portal/affairs" :class="{ selected: ['/portal/affairs','/portal/leave','/portal/certificates'].some(p => route.path.startsWith(p)) }"><ClipboardList :size="16" aria-hidden="true" />我的办事</RouterLink>
-          <RouterLink v-if="currentUser?.permissions.includes('reservation:apply')" to="/portal/reservations" :class="{ selected: route.path.startsWith('/portal/reservations') }"><CalendarCheck :size="16" aria-hidden="true" />场地借用</RouterLink>
-          <RouterLink
-            v-if="currentUser?.permissions.includes('housing:read')"
-            to="/housing/mine"
-            :class="{ selected: route.path.startsWith('/housing/mine') || route.path.startsWith('/housing/transfer') }"
-          >
-            <BedDouble :size="16" aria-hidden="true" />我的住宿与调宿
-          </RouterLink>
-          <RouterLink v-if="hasStaffCapabilities" to="/workbench" :class="{ selected: route.path.startsWith('/workbench') }">
-            <House :size="16" aria-hidden="true" />岗位工作台
-          </RouterLink>
-        </template>
-        <RouterLink v-else to="/workbench" exact-active-class="selected"><House :size="16" aria-hidden="true" />{{ workspace }}</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('teaching:manage')" to="/teaching" :class="{ selected: route.path.startsWith('/teaching') }"><BookOpen :size="16" aria-hidden="true" />教学班与资料</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('academic:manage')" to="/academic" :class="{ selected: route.path.startsWith('/academic') }"><NotebookPen :size="16" aria-hidden="true" />教务信息维护</RouterLink>
-        <RouterLink v-if="counselor" to="/student-affairs/leave" :class="{ selected: route.path.startsWith('/student-affairs/leave') }"><ClipboardCheck :size="16" aria-hidden="true" />班级请假处理</RouterLink>
-        <RouterLink v-if="affairs" to="/student-affairs/certificates" :class="{ selected: route.path.startsWith('/student-affairs/certificates') }"><FileCheck2 :size="16" aria-hidden="true" />学院证明申请处理</RouterLink>
-        <RouterLink v-if="reservationReviewer" to="/student-affairs/reservations" :class="{ selected: route.path.startsWith('/student-affairs/reservations') }"><CalendarCheck :size="16" aria-hidden="true" />借用审批</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('housing:review')" to="/student-affairs/housing" :class="{ selected: route.path.startsWith('/student-affairs/housing') }"><BedDouble :size="16" aria-hidden="true" />学院调宿初审</RouterLink>
-        <RouterLink v-if="content" to="/admin/content" :class="{ selected: route.path.startsWith('/admin/content') }"><Newspaper :size="16" aria-hidden="true" />官网内容管理</RouterLink>
-        <RouterLink v-if="foundation" to="/admin/foundation" :class="{ selected: route.path.startsWith('/admin/foundation') }"><Users :size="16" aria-hidden="true" />账号与组织管理</RouterLink>
-        <RouterLink v-if="foundation" to="/admin/resources" :class="{ selected: route.path.startsWith('/admin/resources') }"><Building2 :size="16" aria-hidden="true" />教室资源目录</RouterLink>
-        <RouterLink v-if="foundation" to="/admin/counselors" :class="{ selected: route.path.startsWith('/admin/counselors') }"><UsersRound :size="16" aria-hidden="true" />辅导员负责班级</RouterLink>
-        <RouterLink v-if="repairConfiguration" to="/admin/repair-settings" :class="{ selected: route.path.startsWith('/admin/repair-settings') }"><Wrench :size="16" aria-hidden="true" />报修配置</RouterLink>
-        <RouterLink v-if="housingConfiguration" to="/admin/housing" :class="{ selected: route.path.startsWith('/admin/housing') }"><BedDouble :size="16" aria-hidden="true" />宿舍资源</RouterLink>
-        <RouterLink v-if="housingDesk" to="/housing/assignments" :class="{ selected: route.path.startsWith('/housing/assignments') }"><BedDouble :size="16" aria-hidden="true" />住宿办理</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('repair:apply')" to="/repairs/mine" :class="{ selected: route.path.startsWith('/repairs/mine') }"><Wrench :size="16" aria-hidden="true" />我的校园报修</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('repair:dispatch')" to="/logistics/repairs/dispatch" :class="{ selected: route.path.startsWith('/logistics/repairs/dispatch') }"><Wrench :size="16" aria-hidden="true" />后勤分诊派单</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('repair:dispatch')" to="/logistics/repairs/statistics" :class="{ selected: route.path.startsWith('/logistics/repairs/statistics') }"><ChartColumn :size="16" aria-hidden="true" />报修统计</RouterLink>
-        <RouterLink v-if="currentUser?.permissions.includes('repair:work')" to="/logistics/repairs/tasks" :class="{ selected: route.path.startsWith('/logistics/repairs/tasks') }"><Wrench :size="16" aria-hidden="true" />我的维修任务</RouterLink>
-        <RouterLink v-if="repairResponsibilities" to="/logistics/repair-responsibilities" :class="{ selected: route.path.startsWith('/logistics/repair-responsibilities') }"><Wrench :size="16" aria-hidden="true" />我的负责范围</RouterLink>
-        <RouterLink to="/profile" :class="{ selected: route.path.startsWith('/profile') }"><UserRound :size="16" aria-hidden="true" />个人资料</RouterLink>
-        <div class="portal-nav-indicator" :style="indicatorStyle" aria-hidden="true"></div>
-      </nav>
-    </header>
-    <p v-if="error" class="alert page-width" role="alert">{{ error }}</p>
-    <div class="portal-content-wrap">
-      <CulturalFrame class="portal-frame" />
-      <CulturalOrnament motif="cloud" class="portal-edge-cloud" />
-      <main class="portal-main page-width"><RouterView /></main>
+      </header>
+      <p v-if="error" class="alert page-width" role="alert">{{ error }}</p>
+      <main id="portal-main" class="portal-main page-width" tabindex="-1"><RouterView /></main>
+      <footer class="portal-footer page-width"><span>校园综合服务平台 <small>毕业设计演示 · 个人记录为演示数据</small></span><RouterLink to="/">学校官网 <ArrowUpRight :size="12" /></RouterLink></footer>
     </div>
-    <footer class="portal-footer page-width">毕业设计演示 · 个人记录为演示数据 <RouterLink to="/">学校官网</RouterLink></footer>
+    <dialog id="portal-mobile-navigation" ref="drawer" class="portal-navigation-drawer" aria-labelledby="portal-drawer-title" @close="menuClosed" @click.self="closeMenu">
+      <div class="portal-drawer-sheet"><div class="portal-drawer-heading"><div><span>CAMPUS SERVICES</span><h2 id="portal-drawer-title">校园服务导航</h2></div><button aria-label="关闭服务导航" @click="closeMenu"><X :size="22" /></button></div><PortalNavigation :groups="groups" :active="selected?.item.to" label="手机校园服务导航" @navigate="closeMenu" /><button class="portal-motion-toggle portal-drawer-motion" :aria-pressed="publicMotionPreference === 'reduce'" @click="setPublicMotionPreference(publicMotionPreference === 'reduce' ? 'auto' : 'reduce')"><span aria-hidden="true"></span>减少动态</button><RouterLink class="portal-drawer-home" to="/" @click="closeMenu">返回学校官网 <ArrowUpRight :size="14" /></RouterLink></div>
+    </dialog>
     <AssistantChat />
   </div>
 </template>

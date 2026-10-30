@@ -1,5 +1,6 @@
 import { reservationSearchSelection } from './reservationSearch.ts'
 import { reservationStatuses } from '../reservations.ts'
+import { safeCampusExploreDestination } from './campusServiceNavigation.ts'
 export interface AssistantContext { type: 'LEAVE_MINE' | 'LEAVE_REVIEW' | 'CERTIFICATE_MINE' | 'CERTIFICATE_REVIEW' | 'REPAIR_MINE' | 'REPAIR_DISPATCH' | 'REPAIR_WORK' | 'HOUSING_MINE' | 'RESERVATION_MINE'; id: number }
 export interface AssistantGuide { slug: string; title: string; body: string; version: number; updatedAt: string; targetPath: string }
 export interface AssistantFact { key: string; title: string; description: string; targetPath: string | null }
@@ -22,7 +23,7 @@ export function safeAssistantDestination(value: unknown): string | null {
   if (/^\/(?:portal\/learning\/(?:timetable|grades|exams)|teaching\/timetable)\?term=[1-9]\d{0,14}(?:&week=\d{4}-\d{2}-\d{2})?$/.test(value)) return value
   if (/^\/(?:portal\/(?:leave|certificates|reservations)|student-affairs\/(?:leave|certificates|housing|reservations)|repairs\/mine|housing\/(?:transfer|assignments)|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value)) return value
   if (/^\/(?:repairs\/mine|logistics\/repairs\/(?:dispatch|tasks))$/.test(value)) return value
-  if (/^\/campus\/explore(?:\?navigate=[a-z0-9-]+)?$/.test(value)) return value
+  if (safeCampusExploreDestination(value)) return value
   return null
 }
 export function assistantContextLabel(context: AssistantContext | null) {

@@ -1,0 +1,243 @@
+/* Business surfaces share the portal's paper and ink; domain status rules stay explicit. */
+#portal-main .service-workflow, #portal-main .campus-affairs, #portal-main .campus-workbench { color: #334b3c; min-width: 0; }
+#portal-main .service-workflow :is(.page-heading-row, .repair-page-heading), #portal-main .campus-affairs .affairs-heading { gap: 20px; margin-bottom: 24px; align-items: center; }
+#portal-main .service-workflow .page-heading-row { display: flex; flex-direction: row; justify-content: space-between; flex-wrap: wrap; }
+#portal-main .service-workflow .page-heading-row > .form-actions { padding: 0; margin: 0; }
+#portal-main .service-workflow :is(.page-heading-row, .repair-page-heading) h1, #portal-main .campus-affairs .affairs-heading h1 { color: #31533e; font-family: var(--campus-serif); font-size: clamp(26px, 2.5vw, 32px); font-weight: 400; line-height: 1.6; letter-spacing: 1px; }
+#portal-main .service-workflow :is(.portal-context, .eyebrow), #portal-main .campus-affairs .affairs-eyebrow { color: #829174; font-size: 10px; letter-spacing: 1px; }
+#portal-main .service-workflow :is(.page-heading-row, .repair-page-heading) p, #portal-main .campus-affairs .affairs-heading p { font-size: 12px; line-height: 1.9; color: #78856e; }
+#portal-main .service-workflow :is(.portal-panel, .repair-config-card, .repair-editor), #portal-main .campus-affairs .portal-panel { background: #fdfdf9; border: 1px solid #dce3d2; border-radius: 6px; box-shadow: none; }
+#portal-main .service-workflow .portal-panel { padding: 24px; margin-bottom: 22px; min-width: 0; }
+#portal-main .service-workflow :is(section, form, fieldset, figure, .modal-card) { min-width: 0; }
+#portal-main .service-workflow :is([id], .leave-detail, .reservation-detail-panel, .repair-detail-panel) { scroll-margin-top: 95px; }
+#portal-main .service-workflow :is(h2, h3) { color: #405c39; }
+#portal-main .service-workflow h2 { font-size: 18px; font-weight: 500; line-height: 1.7; }
+#portal-main .service-workflow h3 { font-size: 14px; font-weight: 500; }
+#portal-main .service-workflow .muted { color: #7b886f; font-size: 12px; line-height: 1.9; }
+#portal-main .service-workflow .data-note { color: #8c987f; font-size: 11px; line-height: 1.9; }
+#portal-main .service-workflow .button, #portal-main .campus-affairs .button { min-height: 35px; gap: 8px; border-radius: 5px; border-color: #d2ddc6; background: #fdfef8; color: #506b41; box-shadow: none; font-size: 12px; line-height: 1.6; white-space: normal; }
+#portal-main .service-workflow .button:hover:not(:disabled), #portal-main .campus-affairs .button:hover:not(:disabled) { transform: none; box-shadow: none; filter: none; background: #eff3e5; border-color: #a3b78f; }
+#portal-main .service-workflow .button.primary, #portal-main .campus-affairs .button.primary { background: #315244; border-color: #315244; color: #fff; }
+#portal-main .service-workflow .button.primary:hover:not(:disabled), #portal-main .campus-affairs .button.primary:hover:not(:disabled) { background: #244332; border-color: #244332; }
+#portal-main .service-workflow .button.danger { color: #934e42; border-color: #dfbbae; background: #fff9f5; }
+#portal-main .service-workflow .text-button { color: #5d7d47; font-size: 12px; }
+#portal-main .service-workflow .form-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+#portal-main .service-workflow :is(.editor-form, .leave-review-form, .booking-form, .repair-editor) > .form-actions { padding-top: 20px; margin-top: 22px; border-top: 1px solid #dce4d0; }
+#portal-main .service-workflow :is(.foundation-filters, .leave-filters, .repair-list-filter) { padding: 18px 20px; background: #f0f2e9; border-color: #dfe5d6; border-radius: 5px; box-shadow: none; margin-bottom: 22px; }
+#portal-main .service-workflow :is(input, textarea, select) { border-color: #d6dfcc; border-radius: 5px; color: #3d5636; box-shadow: none; background-color: #fffffc; font-size: 13px; }
+#portal-main .service-workflow :is(input, textarea)::placeholder { color: #9ca98e; }
+#portal-main .service-workflow label { color: #4f6844; font-size: 13px; line-height: 1.8; }
+#portal-main .service-workflow :is(.foundation-fields, .editor-form, .repair-editor-form) { gap: 20px; }
+#portal-main .service-workflow .label-heading-row { align-items: baseline; flex-wrap: wrap; gap: 5px 15px; margin-bottom: 8px; }
+#portal-main .service-workflow .label-heading-row small { font-size: 10px; color: #8e9c80; }
+#portal-main .service-workflow :is(.form-grid, .resource-facts, .repair-facts) { gap: 20px 30px; }
+#portal-main .service-workflow :is(.resource-facts, .repair-facts) { padding-block: 18px; border-block: 1px solid #e5e9dc; margin-block: 18px; }
+#portal-main .service-workflow :is(.resource-facts, .repair-facts) dt { color: #8a987b; font-size: 11px; }
+#portal-main .service-workflow :is(.resource-facts, .repair-facts) dd { color: #47613b; font-size: 13px; line-height: 1.9; overflow-wrap: anywhere; }
+#portal-main .service-workflow .service-processing-note { grid-column: 1 / -1; padding: 16px 18px; background: #f0f3e7; border-left: 2px solid #94a77c; }
+#portal-main .service-workflow .service-processing-note dd { margin-top: 8px; white-space: pre-wrap; }
+#portal-main .service-workflow .service-editor-feedback { border: 1px solid #ebdab7; border-left: 2px solid #bd9554; border-radius: 4px; padding: 15px 18px; margin-block: 20px; background: #fbf6eb; color: #8f743f; }
+#portal-main .service-workflow .service-editor-feedback strong { font-size: 12px; font-weight: 500; }
+#portal-main .service-workflow .service-editor-feedback p { margin: 9px 0 0; font-size: 13px; line-height: 1.9; white-space: pre-wrap; overflow-wrap: anywhere; }
+#portal-main .service-workflow :is(.leave-upload, .housing-upload) { padding: 20px; border: 1px solid #e0e6d5; border-radius: 5px; background: #f5f7ed; }
+#portal-main .service-workflow input[type='file'] { max-width: 100%; font-size: 12px; }
+#portal-main .service-workflow :is(.content-context-note, .housing-context-banner, .housing-notice-banner) { border: 1px solid #dce5cf; border-left: 2px solid #94aa7d; border-radius: 4px; background: #eff3e6; color: #667e53; padding: 14px 18px; font-size: 12px; line-height: 1.9; }
+#portal-main .service-workflow :is(.learning-tabs, .housing-tab-toolbar) { margin-block: 22px; }
+#portal-main .service-workflow .learning-tabs { border-color: #dce3d1; gap: 25px; }
+#portal-main .service-workflow .learning-tabs button { color: #849376; font-size: 12px; }
+#portal-main .service-workflow .learning-tabs button:is(.active, .selected) { color: #365a2c; }
+#portal-main .service-workflow :is(.table-scroll, .table-responsive) { max-width: 100%; overflow-x: auto; }
+#portal-main .service-workflow table { font-size: 12px; }
+#portal-main .service-workflow th { background: #f0f3e8; border-color: #dce4d0; color: #7a8c69; font-size: 11px; font-weight: 500; }
+#portal-main .service-workflow td { border-color: #e6ebde; color: #506743; line-height: 1.8; }
+#portal-main .service-workflow td small { color: #8a987b; }
+#portal-main .service-workflow :is(.resource-selected, .row-selected) { background: #f0f4e7; }
+#portal-main .service-workflow .status-label { border-radius: 4px; font-size: 11px; background: #eef1e7; color: #75866a; }
+#portal-main .service-workflow .status-label:is([data-status='APPROVED'], [data-status='COMPLETED'], .approved, .completed) { color: #547b3d; background: #e9f1de; }
+#portal-main .service-workflow .status-label:is([data-status='RETURNED'], [data-status='RETURN_PENDING'], .returned, .awaiting_confirmation, .return_pending, .awaiting_checkin) { color: #9a7441; background: #faf1e2; }
+#portal-main .service-workflow .status-label:is([data-status='REJECTED'], .rejected) { color: #a0685b; background: #f6ece7; }
+#portal-main .service-workflow .status-label:is([data-status='WITHDRAWN'], .withdrawn, .cancelled, .expired) { color: #959b8d; background: #eff0eb; }
+#portal-main .service-workflow :is(.foundation-pagination, .pagination) { align-items: center; flex-wrap: wrap; gap: 14px; font-size: 11px; color: #819173; }
+#portal-main .service-workflow :is(.resource-history, .leave-history article) { padding: 18px; border: 1px solid #e1e7d6; border-left: 2px solid #adbca0; border-radius: 4px; background: #f8f9f2; margin-block: 12px; }
+#portal-main .service-workflow :is(.foundation-dialog, .modal-card) { background: #fbfcf5; border-color: #d6e0c9; border-radius: 7px; }
+#portal-main .service-workflow .foundation-dialog { width: min(520px, calc(100vw - 36px)); padding: 26px; }
+#portal-main .service-workflow .modal-overlay { padding: 24px; }
+#portal-main .service-workflow :is(.modal-header, .modal-actions) { border-color: #dce4d0; }
+#portal-main .service-workflow .modal-actions { background: #fbfcf5; }
+#portal-main .service-workflow .booking-dialog { margin: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; border: 0; border-radius: 0; overscroll-behavior: contain; }
+#portal-main .service-workflow .booking-dialog::backdrop { background: transparent; }
+#portal-main .service-workflow .booking-modal-card { overscroll-behavior: contain; }
+#portal-main .service-workflow .service-form-section { display: flex; align-items: center; gap: 12px; grid-column: 1 / -1; margin: 12px 0 4px; padding-block: 10px; border-bottom: 1px solid #dce4d0; }
+#portal-main .service-workflow .service-form-section > span { color: #9bad87; font-size: 11px; font-variant-numeric: tabular-nums; }
+#portal-main .service-workflow .service-form-section h3 { margin: 0; font-size: 14px; }
+
+/* This is an orientation guide, separate from the authoritative history timeline. */
+#portal-main .service-journey { padding: 18px 22px 14px; margin: 0 0 24px; background: #eff2e7; border: 1px solid #dde4d0; border-radius: 5px; }
+#portal-main .journey-title { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+#portal-main .journey-title > span { display: inline-flex; align-items: center; gap: 8px; color: #71875e; font-size: 10px; letter-spacing: 1px; }
+#portal-main .journey-title small { color: #59734a; font-size: 11px; }
+#portal-main .service-journey ol { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 12px; list-style: none; margin: 0; padding: 0; }
+#portal-main .service-journey li { display: flex; align-items: center; gap: 10px; color: #89977b; font-size: 12px; line-height: 1.7; }
+#portal-main .service-journey li > span { display: grid; place-items: center; flex-shrink: 0; width: 27px; height: 27px; border: 1px solid #d3ddc5; border-radius: 50%; color: #a0ae91; font-size: 10px; font-variant-numeric: tabular-nums; }
+#portal-main .service-journey li[aria-current='step'] { color: #3e6332; font-weight: 500; }
+#portal-main .service-journey li[aria-current='step'] > span { background: #dce7cd; color: #4d703c; border-color: #b3c79d; }
+#portal-main .service-journey > p { display: flex; align-items: flex-start; gap: 9px; margin: 18px 0 0; padding-top: 13px; border-top: 1px solid #dce4d0; color: #7b8b6b; font-size: 12px; line-height: 1.9; }
+#portal-main .service-journey > p svg { flex-shrink: 0; margin-top: 4px; }
+#portal-main .service-journey[data-tone='attention'] .journey-title small { color: #976735; }
+#portal-main .service-journey[data-tone='attention'] > p { color: #8e7448; }
+#portal-main .service-journey[data-tone='closed'] .journey-title small { color: #89917f; }
+#portal-main .service-journey[data-tone='complete'] .journey-title small { color: #4f7a39; }
+
+/* Repair keeps its detailed stepper, queue and permission-bound action panel. */
+#portal-main .service-repair { --repair-ink: #36503f; --repair-muted: #829274; --repair-line: #dce4d1; }
+#portal-main .service-repair .repair-request-list { padding: 0; }
+#portal-main .service-repair .repair-detail-panel { padding: 25px; }
+#portal-main .service-repair :is(.repair-request-card, .repair-status-strip, .repair-stepper-container) { border-color: #e0e6d6; }
+#portal-main .service-repair .repair-request-card.selected { background: #eef3e4; border-left-color: #7c9b63; }
+#portal-main .service-repair .repair-request-card:hover { background: #f5f7ed; }
+#portal-main .service-repair :is(.repair-form-group-heading, .repair-detail-identity) { border-color: #dce4d1; }
+#portal-main .service-repair .repair-form-group-heading span { background: #eaf0de; color: #829970; }
+#portal-main .service-repair .repair-operation-panel { border-color: #dce5ce; background: #f5f8ed; border-radius: 5px; }
+#portal-main .service-repair :is(.repair-image-thumbnails-grid, .repair-material-list) { gap: 14px; }
+#portal-main .service-repair .repair-queue-tabs button.selected { color: #4f743a; border-color: #7b985f; background: #eef3e4; }
+#portal-main .service-repair .repair-stepper-container { background: #f4f7ed; border-radius: 5px; }
+#portal-main .service-housing :is(.housing-stay-hero, .housing-context-banner) { background: #f1f5e8; border-color: #d8e3c9; }
+#portal-main .service-housing .housing-bed-highlight { color: #53763e; font-size: 17px; line-height: 1.9; }
+#portal-main .service-housing :is(.housing-materials, .housing-submission, .housing-file-list li) { border-color: #dfe6d3; }
+#portal-main .service-housing .housing-material-body { background: #f7f9f0; padding: 18px; border-radius: 5px; }
+#portal-main .service-reservation :is(.venue-card, .reservation-detail-panel, .booking-modal-card) { border-color: #dce4d1; box-shadow: none; border-radius: 6px; }
+#portal-main .service-reservation .venue-card { background: #fcfdf7; }
+#portal-main .service-reservation .venue-title { color: #49643b; font-size: 18px; }
+#portal-main .service-reservation .venue-category-badge { color: #72925a; background: #eff4e4; }
+#portal-main .service-reservation .access-pass-card { border-color: #b8cca2; background: linear-gradient(115deg, #f1f6e8, #fcfdf7); box-shadow: none; }
+#portal-main .service-reservation :is(.pass-header, .pass-footer) { border-color: #d5e1c6; }
+#portal-main .service-reservation .booking-form > label { margin-block: 3px; }
+#portal-main .service-reservation .search-input-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#portal-main .service-reservation .search-input-group input { min-width: 0; width: auto; flex: 1; }
+#portal-main .service-reservation .search-input-group button { flex-shrink: 0; white-space: nowrap; }
+#portal-main .service-reservation .category-pills { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; border-radius: 5px; background: #eef3e5; }
+#portal-main .service-reservation .category-pills button { flex-shrink: 0; white-space: nowrap; font-size: 11px; }
+#portal-main .service-reservation .category-pills button.active { color: #4f743d; }
+#portal-main .service-reservation .category-pills button:focus-visible { outline: 2px solid #75965b !important; outline-offset: 2px; }
+#portal-main .service-reservation .category-pill-indicator { background: #dce8cc; box-shadow: none; }
+#portal-main .service-reservation .venue-cards-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); }
+#portal-main .service-reservation .venue-card { min-width: 0; overflow-wrap: anywhere; }
+#portal-main .service-certificate .certificate-result { border-color: #ccdcba; background: #f1f6e8; border-radius: 5px; }
+
+/* The unified records page stays readable alongside the individual services. */
+#portal-main .campus-affairs .affairs-overview { border-color: #dce4d0; border-radius: 6px; background: #fdfdf8; }
+#portal-main .campus-affairs .affairs-overview > div { border-color: #e3e8da; }
+#portal-main .campus-affairs .affairs-overview dt { color: #839373; }
+#portal-main .campus-affairs .affairs-overview dd { color: #4f7040; font-weight: 400; }
+#portal-main .campus-affairs .affairs-overview .needs-attention { background: #faf3e7; }
+#portal-main .campus-affairs .affairs-overview .needs-attention dd { color: #a77837; }
+#portal-main .campus-affairs .affairs-filters { background: #f1f4e9; border-color: #dce4d1; border-radius: 5px; }
+#portal-main .campus-affairs :is(.affairs-records-heading h2, .affairs-services-heading h2, .affair-name strong) { color: #48653b; }
+#portal-main .campus-affairs .affairs-table th { color: #839573; background: #f4f7ed; border-color: #e0e8d4; }
+#portal-main .campus-affairs .affairs-table td { border-color: #e4eadd; }
+#portal-main .campus-affairs :is(.affair-detail-link, .affairs-clear-filter, .affair-progress-toggle) { color: #708e55; }
+#portal-main .campus-affairs :is(.affairs-service-link, .affairs-calendar, .affairs-services-note) { border-color: #dee6d2; }
+#portal-main .campus-affairs .affairs-service-link:hover { background: #f1f6e7; }
+#portal-main .campus-affairs :is(.affairs-service-icon, .affair-kind-icon) { color: #809a68; background: #edf3e1; }
+#portal-main .campus-affairs .affairs-service-copy strong { color: #4f6c40; }
+#portal-main .campus-affairs .affairs-service-copy > span { color: #859675; }
+#portal-main .campus-affairs .affair-timeline { background: #f4f7ed; border-color: #dce5cf; }
+#portal-main .campus-affairs .timeline-events li { border-color: #cbdab8; }
+#portal-main .campus-affairs .timeline-events li::before { background: #92aa77; border-color: #f4f7ed; }
+#portal-main .campus-affairs .timeline-current { border-color: #83a164; }
+
+/* Staff queues use the same family with stronger task and scope hierarchy. */
+#portal-main .campus-workbench .workbench-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 22px; }
+#portal-main .campus-workbench .workbench-toolbar > span { font-size: 10px; color: #899a7a; letter-spacing: 1.5px; }
+#portal-main .campus-workbench .workspace-switch-wrap { margin-bottom: 20px; }
+#portal-main .campus-workbench :is(.service-segmented-control, .task-filter-pills) { background: #ebf0e1; border-color: #dce4d0; border-radius: 5px; }
+#portal-main .campus-workbench .service-segment-btn { font-size: 12px; color: #829573; }
+#portal-main .campus-workbench .service-segment-btn.active { color: #486e36; }
+#portal-main .campus-workbench .workbench-welcome { padding: 25px 28px; margin-bottom: 24px; border: 1px solid #d6e1c8; border-left: 3px solid #92aa78; border-radius: 5px; background: #eef3e4; }
+#portal-main .campus-workbench .workbench-welcome h1 { color: #3e6334; font-size: 30px; font-weight: 400; margin: 12px 0; }
+#portal-main .campus-workbench .workbench-welcome .portal-context { color: #82996d; }
+#portal-main .campus-workbench .workbench-welcome p { font-size: 12px; color: #748b61; line-height: 1.9; }
+#portal-main .campus-workbench .workbench-pending-summary { border-color: #d3e0c1; }
+#portal-main .campus-workbench .workbench-pending-summary strong { color: #668b49; font-size: 42px; }
+#portal-main .campus-workbench .workbench-pending-summary :is(span, small) { color: #899d77; }
+#portal-main .campus-workbench .workbench-dashboard { grid-template-columns: minmax(0, 1fr) 250px; gap: 22px; }
+#portal-main .campus-workbench .workbench-tasks-panel { border-color: #dce5d0; border-radius: 6px; padding: 24px; background: #fdfdf8; }
+#portal-main .campus-workbench .heading-with-badge { gap: 12px; flex-wrap: wrap; }
+#portal-main .campus-workbench .heading-with-badge h2 { color: #49683b; font-size: 19px; font-weight: 500; }
+#portal-main .campus-workbench .workbench-tasks-panel > .section-heading { flex-direction: column; align-items: stretch; gap: 16px; }
+#portal-main .campus-workbench .workbench-tasks-panel > .muted { font-size: 12px; color: #899a7b; line-height: 1.8; }
+#portal-main .campus-workbench .task-filter-pills { align-self: flex-start; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; margin-left: 0; }
+#portal-main .campus-workbench .task-filter-pills button { flex-shrink: 0; }
+#portal-main .campus-workbench .task-pill-btn { color: #839673; font-size: 11px; }
+#portal-main .campus-workbench .task-pill-btn.active { color: #4f763b; }
+#portal-main .campus-workbench .task-filter-pill-indicator { background: #dce8cc; box-shadow: none; }
+#portal-main .campus-workbench .task-pill-btn:focus-visible { outline: 2px solid #75965b !important; outline-offset: 3px; }
+#portal-main .campus-workbench .workbench-task-card { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 9px 20px; padding: 21px 0; margin: 0; border: 0; border-bottom: 1px solid #e0e8d5; border-radius: 0; background: transparent; box-shadow: none; }
+#portal-main .campus-workbench .workbench-task-card:hover { box-shadow: none; transform: none; background: #f7faef; }
+#portal-main .campus-workbench .workbench-task-card.urgent-task { border-left: 2px solid #c5a16c; padding-left: 15px; background: #fcf8ef; }
+#portal-main .campus-workbench .task-card-header { grid-column: 1; grid-row: 1; display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 8px; margin: 0; }
+#portal-main .campus-workbench .task-category-pill { color: #8a9b7a; background: #f0f4e7; border-radius: 3px; font-size: 10px; }
+#portal-main .campus-workbench .task-status-pill { color: #789560; background: #eaf2de; border-radius: 3px; font-size: 10px; }
+#portal-main .campus-workbench .task-status-pill[data-status='RETURNED'] { color: #a07941; background: #faf1e2; }
+#portal-main .campus-workbench .task-title { grid-column: 1; grid-row: 2; margin: 0; color: #3f5d33; font-size: 15px; line-height: 1.8; font-weight: 500; }
+#portal-main .campus-workbench .task-meta { grid-column: 1; grid-row: 3; display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 11px; color: #889b77; }
+#portal-main .campus-workbench .task-meta strong { font-weight: 400; color: #7f946d; }
+#portal-main .campus-workbench .task-card-footer { grid-column: 2; grid-row: 1 / span 3; display: flex; flex-direction: column; justify-content: center; align-items: flex-end; gap: 16px; padding: 0; margin: 0; border: 0; }
+#portal-main .campus-workbench .task-time { color: #93a382; font-size: 10px; text-align: right; }
+#portal-main .campus-workbench .task-action-btn { display: inline-flex; align-items: center; gap: 9px; padding: 8px 12px; border: 1px solid #cfddbd; border-radius: 4px; color: #5f8247; background: #f3f7e9; font-size: 11px; font-weight: 400; }
+#portal-main .campus-workbench .task-action-btn:hover { color: #355d2b; background: #e8f0dc; }
+#portal-main .campus-workbench .workbench-tasks-empty { border: 1px dashed #dce6ce; border-radius: 5px; background: #f5f8ee; color: #91a180; padding: 32px 20px; line-height: 1.9; }
+#portal-main .campus-workbench .workbench-scope-panel { position: sticky; top: 95px; border-color: #dce4d0; border-radius: 6px; background: #fcfdf7; }
+#portal-main .campus-workbench .workspace-campus-image { height: 115px; }
+#portal-main .campus-workbench .workspace-scope-copy h2 { color: #52733e; }
+#portal-main .campus-workbench .workspace-scope-copy dd { color: #70895b; }
+#portal-main .campus-workbench .workspace-scope-copy dt, #portal-main .campus-workbench .workspace-scope-note { color: #91a17e; }
+#portal-main .campus-workbench .workspace-scope-note { border-color: #e0e8d3; }
+#portal-main .campus-workbench .service-entry { border-color: #dfe6d5; background: #fcfdf7; border-radius: 5px; }
+#portal-main .campus-workbench .service-entry .service-entry-icon { color: #809b69; border-color: #dce7cd; background: #f0f5e6; }
+#portal-main .campus-workbench .service-entry-copy strong { color: #55733f; }
+#portal-main .campus-workbench .service-entry-copy > span { color: #8b9d79; }
+
+@media (max-width: 1280px) {
+  #portal-main .campus-workbench .workbench-dashboard { grid-template-columns: minmax(0, 1fr); }
+  #portal-main .campus-workbench .workbench-scope-panel { position: static; }
+  #portal-main .campus-workbench .workspace-campus-image { display: none; }
+  #portal-main .campus-workbench .workspace-scope-copy { padding: 22px; }
+}
+@media (max-width: 760px) {
+  #portal-main .service-workflow :is(.page-heading-row, .repair-page-heading) { align-items: flex-start; flex-direction: column; gap: 18px; }
+  #portal-main .service-workflow .portal-panel { padding: 20px 17px; }
+  #portal-main .service-workflow .repair-request-list { padding: 0; }
+  #portal-main .service-workflow .repair-detail-panel { padding: 18px; }
+  #portal-main .service-workflow .service-journey { padding: 16px; }
+  #portal-main .service-journey ol { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px 8px; }
+  #portal-main .service-journey li { font-size: 11px; gap: 8px; }
+  #portal-main .service-journey li > span { width: 24px; height: 24px; font-size: 9px; }
+  #portal-main .service-journey > p { font-size: 11px; }
+  #portal-main .service-workflow :is(.foundation-filters, .leave-filters, .repair-list-filter) { padding: 16px; }
+  #portal-main .service-workflow :is(.form-grid, .resource-facts, .repair-facts) { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  #portal-main .service-workflow .service-processing-note { padding: 15px; }
+  #portal-main .service-workflow :is(.modal-overlay, .foundation-dialog) { padding: 18px; }
+  #portal-main .service-workflow .booking-modal-card { max-height: calc(100dvh - 36px); }
+  #portal-main .service-reservation .venue-filters { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
+  #portal-main .service-reservation :is(.form-grid-two, .pass-grid) { grid-template-columns: minmax(0, 1fr); }
+  #portal-main .service-workflow :is(.leave-upload, .housing-upload) { padding: 15px; }
+  #portal-main .service-workflow :is(.foundation-pagination, .pagination) > div { display: flex; gap: 9px; flex-wrap: wrap; }
+  #portal-main .service-housing .housing-context-banner { align-items: flex-start; }
+  #portal-main .service-housing .housing-context-banner svg { flex-shrink: 0; margin-top: 4px; }
+  #portal-main .service-housing .housing-material-body { padding: 14px; }
+  #portal-main .campus-workbench .workbench-toolbar { align-items: center; }
+  #portal-main .campus-workbench .workbench-toolbar > span { font-size: 8px; letter-spacing: 1px; }
+  #portal-main .campus-workbench .workbench-welcome { padding: 21px; }
+  #portal-main .campus-workbench .workbench-welcome h1 { font-size: 27px; }
+  #portal-main .campus-workbench .workbench-tasks-panel { padding: 21px 17px; }
+  #portal-main .campus-workbench .workbench-task-card { display: block; padding-block: 20px; }
+  #portal-main .campus-workbench .task-title { margin-block: 11px; font-size: 14px; }
+  #portal-main .campus-workbench .task-meta { gap: 7px; flex-direction: column; }
+  #portal-main .campus-workbench .task-card-footer { flex-direction: row; justify-content: space-between; align-items: center; margin-top: 16px; gap: 12px; }
+  #portal-main .campus-workbench .workbench-pending-summary strong { font-size: 30px; }
+  #portal-main .campus-workbench .heading-with-toggle { align-items: flex-start; flex-direction: column; gap: 14px; }
+}
+@media print {
+  #portal-main .service-journey, #portal-main .campus-workbench .workbench-toolbar { display: none; }
+}

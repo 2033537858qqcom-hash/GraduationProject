@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowUpRight, Bot, ChevronDown, RotateCw, Send, Sparkles, X } from '@lucide/vue'
 import { api, ApiError, errorMessage } from '../lib/api'
 import { assistantContext, assistantContextLabel, assistantSuggestions, safeAssistantDestination } from '../lib/assistant'
-import { reservationSearchSelection } from '../lib/reservationSearch'
 import type { AssistantAnswer, AssistantCapabilities } from '../lib/assistant'
 import { currentUser } from '../stores/auth'
 import AssistantLeaveDraft from './AssistantLeaveDraft.vue'
@@ -15,8 +14,10 @@ import BaseSelect from './BaseSelect.vue'
 import { latestAssistantTask, mergeAssistantTurns, restoredTurnLabel } from '../lib/assistantSessions'
 import type { AssistantSession, AssistantSessionDetail, AssistantTurn, AssistantTaskSummary, AssistantTaskView, AssistantQueryResult } from '../lib/assistantSessions'
 import type { AssistantContext } from '../lib/assistant'
+import { publicReducedMotion } from '../lib/publicMotion'
 
 const route = useRoute()
+const router = useRouter()
 const open = ref(false), hint = ref(true), loading = ref(false), busy = ref(false), error = ref(''), question = ref('')
 const contextEnabled = ref(true), consent = ref(false), mode = ref<'LOCAL' | 'DEEPSEEK'>('LOCAL')
 const capabilities = ref<AssistantCapabilities | null>(null)
@@ -50,6 +51,7 @@ const suggestions = computed(() => assistantSuggestions(route.path, capabilities
 const contextLabel = computed(() => assistantContextLabel(context.value))
 const hintSubject = computed(() => {
   const p = currentUser.value?.permissions ?? []
+  if (route.path === '/campus/explore') return '校园地点与路线'
   if (route.path.startsWith('/housing') && p.includes('housing:read')) return '住宿和调宿进度'
   if (route.path.includes('/repairs')) return '报修进度'
   if (route.path.includes('certificates')) return '证明进度'
@@ -75,12 +77,23 @@ async function loadCapabilities() {
 async function show() {
   open.value = true; hint.value = false
   await loadCapabilities()
-  if (!session.value) await restoreLatest()
-  else await refreshSession()
-  await nextTick(); if (task.value === 'QUERY') input.value?.focus()
+  if (!open.value) return
+  try {
+    if (!session.value) await restoreLatest()
+    else await refreshSession()
+  } catch (cause) { if (open.value) error.value = errorMessage(cause) }
+  await nextTick(); if (open.value && task.value === 'QUERY') input.value?.focus()
 }
 function stopWaiting() { generation++; request?.abort(); request = null; busy.value = false }
 function close() { if (savingDraft.value) return; stopWaiting(); open.value = false; question.value = ''; consent.value = false; launcher.value?.focus() }
+async function followResult(event: MouseEvent, value: unknown) {
+  const target = safeAssistantDestination(value)
+  if (!target || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
+  event.preventDefault()
+  if (savingDraft.value || !await allowSessionChange()) return
+  close()
+  await router.push(target)
+}
 async function refreshSession(before?: number) {
   if (!session.value) return
   const sessionId = session.value.session.id, current = sessionGeneration
@@ -161,8 +174,11 @@ async function send() {
     if (answer) messages.value = [...messages.value.slice(-5), { question: text, answer }]
     else error.value = '这次请求已记录，未重复调用模型。可从历史提问手动重新查询。'
     question.value = ''; consent.value = false; queryKey.value = crypto.randomUUID(); await refreshSession()
-    await nextTick(); history.value?.scrollTo({ top: history.value.scrollHeight, behavior: 'smooth' })
-    input.value?.focus()
+    await nextTick()
+    if (open.value && current === generation) {
+      history.value?.scrollTo({ top: history.value.scrollHeight, behavior: publicReducedMotion.value ? 'auto' : 'smooth' })
+      input.value?.focus()
+    }
   } catch (cause) { if (current === generation && !controller.signal.aborted) { error.value = errorMessage(cause); if (!(cause instanceof ApiError && cause.status === 0)) queryKey.value = crypto.randomUUID(); try { await refreshSession() } catch { /* The original error remains visible. */ } } }
   finally { if (current === generation) { busy.value = false; request = null; consent.value = false } }
 }
@@ -170,10 +186,10 @@ function choose(text: string) { question.value = text; input.value?.focus() }
 function keydown(event: KeyboardEvent) {
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); void send() }
 }
-watch([() => route.fullPath, () => currentUser.value?.permissions.join(',')], () => {
+watch([() => route.path, () => route.query.id, () => currentUser.value?.permissions.join(',')], () => {
   stopWaiting(); messages.value = []; question.value = ''; consent.value = false; contextEnabled.value = true; requeryContext.value = null
   task.value = 'QUERY'; preparingDraft.value = false; savingDraft.value = false
-  hint.value = true
+  hint.value = false
   if (open.value && currentUser.value) { void loadCapabilities(); void refreshSession().catch(cause => { error.value = errorMessage(cause) }) }
 })
 watch(() => currentUser.value?.id, () => {
@@ -185,6 +201,7 @@ watch(question, () => { queryKey.value = crypto.randomUUID() })
 watch(() => session.value?.session.id, () => { selectedTask.value = null })
 
 function triggerRandomAutonomousAction() {
+  if (!canAnimate()) { clearAvatarMotion(); return }
   if (open.value || isScrolling || busy.value || preparingDraft.value || savingDraft.value) {
     scheduleNextAutonomousAction()
     return
@@ -202,12 +219,14 @@ function triggerRandomAutonomousAction() {
 
 function scheduleNextAutonomousAction() {
   if (autoActionTimer) clearTimeout(autoActionTimer)
+  autoActionTimer = null
+  if (!canAnimate() || open.value) return
   const delay = 6000 + Math.random() * 5000
   autoActionTimer = window.setTimeout(triggerRandomAutonomousAction, delay)
 }
 
 function handleScroll() {
-  if (open.value) return
+  if (open.value || !canAnimate()) return
   const currentY = window.scrollY || document.documentElement.scrollTop
   const diff = currentY - lastScrollY
 
@@ -230,6 +249,14 @@ function handleScroll() {
   lastScrollY = currentY
 }
 
+function canAnimate() { return !publicReducedMotion.value && typeof document !== 'undefined' && !document.hidden && !!currentUser.value?.permissions.includes('agent:query') }
+function clearAvatarMotion() {
+  for (const timer of [autoActionTimer, autoActionResetTimer, scrollEndTimer, scrollSettleTimer]) if (timer) clearTimeout(timer)
+  autoActionTimer = autoActionResetTimer = scrollEndTimer = scrollSettleTimer = null
+  autoAction.value = 'none'; scrollMotion.value = 'none'; isScrolling = false
+}
+function visibilityChanged() { if (document.hidden) clearAvatarMotion(); else scheduleNextAutonomousAction() }
+watch(publicReducedMotion, reduced => { if (reduced) clearAvatarMotion(); else scheduleNextAutonomousAction() })
 watch(open, (isOpen) => {
   if (isOpen) {
     autoAction.value = 'none'
@@ -245,6 +272,7 @@ onMounted(() => {
   if (typeof window !== 'undefined') {
     lastScrollY = window.scrollY || document.documentElement.scrollTop
     window.addEventListener('scroll', handleScroll, { passive: true })
+    document.addEventListener('visibilitychange', visibilityChanged)
     scheduleNextAutonomousAction()
   }
 })
@@ -255,6 +283,7 @@ onBeforeUnmount(() => {
   sessionGeneration++
   if (typeof window !== 'undefined') {
     window.removeEventListener('scroll', handleScroll)
+    document.removeEventListener('visibilitychange', visibilityChanged)
     if (autoActionTimer) clearTimeout(autoActionTimer)
     if (autoActionResetTimer) clearTimeout(autoActionResetTimer)
     if (scrollEndTimer) clearTimeout(scrollEndTimer)
@@ -263,9 +292,9 @@ onBeforeUnmount(() => {
 })
 </script>
 <template>
-  <aside v-if="currentUser?.permissions.includes('agent:query')" class="assistant-dock" :class="{ expanded: open }">
-    <section v-show="open" class="assistant-panel" role="dialog" aria-label="AI 对话" @keydown.esc.stop="close">
-      <header class="assistant-head"><div><strong>AI 对话</strong><small>{{ task === 'HISTORY' ? '恢复本人对话与已核对的进度' : task !== 'QUERY' ? '整理资料，确认后保存本人草稿' : '查询当前账号可见的信息' }}</small></div><button class="assistant-icon" aria-label="收起 AI 对话" :disabled="savingDraft" @click="close"><ChevronDown :size="19" /></button></header>
+  <aside v-if="currentUser?.permissions.includes('agent:query')" id="campus-assistant" class="assistant-dock campus-assistant" :class="{ expanded: open, 'is-reduced': publicReducedMotion }">
+    <section v-show="open" id="campus-assistant-panel" class="assistant-panel" role="dialog" aria-labelledby="campus-assistant-heading" @keydown.esc.stop="close">
+      <header class="assistant-head"><div><strong id="campus-assistant-heading">校园助手</strong><small>{{ task === 'HISTORY' ? '恢复本人对话与已核对的进度' : task !== 'QUERY' ? '整理资料，确认后保存本人草稿' : '查询当前账号可见的信息' }}</small></div><button class="assistant-icon" aria-label="收起 AI 对话" :disabled="savingDraft" @click="close"><ChevronDown :size="19" /></button></header>
       <div class="assistant-session-bar"><span>{{ session?.session.title ?? '正在恢复本人对话' }}</span><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="listSessions()">历史对话</button><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="newSession">新对话</button></div>
       <nav v-if="canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing" class="assistant-tasks" aria-label="AI 服务方式"><button :aria-pressed="task === 'QUERY'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'QUERY'">查询信息</button><button v-if="canPrepareLeave" :aria-pressed="task === 'LEAVE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'LEAVE'">准备请假</button><button v-if="canPrepareCertificate" :aria-pressed="task === 'CERTIFICATE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'CERTIFICATE'">准备证明</button><button v-if="canPrepareRepair" :aria-pressed="task === 'REPAIR'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'REPAIR'">准备报修</button><button v-if="canPrepareHousing" :aria-pressed="task === 'HOUSING'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'HOUSING'">准备调宿</button></nav>
       <div v-if="task !== 'HISTORY'" class="assistant-mode"><label>回答方式<BaseSelect v-model="mode" :options="modeOptions" compact :disabled="busy || loading || preparingDraft || savingDraft" aria-label="回答方式" /></label><span>{{ busy || preparingDraft ? '正在处理' : mode === 'LOCAL' ? task !== 'QUERY' ? '表单核对' : '关键词识别' : '自然语言识别' }}</span></div>
@@ -292,9 +321,9 @@ onBeforeUnmount(() => {
           <p class="assistant-summary">{{ entry.answer.summary }}</p>
           <section v-for="result in entry.answer.results" :key="result.name" class="assistant-result" :class="{ 'query-issue': result.status !== 'OK' }">
             <h3>{{ result.title }}</h3><p>{{ result.message }}</p>
-            <RouterLink v-for="item in result.items" :key="item.key" :to="safeAssistantDestination(item.targetPath) ?? '#'" class="assistant-fact" :class="{ 'no-target': !safeAssistantDestination(item.targetPath) }" @click="item.targetPath && reservationSearchSelection(item.targetPath) && (open = false)"><strong>{{ item.title }}</strong><span>{{ item.description }}</span><ArrowUpRight v-if="safeAssistantDestination(item.targetPath)" :size="13" /></RouterLink>
-            <div v-for="source in result.sources" :key="source.slug" class="assistant-source"><strong>{{ source.title }}</strong><p>{{ source.body.slice(0, 220) }}{{ source.body.length > 220 ? '…' : '' }}</p><RouterLink v-if="safeAssistantDestination(source.targetPath)" :to="source.targetPath">来源 · V{{ source.version }} · 查看完整指南 <ArrowUpRight :size="12" /></RouterLink></div>
-            <RouterLink v-if="safeAssistantDestination(result.targetPath) && (!result.items.length || result.total > result.items.length)" :to="result.targetPath!" class="assistant-more">{{ result.items.length ? '查看完整业务列表' : '查看业务页面' }} <ArrowUpRight :size="13" /></RouterLink>
+            <template v-for="item in result.items" :key="item.key"><RouterLink v-if="safeAssistantDestination(item.targetPath)" :to="safeAssistantDestination(item.targetPath)!" class="assistant-fact" @click="followResult($event, item.targetPath)"><strong>{{ item.title }}</strong><span>{{ item.description }}</span><ArrowUpRight :size="13" /></RouterLink><div v-else class="assistant-fact no-target"><strong>{{ item.title }}</strong><span>{{ item.description }}</span></div></template>
+            <div v-for="source in result.sources" :key="source.slug" class="assistant-source"><strong>{{ source.title }}</strong><p>{{ source.body.slice(0, 220) }}{{ source.body.length > 220 ? '…' : '' }}</p><RouterLink v-if="safeAssistantDestination(source.targetPath)" :to="source.targetPath" @click="followResult($event, source.targetPath)">来源 · V{{ source.version }} · 查看完整指南 <ArrowUpRight :size="12" /></RouterLink></div>
+            <RouterLink v-if="safeAssistantDestination(result.targetPath) && (!result.items.length || result.total > result.items.length)" :to="result.targetPath!" class="assistant-more" @click="followResult($event, result.targetPath)">{{ result.items.length ? '查看完整业务列表' : '查看业务页面' }} <ArrowUpRight :size="13" /></RouterLink>
           </section>
           <small class="assistant-time">{{ entry.answer.modelUsed ? 'DeepSeek 规划 · 本地执行' : entry.answer.mode === 'LOCAL' ? '本地查询' : '本地边界检查 · 未调用模型' }} · {{ entry.answer.queriedAt.replace('T', ' ').slice(0, 19) }}</small>
         </article>
@@ -327,7 +356,7 @@ onBeforeUnmount(() => {
       :data-state="avatarState"
       :data-action="autoAction"
       :data-motion="scrollMotion"
-      :aria-expanded="open"
+      :aria-expanded="open" aria-controls="campus-assistant-panel"
       :aria-label="open ? '收起 AI 对话' : '打开 AI 对话'"
       :disabled="savingDraft"
       @click="open ? close() : show()"

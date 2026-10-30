@@ -1,0 +1,97 @@
+.public-campus-site {
+  --brand: #315244;
+  --site-surface: #f3f1eb;
+  --site-ink: #2f493e;
+  --muted: #6e7b70;
+  --line: #d5dccf;
+  --public-header-height: 84px;
+  background: var(--site-surface);
+}
+.public-campus-site .public-header {
+  --header-bar-height: 84px;
+  --chapter-offset: 68px;
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  color: #315244;
+  background: #f3f1ebf7;
+  border-bottom: 1px solid #85927630;
+  transition: background-color .3s ease, color .3s ease;
+}
+.public-campus-site.is-homepage .public-header { position: fixed; inset: 0 0 auto; color: #fff; background: linear-gradient(#0b2029e8, #0b20293d); border-color: #ffffff26; }
+.public-campus-site.is-homepage .public-header.cinema-header-light { color: #315244; background: #f3f1ebf7; border-color: #85927630; }
+.public-campus-site.is-homepage .public-header.cinema-header-life { background: #102a2df5; }
+.public-campus-site .public-header-bar { display: grid; grid-template-columns: 190px minmax(0, 1fr) auto; align-items: center; gap: 28px; width: min(94%, 1440px); height: var(--header-bar-height); transition: height .3s ease; }
+.public-campus-site .school-brand { width: 190px; min-width: 0; margin: 0; color: inherit; flex-shrink: 1; }
+.public-campus-site .public-header .school-navigation { position: static; min-width: 0; color: inherit; background: none; border: 0; backdrop-filter: none; }
+.public-campus-site .school-navigation-inner { display: flex; justify-content: space-between; align-items: stretch; position: relative; height: var(--header-bar-height); gap: 12px; }
+.public-campus-site .school-navigation a { display: flex; align-items: center; height: 100%; padding: 0; color: inherit; font-size: 12px; letter-spacing: .04em; white-space: nowrap; }
+.public-campus-site .school-nav-indicator { bottom: 16px; height: 1px; border-radius: 0; background: #bca16c; box-shadow: none; }
+.public-campus-site .public-header-actions { display: flex; align-items: center; gap: 22px; color: inherit; }
+.public-campus-site .service-link { display: inline-flex; align-items: center; gap: 7px; margin: 0; padding: 0 0 0 20px; border-left: 1px solid #9eac8c60; color: inherit; font-size: 12px; white-space: nowrap; }
+.public-campus-site.is-homepage .public-header:not(.cinema-header-light) .service-link { border-color: #ffffff40; }
+.public-campus-site .public-header .mobile-menu { display: none; background: none; border: 0; color: inherit; }
+.public-campus-site .public-header a:focus-visible,
+.public-campus-site .public-header button:focus-visible { outline: 2px solid currentColor; outline-offset: 5px; }
+.public-campus-site .campus-footer { padding-block: 38px 32px; }
+.public-campus-site .campus-footer > .campus-contour { width: min(100%, 640px); margin: 0 auto 34px; color: #89967c; opacity: .35; }
+.public-campus-site .campus-footer-row { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding-top: 22px; border-top: 1px solid var(--line); color: #6c7b68; }
+.public-campus-site .campus-footer-row > small { font-size: 10px; letter-spacing: 1px; }
+.public-campus-site .campus-footer-row .footer-links { display: flex; flex-wrap: wrap; gap: 24px; font-size: 11px; }
+.public-campus-site .footer-links a { display: inline-flex; align-items: center; gap: 5px; }
+
+/* Reading pages use the same paper, ink and fine rules as the campus chapters. */
+.public-campus-site .campus-article { width: min(88%, 1180px); padding-block: 52px 70px; }
+.public-campus-site .article-back { display: inline-flex; align-items: center; gap: 10px; color: #667961; font-size: 11px; padding-block: 8px; }
+.public-campus-site .article-heading { padding-block: 38px 36px; border-bottom: 1px solid var(--line); }
+.public-campus-site .article-eyebrow { color: #829172; font-size: 10px; letter-spacing: 2px; }
+.public-campus-site .campus-article h1 { max-width: 960px; margin: 22px 0 28px; color: #294c3c; font-family: var(--site-serif); font-size: clamp(32px, 3.6vw, 52px); font-weight: 400; line-height: 1.5; letter-spacing: .05em; text-wrap: balance; overflow-wrap: anywhere; }
+.public-campus-site .article-meta { display: flex; flex-wrap: wrap; gap: 12px 24px; color: #78836e; font-size: 11px; line-height: 1.8; }
+.public-campus-site .article-layout { display: grid; grid-template-columns: minmax(0, 760px) minmax(180px, 240px); gap: 10%; padding-top: 42px; align-items: start; }
+.public-campus-site .article-summary { margin: 0 0 34px; font-family: var(--site-serif); color: #536e53; font-size: 19px; line-height: 2; }
+.public-campus-site .article-body { color: #425947; font-size: 15px; line-height: 2.3; white-space: normal; overflow-wrap: anywhere; }
+.public-campus-site .article-body p { margin: 0 0 24px; white-space: pre-line; }
+.public-campus-site .article-context { position: sticky; top: calc(var(--public-header-height) + 32px); padding-left: 26px; border-left: 1px solid var(--line); }
+.public-campus-site .article-context h2 { margin: 0 0 18px; font-size: 11px; letter-spacing: 2px; font-weight: 400; color: #839173; }
+.public-campus-site .article-context p { margin: 0 0 18px; color: #5e7358; font-size: 12px; line-height: 2; overflow-wrap: anywhere; }
+.public-campus-site .article-context a { display: inline-flex; align-items: center; gap: 10px; padding-bottom: 9px; border-bottom: 1px solid #aab397; color: #35583e; font-size: 11px; }
+.public-campus-site .article-bottom { display: flex; justify-content: space-between; gap: 24px; border-top: 1px solid var(--line); margin-top: 50px; padding-top: 22px; color: #617558; font-size: 12px; }
+.public-campus-site .article-bottom a { display: inline-flex; align-items: center; gap: 12px; }
+.public-campus-site .article-load-state { padding-block: 70px; font-size: 14px; color: #708164; }
+.public-campus-site .campus-article a:focus-visible,
+.public-campus-site .campus-footer a:focus-visible { outline: 2px solid #8d9b76; outline-offset: 5px; }
+@media (min-width: 1181px) {
+  .public-campus-site .public-header.is-compact { --header-bar-height: 68px; }
+}
+@media (max-width: 1180px) {
+  .public-campus-site { --public-header-height: 76px; }
+  .public-campus-site .public-header { --header-bar-height: 76px; --chapter-offset: 76px; }
+  .public-campus-site .public-header-bar { display: flex; justify-content: space-between; gap: 20px; }
+  .public-campus-site .school-brand { width: min(54vw, 210px); flex-shrink: 1; }
+  .public-campus-site .public-header-actions { gap: 14px; flex-shrink: 0; }
+  .public-campus-site .service-link { font-size: 11px; padding-left: 0; border: 0; gap: 4px; }
+  .public-campus-site .public-header .mobile-menu { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 38px; padding: 0; }
+  .public-campus-site .public-header .school-navigation { display: none; }
+  .public-campus-site .public-header .school-navigation.expanded { display: block; position: absolute; top: 100%; inset-inline: 0; padding: 12px 5% 4px; background: #f3f1eb; color: #315244; border-bottom: 1px solid var(--line); box-shadow: 0 14px 24px #102a2d0a; }
+  .public-campus-site .school-navigation-inner { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); height: auto; gap: 0 20px; }
+  .public-campus-site .school-navigation a { height: auto; min-height: 48px; padding: 10px 0; font-size: 12px; }
+  .public-campus-site .school-navigation a[aria-current="location"] { text-decoration: underline; text-underline-offset: 6px; }
+  .public-campus-site .school-nav-indicator { display: none; }
+}
+@media (max-width: 760px) {
+  .public-campus-site .public-header-bar { width: 90%; gap: 12px; }
+  .public-campus-site .service-link { font-size: 10px; }
+  .public-campus-site .service-link svg { width: 13px; }
+  .public-campus-site .campus-article { width: 88%; padding-block: 26px 44px; }
+  .public-campus-site .article-heading { padding-block: 24px 26px; }
+  .public-campus-site .campus-article h1 { font-size: 31px; line-height: 1.6; margin-block: 20px 24px; letter-spacing: .03em; }
+  .public-campus-site .article-meta { font-size: 10px; gap: 9px 18px; }
+  .public-campus-site .article-layout { grid-template-columns: 1fr; gap: 28px; padding-top: 26px; }
+  .public-campus-site .article-summary { font-size: 17px; line-height: 2; margin-bottom: 26px; }
+  .public-campus-site .article-body { font-size: 14px; line-height: 2.2; }
+  .public-campus-site .article-context { position: static; padding-left: 0; border-left: 0; padding-top: 24px; border-top: 1px solid var(--line); }
+  .public-campus-site .article-context p { font-size: 11px; }
+  .public-campus-site .article-bottom { margin-top: 32px; font-size: 11px; flex-wrap: wrap; }
+  .public-campus-site .campus-footer { padding-block: 26px; }
+  .public-campus-site .campus-footer-row { align-items: flex-start; flex-direction: column; gap: 18px; }
+}

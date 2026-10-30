@@ -11,6 +11,7 @@ import {
   Wrench,
 } from '@lucide/vue'
 import HousingTransferMaterials from '../components/HousingTransferMaterials.vue'
+import ServiceJourney from '../components/ServiceJourney.vue'
 import { api, errorMessage } from '../lib/api'
 import {
   housingRequestKey,
@@ -272,7 +273,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="repair-settings housing-page">
+  <div class="repair-settings housing-page service-workflow service-housing">
     <!-- 页面标题与操作 -->
     <div class="repair-page-heading">
       <div>
@@ -412,6 +413,7 @@ onBeforeUnmount(() => {
 
       <!-- TAB 2: 调宿申请与办理进度 -->
       <section v-else-if="activeTab === 'transfer'" class="housing-transfer-section">
+        <ServiceJourney kind="HOUSING" :status="activeTransfer?.status" :preparing="!!editing" :cancellation-pending="activeTransfer?.cancelRequested" />
         <!-- 当前在住床位上下文提示条 -->
         <div class="housing-context-banner">
           <Info :size="16" />

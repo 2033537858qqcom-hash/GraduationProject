@@ -1,0 +1,142 @@
+/* Campus exploration and the assistant share the portal's quiet paper-and-ink palette. */
+#app .campus-explore { color: #36503f; padding-block: 28px 32px; }
+#app .campus-explore .explore-context-bar { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 24px; color: #879776; font-size: 9px; letter-spacing: 1.5px; }
+#app .campus-explore .explore-context-bar a { display: inline-flex; align-items: center; gap: 9px; color: #6f855e; font-size: 11px; letter-spacing: 0; }
+#app .campus-explore .exploration-heading { margin-bottom: 26px; gap: 24px; }
+#app .campus-explore .exploration-heading h1 { font-family: var(--site-serif); font-size: 35px; font-weight: 400; letter-spacing: 2px; line-height: 1.6; color: #31543e; }
+#app .campus-explore .exploration-heading .eyebrow { color: #91a07e; font-size: 9px; letter-spacing: 1px; }
+#app .campus-explore .exploration-heading p { color: #7f9070; font-size: 12px; line-height: 1.9; }
+#app .campus-explore .campus-selector { border-color: #d3dfc6; background: #eaf0df; border-radius: 5px; }
+#app .campus-explore .campus-tab-btn { color: #839872; font-size: 11px; }
+#app .campus-explore .campus-tab-btn.active { background: #fcfdf6; color: #52763c; border-color: #c6d5b5; box-shadow: none; }
+#app .campus-explore .campus-badge { color: #88a171; background: #eaf1df; }
+#app .campus-explore .campus-tab-btn.active .campus-badge { color: #fff; background: #78985a; }
+#app .campus-explore .explore-tour-start { border-color: #c5d6b3; background: #f8fbf2; color: #68864f; border-radius: 4px; }
+#app .campus-explore .exploration-workspace { grid-template-columns: minmax(0, 1fr) 302px; gap: 20px; }
+#app .campus-explore .exploration-viewport { background: #eef2e8; border-color: #d2dec6; border-radius: 6px; }
+#app .campus-explore .exploration-toolbar { background: #edf2e6; padding: 12px; gap: 9px; }
+#app .campus-explore :is(.view-options, .display-options) { border-color: #d4e0c7; background: #f7faf1; border-radius: 4px; }
+#app .campus-explore .exploration-toolbar button { color: #829673; }
+#app .campus-explore .exploration-toolbar button[aria-pressed='true'] { color: #4c7338; background: #fffef9; box-shadow: none; }
+#app .campus-explore .exploration-directory { background: #fbfcf5; border-color: #d6e0ca; border-radius: 6px; }
+#app .campus-explore .directory-heading h2 { color: #547442; font-size: 17px; font-weight: 500; }
+#app .campus-explore :is(.directory-heading > span, .place-category-label) { color: #91a17e; font-size: 10px; }
+#app .campus-explore .exploration-search { border-color: #d9e3cd; border-radius: 5px; background: #fffffb; }
+#app .campus-explore .exploration-search input { color: #536e43; font-size: 12px; }
+#app .campus-explore .place-categories { gap: 6px; }
+#app .campus-explore .place-categories button { border-radius: 4px; border-color: #e0e8d4; background: #f4f7ed; color: #8a9e75; font-size: 10px; }
+#app .campus-explore .place-categories button[aria-pressed='true'] { color: #577d3d; border-color: #c7d9b3; background: #eaf2df; }
+#app .campus-explore .place-directory-item { color: #698356; border-color: #e8eddf; font-size: 12px; }
+#app .campus-explore .place-directory-item:hover { background: #f0f5e7; }
+#app .campus-explore .place-directory-item.selected { color: #466b32; background: #e8f0dc; border-color: #cadbb6; }
+#app .campus-explore .place-detail { border-color: #dee7d2; scroll-margin-top: 110px; outline-offset: 5px; }
+#app .campus-explore .place-detail h3 { color: #4b7037; font-family: var(--site-serif); font-size: 22px; font-weight: 400; line-height: 1.6; }
+#app .campus-explore .place-detail > p { color: #81916f; font-size: 12px; line-height: 1.9; }
+#app .campus-explore .place-feature-tags span { background: #edf3e2; color: #8aa174; border-color: #dce8cf; border-radius: 3px; }
+#app .campus-explore :is(.route-btn, .reserve-btn) { border: 1px solid #cbdcb9; border-radius: 4px; background: #eff5e6; color: #64864a; font-size: 11px; }
+#app .campus-explore .reserve-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 11px; }
+#app .campus-explore .place-detail > small { font-size: 10px; line-height: 1.9; color: #97a788; }
+#app .campus-explore :is(.related-place, .place-source) { color: #829b68; }
+#app .campus-explore :is(.exploration-bottom, .exploration-footnote) { border-color: #dbe5ce; color: #8c9e78; background: #f4f7ed; }
+#app .campus-explore .zoom-options button { background: #fbfdf5; color: #739455; border-color: #d7e4c9; }
+#app .campus-explore :is(.model-caption, .spatial-nav-hud, .exploration-tour) { border-color: #cfddc0; background: #f7fbf0ed; color: #67864e; box-shadow: 0 5px 24px #314a3812; }
+#app .campus-explore .exploration-fallback { background: #f2f6eb; color: #78925f; }
+#app .campus-explore a:focus-visible, #app .campus-explore button:focus-visible { outline: 2px solid #8da971; outline-offset: 3px; }
+#portal-main .campus-return-banner { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 18px; padding: 19px; margin: 0 0 20px; background: #eef4e5; border: 1px solid #d4e2c5; border-left: 2px solid #96b17c; border-radius: 5px; }
+#portal-main .campus-return-banner small { display: block; font-size: 10px; letter-spacing: 1px; color: #91a47a; }
+#portal-main .campus-return-banner strong { display: block; margin-top: 9px; color: #5f7f47; font-size: 15px; font-weight: 500; }
+#portal-main .campus-return-banner p { margin: 9px 0 0; color: #8ba275; font-size: 12px; line-height: 1.8; }
+#portal-main .campus-return-banner > a { display: inline-flex; align-items: center; gap: 10px; color: #63864a; font-size: 12px; }
+
+/* A compact, modeless helper that leaves the original business controls in charge. */
+#campus-assistant { color: #40583b; --brand: #42613e; --muted: #879a76; --line: #dce5d1; right: 22px; bottom: 22px; }
+#campus-assistant .assistant-panel { width: min(420px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 120px)); bottom: 68px; border: 1px solid #cddbc0; border-radius: 8px; background: #fbfcf6; box-shadow: 0 18px 65px #24422d26; }
+#campus-assistant .assistant-head { padding: 18px 20px 14px; border-color: #dfe7d4; background: #f0f5e7; }
+#campus-assistant .assistant-head strong { font-family: 'Songti SC', 'STSong', 'SimSun', serif; color: #456d36; font-size: 20px; font-weight: 400; letter-spacing: 2px; }
+#campus-assistant .assistant-head small { color: #687d5b; font-size: 11px; line-height: 1.7; }
+#campus-assistant .assistant-icon { color: #879f70; border-radius: 4px; }
+#campus-assistant .assistant-icon:hover { background: #e6efda; }
+#campus-assistant .assistant-session-bar { padding: 12px 20px; color: #74846a; background: #f7f9f0; }
+#campus-assistant .assistant-session-bar button { color: #687f54; font-size: 10px; min-height: 28px; }
+#campus-assistant .assistant-tasks { flex-wrap: nowrap; overflow-x: auto; padding: 2px 20px 12px; gap: 7px; }
+#campus-assistant .assistant-tasks button { flex-shrink: 0; border-color: #e0e8d5; background: #f5f8ed; color: #91a47d; border-radius: 4px; font-size: 11px; min-height: 30px; }
+#campus-assistant .assistant-tasks button[aria-pressed='true'] { border-color: #c9dcb4; background: #eaf3de; color: #638849; }
+#campus-assistant .assistant-mode { border-color: #e2e9d8; padding-inline: 20px; color: #8ea47b; }
+#campus-assistant .assistant-mode label { color: #7e9769; }
+#campus-assistant .assistant-history { padding: 16px 20px; scrollbar-color: #c5d8b0 transparent; }
+#campus-assistant .assistant-intro { color: #6c825b; padding-block: 24px; }
+#campus-assistant .assistant-intro h2 { color: #64864d; font-size: 17px; font-weight: 500; }
+#campus-assistant .assistant-intro-mark { color: #87a36e; background: #eaf2df; border-radius: 6px; }
+#campus-assistant .assistant-question { color: #73925c; background: #eef5e5; border-color: #dce9d0; border-radius: 5px; font-size: 12px; }
+#campus-assistant .assistant-summary { color: #587b42; font-size: 13px; line-height: 1.9; }
+#campus-assistant .assistant-result { border-color: #dce7d1; background: #f8fbf2; border-radius: 5px; }
+#campus-assistant .assistant-result h3 { color: #61834a; font-size: 13px; }
+#campus-assistant .assistant-result > p { color: #6b8259; font-size: 12px; line-height: 1.8; }
+#campus-assistant .assistant-fact { border-color: #e2ead8; color: #72925a; background: #fcfef7; border-radius: 4px; }
+#campus-assistant .assistant-fact:hover { border-color: #bdd5a5; background: #eef6e3; }
+#campus-assistant .assistant-fact strong { color: #64854c; font-size: 12px; }
+#campus-assistant .assistant-fact span { color: #718761; font-size: 11px; line-height: 1.8; }
+#campus-assistant .assistant-fact.no-target, #campus-assistant .assistant-fact.no-target:hover { cursor: default; border-color: #e4e9dc; background: #f5f7ef; }
+#campus-assistant .assistant-more, #campus-assistant .assistant-source a { color: #779b59; }
+#campus-assistant .assistant-source { border-color: #e0e9d4; background: #f4f8ec; color: #8da377; }
+#campus-assistant .assistant-context { color: #90a67b; background: #f1f6e8; border-color: #dce8ce; }
+#campus-assistant .assistant-prompts { gap: 8px; padding-inline: 20px; }
+#campus-assistant .assistant-prompts button { color: #829e6b; border-color: #d9e6cb; background: #f1f7e9; border-radius: 4px; font-size: 11px; min-height: 30px; }
+#campus-assistant .assistant-compose { padding: 12px 20px 15px; border-color: #dce7d0; background: #f4f8ed; }
+#campus-assistant textarea, #campus-assistant input { color: #5c7d46; border-color: #d1e1c0; background: #fffffb; border-radius: 5px; accent-color: #7a9e5b; }
+#campus-assistant textarea:focus, #campus-assistant input:focus { border-color: #a6c389; box-shadow: 0 0 0 2px #a6c38926; }
+#campus-assistant .assistant-send { background: #63874e; color: #fff; border-radius: 5px; }
+#campus-assistant .assistant-send:disabled { background: #d0ddc2; color: #f9fcf5; }
+#campus-assistant .assistant-compose-note { color: #748766; font-size: 9px; }
+#campus-assistant .assistant-consent { color: #687d56; font-size: 10px; line-height: 1.8; }
+#campus-assistant .assistant-time, #campus-assistant .assistant-status { color: #768a66; font-size: 10px; }
+#campus-assistant .query-issue { border-color: #e4d8b9; background: #fbf7ec; }
+#campus-assistant .assistant-error { color: #a17b52; background: #faf3e8; }
+#campus-assistant .assistant-launcher { width: 52px; height: 52px; background: linear-gradient(140deg, #587a4b, #3d6240); border-color: #d8e6cc; box-shadow: 0 5px 20px #37583633, inset 0 1px 1px #ffffff40; }
+#campus-assistant .launcher-sparkle-icon { color: #d7c995; filter: none; }
+#campus-assistant .assistant-hint { border-color: #d8e5ca; background: #fbfdf7; box-shadow: 0 3px 16px #3b5b2920; }
+#campus-assistant .assistant-hint-btn { color: #839e6e; font-size: 11px; }
+#campus-assistant .assistant-hint-badge { color: #98b57d; background: #edf5e4; }
+#campus-assistant .assistant-aura-ring { border-color: #9cbd7f; }
+#campus-assistant .assistant-surf-trail, #campus-assistant .assistant-jet-trail { background: radial-gradient(ellipse, #a6c98b80, transparent); }
+#campus-assistant .assistant-session-list > button { color: #77985c; background: #f4f8ec; border-color: #dce7d0; border-radius: 5px; }
+#campus-assistant .assistant-restored p { color: #7b9b61; font-size: 12px; }
+#campus-assistant .assistant-restored button, #campus-assistant .assistant-older { color: #87a56b; }
+#campus-assistant .assistant-draft-scroll { color: #7e9a66; }
+#campus-assistant .assistant-draft-scroll h2 { color: #61874c; }
+#campus-assistant .assistant-draft-save, #campus-assistant .assistant-draft-input button { background: #668b4e; border-radius: 4px; }
+#campus-assistant a:focus-visible, #campus-assistant button:focus-visible { outline: 2px solid #9dbb7f; outline-offset: 3px; }
+.portal-motion-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 34px; padding: 4px 0; color: #879a77; background: none; border: 0; font-size: 10px; white-space: nowrap; }
+.portal-motion-toggle > span { width: 23px; height: 12px; border: 1px solid #a5b98c; border-radius: 8px; position: relative; }
+.portal-motion-toggle > span::after { content: ''; position: absolute; top: 2px; left: 2px; width: 6px; height: 6px; border-radius: 50%; background: #92ac79; transition: transform .18s; }
+.portal-motion-toggle[aria-pressed='true'] > span::after { transform: translateX(11px); }
+.portal-drawer-motion { justify-content: flex-start; padding: 14px 12px; min-height: 50px; }
+.campus-portal.public-motion-reduced *, .campus-portal.public-motion-reduced *::before, .campus-portal.public-motion-reduced *::after, #campus-assistant.is-reduced *, #campus-assistant.is-reduced *::before, #campus-assistant.is-reduced *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+@media (max-width: 1100px) {
+  #app .campus-explore .exploration-workspace { grid-template-columns: minmax(0, 1fr) 270px; }
+}
+@media (max-width: 850px) {
+  #app .campus-explore .exploration-workspace { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .portal-account-controls > .portal-motion-toggle { display: none; }
+  #campus-assistant { right: 16px; bottom: 18px; }
+  #campus-assistant .assistant-panel { position: fixed; right: 12px; left: 12px; bottom: 82px; width: auto; height: min(740px, calc(100dvh - 108px)); }
+  #campus-assistant .assistant-head { padding: 15px 16px 12px; }
+  #campus-assistant :is(.assistant-history, .assistant-mode, .assistant-prompts, .assistant-tasks) { padding-inline: 16px; }
+  #campus-assistant .assistant-head strong { font-size: 19px; }
+  #campus-assistant .assistant-session-bar { padding: 8px 16px; }
+  #campus-assistant .assistant-compose { padding: 12px 16px; }
+  #campus-assistant .assistant-input-row textarea { font-size: 16px; }
+  #app .campus-explore .explore-context-bar { margin-bottom: 20px; }
+  #app .campus-explore .explore-context-bar > span { display: none; }
+  #app .campus-explore .exploration-heading h1 { font-size: 29px; }
+  #portal-main .campus-return-banner { padding: 17px; }
+}
+@media (max-width: 600px) {
+  #app .campus-explore .exploration-toolbar { gap: 7px; padding: 10px; }
+  #app .campus-explore .exploration-toolbar button { font-size: 10px; padding-inline: 8px; }
+  #app .campus-explore .exploration-directory { padding: 21px 17px; }
+  #app .campus-explore .place-results { max-height: 220px; }
+}
+@media print { #campus-assistant, .portal-motion-toggle { display: none !important; } }

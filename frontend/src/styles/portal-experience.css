@@ -1,0 +1,253 @@
+/* Shared campus identity; all service changes stay inside these two surfaces. */
+.campus-portal, .campus-login {
+  --brand: #315244;
+  --muted: #738075;
+  --line: #dde2d8;
+  --paper: #f6f6f0;
+  --campus-serif: 'Songti SC', 'STSong', 'SimSun', serif;
+  color: #2c4037;
+}
+.campus-portal { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100svh; background: var(--paper); }
+.campus-portal .portal-sidebar { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; padding: 31px 19px 22px; border-right: 1px solid #dce1d4; background: #eeefe6; }
+.portal-sidebar-brand { display: block; padding: 0 9px 29px; color: #315244; }
+.portal-sidebar-brand > span { display: block; margin-top: 15px; font-size: 10px; letter-spacing: 3px; color: #73816d; }
+.portal-grouped-nav { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c3cdbb transparent; }
+.portal-nav-group { margin-bottom: 22px; }
+.portal-nav-group > p { margin: 0 12px 9px; font-size: 10px; color: #7b8974; letter-spacing: 2px; }
+.portal-nav-group > a { position: relative; display: flex; align-items: center; gap: 12px; min-height: 41px; padding: 10px 12px; margin-block: 3px; border-radius: 5px; color: #5d6e60; font-size: 13px; line-height: 1.5; transition: background-color .18s ease, color .18s ease; }
+.portal-nav-group > a svg { flex-shrink: 0; opacity: .8; }
+.portal-nav-group > a:hover { background: #e4e8dc; color: #315244; }
+.portal-nav-group > a[aria-current='page'] { background: #dce4d3; color: #244c35; font-weight: 600; }
+.portal-nav-group > a[aria-current='page']::before { position: absolute; content: ''; left: 0; top: 12px; bottom: 12px; width: 2px; background: #688361; }
+.portal-sidebar-foot { padding: 16px 10px 0; border-top: 1px solid #d4dcca; }
+.portal-sidebar-foot .campus-contour { width: 100%; height: 34px; color: #839573; opacity: .42; }
+.portal-sidebar-foot p { margin: 12px 0; font-family: var(--campus-serif); letter-spacing: 2px; color: #748568; font-size: 11px; }
+.portal-sidebar-foot a { display: inline-flex; align-items: center; gap: 12px; font-size: 10px; color: #65765e; }
+.campus-portal .portal-workspace { min-width: 0; min-height: 100svh; display: flex; flex-direction: column; }
+.campus-portal .portal-toolbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 15px; min-height: 75px; padding: 12px 32px; overflow: visible; background: #f9faf5f7; border: 0; border-bottom: 1px solid var(--line); }
+.portal-location { min-width: 0; }
+.portal-location > span { display: block; margin-bottom: 5px; font-size: 9px; letter-spacing: 2px; color: #83907a; }
+.portal-location > strong { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-account-controls { display: flex; align-items: center; gap: 18px; margin-left: auto; flex-shrink: 0; }
+.portal-account-action { display: inline-flex; align-items: center; justify-content: center; gap: 9px; min-height: 38px; padding: 5px 2px; border: 0; background: transparent; color: #62715f; font-size: 11px; }
+.portal-account-action:hover { color: #244c35; }
+.portal-profile-action { border-left: 1px solid #dde3d5; padding-left: 18px; }
+.portal-profile-action > span { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-logout { color: #829079; }
+.portal-menu-button { display: none; }
+.campus-portal .portal-main { width: min(calc(100% - 64px), 1260px); flex: 1; padding: 30px 0 36px; min-width: 0; outline: none; z-index: auto; }
+.campus-portal .portal-footer { width: min(calc(100% - 64px), 1260px); display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px 0 26px; border-top: 1px solid var(--line); color: #7e8a74; font-size: 10px; }
+.campus-portal .portal-footer small { margin-left: 16px; color: #8d9784; font-size: 9px; }
+.campus-portal .portal-footer a { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.portal-skip-link { position: fixed; left: 248px; top: -80px; z-index: 100; padding: 13px 20px; color: #fff; background: #315244; }
+.portal-skip-link:focus { top: 12px; }
+.campus-portal a:focus-visible, .campus-portal button:focus-visible, .campus-login a:focus-visible, .campus-login button:focus-visible { outline: 2px solid #64815c; outline-offset: 4px; }
+.campus-portal .button { border-radius: 5px; }
+.campus-portal .button.primary, .campus-login .button.primary { background: #315244; border-color: #315244; color: #fff; box-shadow: none; }
+.campus-portal .button.primary:hover, .campus-login .button.primary:hover { background: #244332; border-color: #244332; }
+.campus-portal .portal-panel { border-color: #dce2d5; background: #fdfdf9; box-shadow: none; }
+.campus-portal input:focus, .campus-portal textarea:focus, .campus-portal select:focus, .campus-login input:focus { border-color: #829476; box-shadow: 0 0 0 3px #8294761c; }
+
+/* The modal supplies focus containment and an accessible Escape/close cycle. */
+.portal-navigation-drawer { position: fixed; inset: 0 auto 0 0; width: min(340px, calc(100vw - 36px)); max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; border: 0; border-radius: 0; color: #315244; background: #f1f2e9; }
+.portal-navigation-drawer::backdrop { background: #132d3299; backdrop-filter: blur(2px); }
+.portal-drawer-sheet { min-height: 100%; display: flex; flex-direction: column; padding: 25px 21px 35px; }
+.portal-drawer-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding: 0 9px 25px; margin-bottom: 22px; border-bottom: 1px solid #d2dcc8; }
+.portal-drawer-heading span { color: #849473; font-size: 9px; letter-spacing: 2px; }
+.portal-drawer-heading h2 { margin: 12px 0 0; font-family: var(--campus-serif); font-size: 24px; font-weight: 400; }
+.portal-drawer-heading button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; background: transparent; }
+.portal-drawer-home { display: flex; align-items: center; justify-content: space-between; padding: 20px 12px 0; border-top: 1px solid #d2dcc8; font-size: 12px; }
+
+/* A short welcome, then the paths used throughout a student's day. */
+.campus-portal .student-campus-home .portal-welcome-feature { grid-template-columns: 1.2fr 1fr; min-height: 260px; margin-bottom: 0; border: 1px solid #dae0d1; border-radius: 6px; background: #eeefe4; }
+.campus-portal .student-campus-home .portal-welcome-copy { padding: 30px 32px; }
+.campus-portal .student-campus-home .portal-context { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 9px; letter-spacing: 1.6px; color: #78886b; }
+.campus-portal .student-campus-home .portal-context span { font-size: 10px; letter-spacing: .4px; }
+.campus-portal .student-campus-home .portal-welcome-copy h1 { margin: 21px 0 14px; font-family: var(--campus-serif); font-size: clamp(27px, 2.6vw, 37px); line-height: 1.6; letter-spacing: 1px; font-weight: 400; color: #31533e; overflow-wrap: anywhere; }
+.campus-portal .student-campus-home .portal-welcome-copy > p { color: #7d8972; font-size: 11px; line-height: 1.8; }
+.campus-portal .student-campus-home .portal-welcome-actions { margin-top: 22px; }
+.campus-portal .student-campus-home .portal-welcome-actions .button { gap: 12px; padding: 9px 13px; min-height: 36px; font-size: 11px; }
+.campus-portal .student-campus-home .portal-campus-feature { min-height: 260px; background: #c5d1b8; }
+.campus-portal .student-campus-home .portal-campus-feature img { object-position: 52% 50%; filter: saturate(.72); transition: transform .6s ease; }
+.campus-portal .student-campus-home .portal-campus-feature:hover img { transform: scale(1.025); }
+.campus-portal .student-campus-home .portal-campus-feature::after { background: linear-gradient(transparent, #163c32b0); }
+.campus-portal .student-campus-home .portal-campus-feature > span { font-family: var(--campus-serif); font-size: 16px; bottom: 24px; }
+.campus-portal .student-campus-home .portal-campus-feature small { font-family: 'Microsoft YaHei', sans-serif; font-size: 9px; letter-spacing: 2px; }
+.student-daily-focus { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 22px 0 30px; border-bottom: 1px solid #dce2d3; padding-bottom: 24px; }
+.student-daily-focus > a { display: flex; align-items: center; gap: 13px; padding: 6px 18px; border-left: 1px solid #d9e1cf; }
+.student-daily-focus > a:first-child { border-left: 0; padding-left: 2px; }
+.student-daily-focus > a:last-child { padding-right: 2px; }
+.student-daily-focus > a > svg { flex-shrink: 0; color: #839275; }
+.student-daily-focus > a > svg:last-child { margin-left: auto; }
+.student-daily-focus > a > div { min-width: 0; }
+.student-daily-focus strong { display: block; font-size: 13px; font-weight: 500; line-height: 1.8; color: #455e42; }
+.student-daily-focus strong small { display: inline-block; margin-left: 6px; font-size: 10px; color: #955b38; }
+.student-daily-focus span { display: block; margin-top: 6px; font-size: 11px; line-height: 1.7; color: #738364; }
+.student-common-services { margin-bottom: 28px; }
+.student-section-label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; gap: 16px; }
+.student-section-label h2 { font-size: 14px; font-weight: 500; margin: 0; color: #41583c; letter-spacing: 1px; }
+.student-section-label > a { display: inline-flex; align-items: center; gap: 8px; color: #839174; font-size: 10px; }
+.student-common-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.student-common-grid > a { display: flex; align-items: center; gap: 12px; padding: 18px 16px; border: 1px solid #dce2d4; border-radius: 5px; background: #fdfdf9; transition: border-color .18s ease, background-color .18s ease; }
+.student-common-grid > a:hover { border-color: #a2b195; background: #f5f7ed; }
+.student-common-grid > a > svg { flex-shrink: 0; color: #7c906b; }
+.student-common-grid > a > svg:last-child { width: 12px; margin-left: auto; color: #9aa58f; }
+.student-common-grid strong { display: block; font-size: 13px; font-weight: 500; color: #405b39; }
+.student-common-grid small { display: block; margin-top: 7px; font-size: 11px; color: #7c8c6e; }
+.campus-portal .student-campus-home .portal-content-grid { gap: 18px; grid-template-columns: 1.1fr 1fr; }
+.campus-portal .student-campus-home .portal-content-grid.single { grid-template-columns: 1fr; }
+.campus-portal .student-campus-home .portal-panel { padding: 22px; border-radius: 6px; }
+.campus-portal .student-campus-home .section-heading { align-items: center; flex-wrap: wrap; gap: 14px; }
+.campus-portal .student-campus-home .section-heading h2 { margin-top: 5px; color: #40583a; font-size: 17px; font-weight: 500; }
+.campus-portal .student-campus-home .section-heading .eyebrow { color: #8d9b80; font-size: 9px; }
+.campus-portal .student-campus-home .section-heading > a { font-size: 10px; color: #7c8f6f; }
+.campus-portal .student-campus-home .lesson-row { grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 12px; border-color: #e1e6d8; }
+.campus-portal .student-campus-home .lesson-row h3 { font-size: 13px; color: #3e553a; }
+.campus-portal .student-campus-home .lesson-row p { font-size: 12px; color: #78876d; }
+.campus-portal .student-campus-home .lesson-time { color: #6c805f; font-size: 11px; }
+.campus-portal .student-campus-home .lesson-campus { grid-column: 2; margin-top: -8px; font-size: 9px; color: #8e9b83; }
+.campus-portal .student-campus-home .data-note { font-size: 9px; color: #94a087; line-height: 1.8; }
+.campus-portal .student-campus-home .notice-row { border-color: #e1e6d8; }
+.campus-portal .student-campus-home .notice-row h3 { color: #49613f; font-size: 13px; }
+.campus-portal .student-campus-home .notice-row p { color: #6e7f62; font-size: 12px; }
+.campus-portal .student-campus-home .notice-row .text-button { font-size: 10px; margin-right: 12px; }
+.student-notice-date { display: block; margin: 0 0 8px; font-size: 9px; color: #94a087; }
+.campus-portal .student-campus-home .status-label { font-size: 9px; background: #eaf0df; color: #6f855b; border-radius: 3px; }
+.campus-portal .student-campus-home .status-label.read { color: #89967d; background: #f0f2e9; }
+.campus-portal .student-campus-home .portal-services { margin-top: 30px; padding-top: 25px; border-color: #dbe2d0; }
+.campus-portal .student-campus-home .service-section-heading h2 { font-size: 18px; color: #40583a; font-weight: 500; scroll-margin-top: 95px; }
+.campus-portal .student-campus-home .service-section-heading p { color: #849276; font-size: 11px; }
+.campus-portal .student-campus-home .service-count-pill { background: #e9eedf; color: #738764; font-size: 10px; }
+.campus-portal .student-campus-home .service-toolbar { align-items: stretch; gap: 16px; }
+.campus-portal .student-campus-home .service-segmented-control { border: 1px solid #dfe5d6; background: #ecefe3; border-radius: 5px; }
+.campus-portal .student-campus-home .service-segment-btn { font-size: 10px; color: #819172; padding: 9px 11px; }
+.campus-portal .student-campus-home .service-segment-btn.active { color: #365d32; }
+.campus-portal .student-campus-home .service-search-box { border-color: #dce4d0; background: #fdfdf9; border-radius: 5px; flex: 1; min-width: 200px; }
+.campus-portal .student-campus-home .service-search-box input { font-size: 11px; }
+.campus-portal .student-campus-home .service-entry-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.campus-portal .student-campus-home .service-entry { border-color: #dee4d4; background: #fdfdf9; border-radius: 5px; padding: 18px; }
+.campus-portal .student-campus-home .service-entry:hover { border-color: #a2b68f; box-shadow: none; }
+.campus-portal .student-campus-home .service-entry .service-entry-icon { color: #768e65; background: #f0f3e7; border-color: #e0e7d3; border-radius: 5px; }
+.campus-portal .student-campus-home .service-entry-copy strong { color: #49603e; font-size: 13px; }
+.campus-portal .student-campus-home .service-entry-copy > span { color: #78896b; font-size: 12px; }
+.campus-portal .student-campus-home .service-category-tag { color: #929e86; font-size: 9px; }
+.campus-portal .student-campus-home .service-badge { background: #edf1e3; color: #72885d; font-size: 9px; }
+.campus-portal .student-campus-home .service-badge.badge-danger { background: #f6ebe1; color: #9b693e; }
+
+/* The login bridges campus imagery and the quiet, practical service interface. */
+.campus-login { grid-template-columns: 54% 46%; background: #f6f5ee; }
+.campus-login .login-intro { padding: 150px 12% 135px; background-color: #163f3b; background-position: 47% center; }
+.campus-login .login-school { top: 42px; width: min(73%, 290px); }
+.campus-login .login-intro .eyebrow { color: #c6d2b8; font-size: 9px; letter-spacing: 2px; line-height: 2; }
+.campus-login .login-intro h1 { margin: 28px 0 20px; font-family: var(--campus-serif); font-weight: 400; font-size: clamp(38px, 3.7vw, 56px); line-height: 1.65; letter-spacing: 3px; }
+.campus-login .login-intro > p { color: #d0d7c5; font-size: 12px; line-height: 2.3; }
+.campus-login .login-intro .quiet-link { display: inline-flex; align-items: center; gap: 10px; margin-top: 35px; color: #d5ddc9; font-size: 11px; }
+.login-image-footer { position: absolute; inset: auto 12% 34px; display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-top: 20px; border-top: 1px solid #e0e7d33b; color: #c4cfb7; font-size: 9px; line-height: 1.8; }
+.login-image-footer > span { font-family: var(--campus-serif); font-size: 12px; letter-spacing: 2px; }
+.campus-login .login-form-area { flex-direction: column; overflow: visible; padding: 76px 12% 150px; background: #f6f5ee; }
+.campus-login .login-form { width: min(100%, 360px); }
+.login-form-eyebrow { display: block; margin-bottom: 19px; color: #8a977b; font-size: 9px; letter-spacing: 2px; }
+.login-title-row { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.campus-login .login-form h2 { margin: 0 0 12px; font-family: var(--campus-serif); font-weight: 400; font-size: 33px; letter-spacing: 2px; color: #31533e; }
+.login-title-row svg { color: #8b9a79; }
+.campus-login .login-form > .muted { margin: 0 0 32px; color: #8a957e; font-size: 11px; }
+.campus-login .login-form label { display: block; font-size: 12px; color: #506545; line-height: 1.8; margin-top: 22px; }
+.campus-login .login-form input { height: 45px; margin-top: 10px; padding: 12px 14px; border-radius: 4px; border-color: #d4ddc8; background: #fcfcf7; box-shadow: none; color: #344d2e; font-size: 12px; }
+.campus-login .login-form input::placeholder { color: #a2ac96; }
+.login-password-field { position: relative; }
+.campus-login .login-password-field input { padding-right: 46px; }
+.login-password-field button { position: absolute; right: 4px; top: 14px; display: grid; place-items: center; width: 38px; height: 37px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: #8a9b78; }
+.login-help { display: block; margin-top: 13px; color: #8c987e; font-size: 10px; line-height: 1.9; }
+.campus-login .login-form > .button { min-height: 46px; margin-top: 27px; border-radius: 4px; padding: 12px 16px; font-size: 12px; }
+.campus-login .demo-accounts { margin-top: 25px; padding-top: 18px; border-color: #dbe1d0; color: #81906f; font-size: 10px; }
+.campus-login .demo-accounts summary { width: fit-content; }
+.login-form-footer { position: absolute; bottom: 30px; width: min(72%, 360px); text-align: center; pointer-events: none; color: #8d9b7a; }
+.login-form-footer .campus-contour { width: 100%; max-height: 45px; opacity: .35; margin-bottom: 12px; }
+.login-form-footer small { font-size: 9px; letter-spacing: 1px; }
+
+@media (min-width: 1025px) and (max-width: 1280px) {
+  .campus-portal { grid-template-columns: 210px minmax(0, 1fr); }
+  .campus-portal .portal-sidebar { padding-inline: 14px; }
+  .campus-portal .portal-main, .campus-portal .portal-footer { width: calc(100% - 44px); }
+  .campus-portal .portal-toolbar { padding-inline: 22px; }
+  .student-daily-focus > a { gap: 9px; padding-inline: 12px; }
+  .student-daily-focus > a > svg:first-child { display: none; }
+  .student-common-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campus-portal .student-campus-home .service-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 1024px) {
+  .campus-portal { display: block; }
+  .campus-portal .portal-sidebar { display: none; }
+  .campus-portal .portal-toolbar { min-height: 70px; padding-inline: 24px; }
+  .portal-menu-button { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 40px; border: 0; border-radius: 4px; background: transparent; color: #546c48; padding: 0; }
+  .portal-skip-link { left: 15px; }
+  .campus-portal .portal-main, .campus-portal .portal-footer { width: calc(100% - 48px); }
+  .campus-login { grid-template-columns: 48% 52%; }
+  .campus-login .login-intro { padding-inline: 10%; }
+  .campus-login .login-form-area { padding-inline: 10%; }
+  .login-image-footer { inset-inline: 10%; flex-direction: column; align-items: flex-start; gap: 10px; }
+}
+@media (max-width: 760px) {
+  .campus-portal .portal-toolbar { min-height: 68px; padding: 10px 18px; gap: 12px; }
+  .portal-location > strong { font-size: 12px; }
+  .portal-location > span { font-size: 8px; }
+  .portal-account-controls { gap: 12px; }
+  .portal-account-action { width: 30px; padding: 0; }
+  .portal-account-action > span { display: none; }
+  .portal-profile-action { border-left: 0; }
+  .campus-portal .portal-main { width: calc(100% - 36px); padding-top: 22px; }
+  .campus-portal .portal-footer { width: calc(100% - 36px); padding-bottom: 90px; font-size: 9px; }
+  .campus-portal .portal-footer small { display: block; margin: 8px 0 0; font-size: 8px; line-height: 1.8; }
+  .campus-portal .student-campus-home .portal-welcome-feature { grid-template-columns: 1fr; }
+  .campus-portal .student-campus-home .portal-welcome-copy { padding: 21px 22px; }
+  .campus-portal .student-campus-home .portal-context { font-size: 8px; justify-content: space-between; gap: 10px; }
+  .campus-portal .student-campus-home .portal-context span { font-size: 9px; }
+  .campus-portal .student-campus-home .portal-welcome-copy h1 { font-size: 26px; letter-spacing: 0; line-height: 1.5; margin: 12px 0 10px; }
+  .campus-portal .student-campus-home .portal-welcome-actions { margin-top: 16px; }
+  .campus-portal .student-campus-home .portal-campus-feature { min-height: 135px; }
+  .campus-portal .student-campus-home .portal-campus-feature > span { font-size: 15px; bottom: 20px; }
+  .student-daily-focus { grid-template-columns: 1fr; gap: 0; margin-top: 9px; margin-bottom: 24px; padding-bottom: 0; }
+  .student-daily-focus > a, .student-daily-focus > a:first-child, .student-daily-focus > a:last-child { padding: 17px 3px; border-left: 0; border-bottom: 1px solid #e1e6d6; }
+  .student-daily-focus > a:last-child { border-bottom: 0; }
+  .student-daily-focus strong { font-size: 13px; }
+  .student-daily-focus span { margin-top: 3px; font-size: 11px; }
+  .student-common-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .student-common-grid > a { gap: 10px; padding: 17px 13px; }
+  .student-common-grid > a > svg:last-child { display: none; }
+  .campus-portal .student-campus-home .portal-content-grid { grid-template-columns: 1fr; }
+  .campus-portal .student-campus-home .portal-panel { padding: 20px 18px; }
+  .campus-portal .student-campus-home .service-entry-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campus-portal .student-campus-home .service-toolbar { gap: 12px; }
+  .campus-portal .student-campus-home .service-search-box { width: 100%; flex-basis: 100%; }
+  .campus-portal .student-campus-home .service-segmented-control { width: 100%; }
+  .campus-portal .student-campus-home .service-segment-btn { padding: 9px 10px; white-space: nowrap; }
+  .campus-login { grid-template-columns: 1fr; }
+  .campus-login .login-intro { min-height: 315px; padding: 110px 7% 58px; }
+  .campus-login .login-school { top: 28px; width: 210px; }
+  .campus-login .login-intro .eyebrow { font-size: 7px; letter-spacing: 1.6px; }
+  .campus-login .login-intro h1 { font-size: 32px; line-height: 1.5; margin: 16px 0 10px; }
+  .campus-login .login-intro > p { display: none; }
+  .campus-login .login-intro .quiet-link { position: absolute; bottom: 23px; right: 7%; margin: 0; font-size: 10px; }
+  .login-image-footer { inset: auto auto 23px 7%; border: 0; padding: 0; font-size: 8px; }
+  .login-image-footer > span { display: none; }
+  .campus-login .login-form-area { padding: 38px 7% 125px; }
+  .campus-login .login-form { width: min(100%, 400px); }
+  .campus-login .login-form h2 { font-size: 28px; }
+  .campus-login .login-form > .muted { margin-bottom: 24px; }
+  .login-form-eyebrow { font-size: 8px; margin-bottom: 15px; }
+  .login-form-footer { bottom: 24px; width: min(76%, 320px); }
+}
+@media (max-width: 480px) {
+  .portal-account-controls { gap: 5px; }
+  .campus-portal .student-campus-home .service-entry-grid { grid-template-columns: 1fr; }
+  .campus-portal .student-campus-home .portal-context { justify-content: flex-start; gap: 8px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .campus-portal *, .campus-login * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+  .campus-portal .student-campus-home .portal-campus-feature:hover img { transform: none; }
+}
+@media print {
+  .campus-portal { display: block; }
+  .campus-portal .portal-sidebar, .campus-portal .portal-toolbar, .portal-navigation-drawer { display: none !important; }
+  .campus-portal .portal-main { width: 100%; padding: 0; }
+}

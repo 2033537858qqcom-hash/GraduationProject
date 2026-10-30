@@ -4,6 +4,13 @@ import { portalNavigation, currentPortalNavigation } from '../src/lib/portalNavi
 
 const paths = groups => groups.flatMap(group => group.items.map(item => item.to))
 
+test('payment entries follow student and administrator permissions', () => {
+  assert.ok(paths(portalNavigation(['portal:read'])).includes('/portal/payments'))
+  assert.ok(!paths(portalNavigation(['portal:read'])).includes('/admin/payments'))
+  assert.ok(paths(portalNavigation(['foundation:manage'])).includes('/admin/payments'))
+  assert.ok(!paths(portalNavigation(['foundation:manage'])).includes('/portal/payments'))
+})
+
 test('student navigation groups personal services without staff or administration access', () => {
   const groups = portalNavigation(['portal:read', 'reservation:apply', 'housing:read', 'repair:apply'])
   assert.deepEqual(groups.map(group => group.id), ['personal', 'account'])

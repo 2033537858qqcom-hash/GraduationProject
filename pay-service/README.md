@@ -23,10 +23,20 @@ mvn -DskipTests package
 ALIPAY_APP_ID=... ALIPAY_PRIVATE_KEY=... ALIPAY_PUBLIC_KEY=... PAY_INTERNAL_TOKEN=... java -Xmx256m -jar target/pay-service-*.jar
 ```
 
-## 部署（124.220.12.254，未执行）
-1. `git clone` 仓库到 `/opt/GraduationProject`（或仅上传 `pay-service/`）。
-2. `cd pay-service/deploy && cp .env.example .env && chmod 600 .env`，填写密钥与 `PAY_INTERNAL_TOKEN`（`openssl rand -hex 32`）。
-3. `docker compose up -d --build`，确认 `curl -s -o /dev/null -w '%{http_code}' 127.0.0.1:8081/internal/payments/x` 返回 401。
-4. `sudo apt-get install -y nginx`，`sudo cp nginx-pay.conf /etc/nginx/conf.d/pay-service.conf`，删除 `/etc/nginx/sites-enabled/default`，`sudo nginx -t && sudo systemctl reload nginx`。
-5. 腾讯云安全组放行 TCP 80；验证 `curl http://124.220.12.254/` 为 404、`/api/alipay/notify` 返回 `failure`。
-6. 主后端配置 `PAYMENT_CHANNEL=remote`、`PAYMENT_REMOTE_URL=http://124.220.12.254`、`PAYMENT_REMOTE_TOKEN=<同上>`。
+## 线上部署（已完成，2026-10-31）
+
+- **主机**：`ubuntu@124.220.12.254`（腾讯云上海）
+- **域名**：`pay.研途学堂.cn`（punycode `pay.xn--ckst2fk89agjv.cn`），主域 `研途学堂.cn` 已 ICP 备案；DNS A 记录 `pay` → `124.220.12.254`（TTL 600）
+- **入口**：nginx 监听 80/443；域名 HTTP → HTTPS 301；HTTPS 仅代理 `/internal/` 与 `/api/alipay/notify`，其余 404。IP 直连 `:80` 仍可访问上述路径（兼容过渡）
+- **证书**：Let's Encrypt（certbot + nginx 插件），约 90 天自动续期；首次签发约 2027-01-28 过期
+- **容器**：`eclipse-temurin:17-jre` + 挂载预构建 jar（`deploy/compose.yaml`），绑定 `127.0.0.1:8081`，`mem_limit: 400m`
+- **通知 URL**：`https://pay.研途学堂.cn/api/alipay/notify`
+- **防火墙**：需放行 TCP **80**（ACME/跳转）与 **443**
+
+### 部署步骤（复现/迁移参考）
+1. 本机 `mvn -DskipTests package`，将 `target/pay-service-*.jar` 上传为 `/home/ubuntu/pay-service/pay-service.jar`（勿在服务器跑 Maven）。
+2. `cd pay-service/deploy && cp .env.example .env && chmod 600 .env`，填写密钥与 `PAY_INTERNAL_TOKEN`（`openssl rand -hex 32`），`ALIPAY_NOTIFY_URL` 用 HTTPS 域名。
+3. 将本目录 `compose.yaml` 放到与 jar 同级（或改路径），`docker compose up -d`。确认 `curl 127.0.0.1:8081/internal/payments/x` 返回 401。
+4. 安装 nginx + certbot：`sudo apt-get install -y nginx certbot python3-certbot-nginx`。配置见 `nginx-pay.conf`（含 HTTPS）。签发：`sudo certbot --nginx -d pay.xn--ckst2fk89agjv.cn --agree-tos --register-unsafely-without-email --non-interactive`。
+5. 腾讯云安全组/防火墙放行 TCP 80、443；DNS A：`pay` → 服务器 IP。
+6. 主后端：`PAYMENT_CHANNEL=remote`、`PAYMENT_REMOTE_URL=https://pay.研途学堂.cn`、`PAYMENT_REMOTE_TOKEN=<同上>`。

@@ -23,6 +23,7 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     { to: '/portal/schedule', label: '我的日程', icon: 'calendar' },
     { to: '/portal/learning', label: '学习与课表', icon: 'book' },
     { to: '/portal/affairs', label: '我的办事', icon: 'clipboard', aliases: ['/portal/leave', '/portal/certificates'] },
+    { to: '/portal/payments', label: '演示缴费', icon: 'file' },
   )
   if (can('reservation:apply')) personal.push({ to: '/portal/reservations', label: '场地借用', icon: 'reservation' })
   if (can('housing:read')) personal.push({ to: '/housing/mine', label: '住宿与调宿', icon: 'bed', aliases: ['/housing/transfer'] })
@@ -47,6 +48,7 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     { to: '/admin/foundation', label: '账号与组织', icon: 'users' },
     { to: '/admin/resources', label: '教室资源', icon: 'building' },
     { to: '/admin/counselors', label: '辅导员负责班级', icon: 'users' },
+    { to: '/admin/payments', label: '演示账单管理', icon: 'file' },
   )
   if (can('repair:configure')) management.push({ to: '/admin/repair-settings', label: '报修配置', icon: 'wrench' })
   if (can('housing:configure')) management.push({ to: '/admin/housing', label: '宿舍资源', icon: 'bed' })

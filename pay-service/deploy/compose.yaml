@@ -1,15 +1,19 @@
 name: pay-service
 services:
   pay-service:
-    build: ..
-    image: pay-service:latest
+    image: eclipse-temurin:17-jre
+    container_name: pay-service
     restart: unless-stopped
     env_file: .env
     environment:
       PAY_DB_URL: jdbc:h2:file:/app/data/pay;MODE=MySQL
+      JAVA_TOOL_OPTIONS: -Xmx256m -XX:MaxMetaspaceSize=96m -Xss512k -XX:+UseSerialGC
+    working_dir: /app
+    command: ["java","-jar","/app/pay-service.jar"]
     ports:
       - "127.0.0.1:8081:8081"
     volumes:
+      - ./pay-service.jar:/app/pay-service.jar:ro
       - pay-data:/app/data
     mem_limit: 400m
 volumes:

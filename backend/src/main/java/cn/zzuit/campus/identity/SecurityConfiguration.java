@@ -36,10 +36,14 @@ public class SecurityConfiguration {
             .httpBasic(AbstractHttpConfigurer::disable)
             .requestCache(AbstractHttpConfigurer::disable)
             .securityContext(context -> context.securityContextRepository(contexts))
-            .csrf(config -> config.csrfTokenRepository(csrf))
+            .csrf(config -> config.csrfTokenRepository(csrf).ignoringRequestMatchers(request ->
+                "POST".equals(request.getMethod()) && "/api/payments/alipay/notify".equals(request.getRequestURI())))
             .addFilterBefore(new cn.zzuit.campus.common.OperationLoggingFilter(), AuthorizationFilter.class)
             .addFilterBefore(new LiveIdentityFilter(identities,contexts),AuthorizationFilter.class)
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/payments/alipay/notify").permitAll()
+                .requestMatchers("/api/payments/mine", "/api/payments/mine/**").hasAuthority("portal:read")
+                .requestMatchers("/api/admin/payments", "/api/admin/payments/**").hasAuthority("foundation:manage")
                 .requestMatchers("/api/public/**", "/api/health", "/api/auth/csrf", "/api/auth/login", "/error").permitAll()
                 .requestMatchers("/api/portal/**").hasAuthority("portal:read")
                 .requestMatchers("/api/workbench/**").hasAuthority("workbench:read")

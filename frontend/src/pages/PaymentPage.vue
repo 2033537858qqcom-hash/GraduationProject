@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import QRCode from 'qrcode'
 import { useRoute } from 'vue-router'
 import { api, errorMessage } from '../lib/api'
-import { centsFromInput, safeSandboxPaymentUrl } from '../lib/payment'
+import { PAYMENT_POLL_MS, centsFromInput, safeAlipayQrCode, safeSandboxPaymentUrl } from '../lib/payment'
 
 interface Bill { id: number; orderNo: string; title: string; amountCents: number; status: 'UNPAID' | 'PAID'; tradeNo: string | null }
 const route = useRoute()
@@ -37,11 +38,33 @@ async function create() {
 async function pay(id: number) {
   busy.value = true; error.value = ''
   try {
-    const result = await api<{url: string}>(`/payments/mine/${id}/pay`, { method: 'POST' })
-    if (!safeSandboxPaymentUrl(result.url)) throw new Error('支付地址无效，请稍后重试。')
+    const result = await api<{url?: string; qrCode?: string}>(`/payments/mine/${id}/pay`, { method: 'POST' })
+    if (result.qrCode) {
+      if (!safeAlipayQrCode(result.qrCode)) throw new Error('支付二维码无效，请稍后重试。')
+      qrImage.value = await QRCode.toDataURL(result.qrCode, { width: 240, margin: 1 })
+      qrBillId.value = id; busy.value = false; startPolling(id); return
+    }
+    if (!result.url || !safeSandboxPaymentUrl(result.url)) throw new Error('支付地址无效，请稍后重试。')
     window.location.assign(result.url)
   } catch (cause) { error.value = errorMessage(cause); busy.value = false }
 }
+const qrImage = ref('')
+const qrBillId = ref<number | null>(null)
+let pollTimer: ReturnType<typeof setTimeout> | undefined
+function stopPolling() { if (pollTimer) clearTimeout(pollTimer); pollTimer = undefined }
+function closeQr() { stopPolling(); qrImage.value = ''; qrBillId.value = null }
+function startPolling(id: number) {
+  stopPolling()
+  pollTimer = setTimeout(async () => {
+    if (qrBillId.value !== id) return
+    try {
+      const bill = await api<Bill>(`/payments/mine/${id}`)
+      if (bill.status === 'PAID') { closeQr(); message.value = `「${bill.title}」已支付成功。`; await load(); return }
+    } catch { /* 网络抖动时继续轮询 */ }
+    startPolling(id)
+  }, PAYMENT_POLL_MS)
+}
+onBeforeUnmount(stopPolling)
 watch(admin, () => { error.value = ''; message.value = ''; void load() })
 onMounted(load)
 </script>
@@ -56,6 +79,12 @@ onMounted(load)
     <p class="payment-note">本页面用于毕业设计演示，账单和支付均为沙箱测试。</p>
     <p v-if="error" class="payment-error" role="alert">{{ error }}</p>
     <p v-if="message" class="payment-success" role="status">{{ message }}</p>
+    <section v-if="qrImage" class="portal-panel payment-panel payment-qr" aria-live="polite">
+      <h2>请使用支付宝沙箱 App 扫码支付</h2>
+      <img :src="qrImage" alt="支付宝付款二维码" width="240" height="240" />
+      <p class="muted">支付完成后页面会自动刷新状态（每 3 秒查询一次）。</p>
+      <button class="button compact" @click="closeQr">关闭</button>
+    </section>
     <section v-if="admin" class="portal-panel payment-panel">
       <h2>创建演示账单</h2><p class="muted">仅支持已启用的演示学生账号。</p>
       <form class="payment-form" @submit.prevent="create">
@@ -98,6 +127,7 @@ onMounted(load)
 .payment-list p { overflow-wrap: anywhere; margin: 0; font-size: .85rem; }
 .payment-amount { display: grid; text-align: right; gap: 5px; white-space: nowrap; }
 .payment-amount span { color: #587264; font-size: .85rem; }
+.payment-qr { display: grid; justify-items: center; gap: 12px; text-align: center; }
 .payment-error,.payment-success { padding: 12px 16px; margin: 0; border-radius: 8px; }
 .payment-error { color: #9e3030; background: #fff1f0; }.payment-success { color: #246c49; background: #effaf3; }
 @media(max-width: 640px) { .payment-panel { padding: 20px; }.payment-list li { flex-wrap: wrap; gap: 12px; }.payment-list li > div:first-child { flex-basis: 60%; }.payment-list li button { width: 100%; } }

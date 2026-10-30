@@ -25,6 +25,10 @@ server:
 app:
   payment:
     enabled: ${PAYMENT_ENABLED:false}
+    # ijpay：进程内 IJPay 电脑网站支付；remote：独立 pay-service 扫码支付
+    channel: ${PAYMENT_CHANNEL:ijpay}
+    remote-url: ${PAYMENT_REMOTE_URL:}
+    remote-token: ${PAYMENT_REMOTE_TOKEN:}
     app-id: ${PAYMENT_APP_ID:}
     seller-id: ${PAYMENT_SELLER_ID:}
     private-key: ${PAYMENT_PRIVATE_KEY:}

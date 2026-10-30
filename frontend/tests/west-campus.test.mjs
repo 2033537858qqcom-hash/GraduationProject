@@ -12,6 +12,7 @@ before(async () => {
   server = await createServer({
     root: fileURLToPath(new URL('../', import.meta.url)),
     configFile: false,
+    cacheDir: fileURLToPath(new URL('../node_modules/.vite-tests/west-campus', import.meta.url)),
     logLevel: 'error',
     server: { middlewareMode: true, hmr: false, ws: false },
   })

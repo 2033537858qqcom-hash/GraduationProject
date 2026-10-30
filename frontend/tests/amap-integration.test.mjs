@@ -7,7 +7,7 @@ import { amapProxy, amapProxyGuard, amapProxyPath } from '../server/amapProxy.ts
 
 let server, geo, buildCampus, places
 before(async () => {
-  server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), configFile: false, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } })
+  server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), cacheDir: fileURLToPath(new URL('../node_modules/.vite-tests/amap-integration', import.meta.url)), configFile: false, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } })
   geo = await server.ssrLoadModule('/src/campus/georeference.ts')
   ;({ buildCampus } = await server.ssrLoadModule('/src/campus/buildCampus.ts'))
   ;({ campusPlaces: places } = await server.ssrLoadModule('/src/campus/manifest.ts'))

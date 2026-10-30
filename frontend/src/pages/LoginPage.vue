@@ -28,11 +28,11 @@ async function submit() {
 <template>
   <main class="login-page campus-login">
     <section class="login-intro" :style="{ backgroundImage: 'linear-gradient(180deg,#102d35aa 0%,#102f32a6 50%,#0e2b2cef 100%),url(' + schoolMedia.overview.url + ')' }">
-      <RouterLink class="login-school" to="/" aria-label="郑州工业应用技术学院官网"><SchoolIdentity /></RouterLink>
+      <a class="login-school" href="/" aria-label="郑州工业应用技术学院官网"><SchoolIdentity /></a>
       <span class="eyebrow">A PLACE TO LEARN. A SPACE TO GROW.</span>
       <h1>让校园日常，<br>更从容。</h1>
       <p>从一堂课，到一次新的探索。<br>学习、生活与办事，在这里相连。</p>
-      <RouterLink class="quiet-link" to="/"><ArrowLeft :size="16" /> 学校官网</RouterLink>
+      <a class="quiet-link" href="/" aria-label="返回学校官网首页"><ArrowLeft :size="16" /> 返回学校官网</a>
       <div class="login-image-footer"><span>励学敦行 · 明理至善</span><a :href="schoolMedia.overview.sourceUrl" target="_blank" rel="noopener noreferrer">全景校园 · 学校官网影像</a></div>
     </section>
     <section class="login-form-area">

@@ -7,7 +7,7 @@ import { containsPoint, intersectionArea } from '../scripts/campus-geometry.mjs'
 
 let server, layout, places, buildCampus
 before(async () => {
-  server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), configFile: false, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } })
+  server = await createServer({ root: fileURLToPath(new URL('../', import.meta.url)), cacheDir: fileURLToPath(new URL('../node_modules/.vite-tests/campus-evidence', import.meta.url)), configFile: false, logLevel: 'error', server: { middlewareMode: true, hmr: false, ws: false } })
   layout = await server.ssrLoadModule('/src/campus/eastCampusLayout.ts')
   ;({ campusPlaces: places } = await server.ssrLoadModule('/src/campus/manifest.ts'))
   ;({ buildCampus } = await server.ssrLoadModule('/src/campus/buildCampus.ts'))

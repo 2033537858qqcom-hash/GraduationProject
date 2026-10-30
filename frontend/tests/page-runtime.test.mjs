@@ -20,6 +20,7 @@ before(async () => {
   globalThis.fetch = async () => { throw new Error('Network disabled in page setup regression') }
   server = await createServer({
     configFile: false,
+    cacheDir: fileURLToPath(new URL('../node_modules/.vite-tests/page-runtime', import.meta.url)),
     root: fileURLToPath(new URL('../', import.meta.url)),
     plugins: [vue()],
     server: { middlewareMode: true, hmr: false, watch: null },

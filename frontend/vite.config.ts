@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
     ...amapProxy(mapSecret),
   }
   return {
+    // Middleware tests own independent optimizer lifecycles and must never replace the live app cache.
+    cacheDir: fileURLToPath(new URL(`node_modules/.vite-app-${mode}`, import.meta.url)),
+    optimizeDeps: { include: ['gsap', 'gsap/ScrollTrigger'] },
     plugins: [vue(), amapProxyGuard(mapSecret)],
     server: { port: 5173, strictPort: true, proxy, fs: { allow: ['..'] } },
     preview: { proxy },

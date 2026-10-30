@@ -6,7 +6,7 @@ import * as THREE from 'three'
 
 // Regression checks for source provenance, orientation, selection and camera framing.
 // Passing these checks is not a survey or a claim that every traced edge is exact.
-const server = await createServer({ server: { middlewareMode: true, hmr: false, ws: false } })
+const server = await createServer({ mode: 'campus-check', server: { middlewareMode: true, hmr: false, ws: false } })
 try {
   const { buildCampus } = await server.ssrLoadModule('/src/campus/buildCampus.ts')
   const { campusPlaces, campusTour } = await server.ssrLoadModule('/src/campus/manifest.ts')

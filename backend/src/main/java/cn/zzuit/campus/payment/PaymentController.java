@@ -19,7 +19,10 @@ public class PaymentController {
         return payments.create(user,input.requestKey(),input.username(),input.title(),input.amountCents());
     }
     @PostMapping("/api/payments/mine/{id}/pay") Map<String,String> pay(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) {
-        return Map.of("url",payments.pay(user,id));
+        return payments.start(user,id);
+    }
+    @GetMapping("/api/payments/mine/{id}") PaymentService.Bill status(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) {
+        return payments.status(user,id);
     }
     @PostMapping(value="/api/payments/alipay/notify",consumes=MediaType.APPLICATION_FORM_URLENCODED_VALUE,produces=MediaType.TEXT_PLAIN_VALUE)
     String notify(HttpServletRequest request) {

@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS pay_order (
+  order_no VARCHAR(64) PRIMARY KEY,
+  amount VARCHAR(20) NOT NULL,
+  subject VARCHAR(128) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  qr_code VARCHAR(512),
+  trade_no VARCHAR(80),
+  created_at TIMESTAMP NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  paid_at TIMESTAMP,
+  CHECK (status IN ('PENDING','PAID','CLOSED'))
+);
+CREATE TABLE IF NOT EXISTS used_nonce (
+  nonce VARCHAR(64) PRIMARY KEY,
+  seen_at TIMESTAMP NOT NULL
+);

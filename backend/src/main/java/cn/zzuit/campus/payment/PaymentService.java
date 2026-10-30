@@ -72,10 +72,45 @@ public class PaymentService {
         requireDemo();
         if(!env.getProperty("app.payment.enabled",Boolean.class,false)) throw error(HttpStatus.SERVICE_UNAVAILABLE,"PAYMENT_UNAVAILABLE","支付宝沙箱尚未配置");
     }
-    public String pay(CampusPrincipal user,long id) {
-        identities.requirePermission(user,"portal:read"); available();
+    boolean remote() { return "remote".equalsIgnoreCase(env.getProperty("app.payment.channel","ijpay").trim()); }
+    RemotePayClient remoteClient() { return new RemotePayClient(setting("remote-url"),setting("remote-token")); }
+    private Bill owned(CampusPrincipal user,long id) {
         var bill=bill(id);
         if(bill.studentId()!=user.id()) throw error(HttpStatus.NOT_FOUND,"BILL_NOT_FOUND","账单不存在");
+        return bill;
+    }
+    /** 发起支付：ijpay 渠道返回 url（电脑网站支付），remote 渠道返回 qrCode（当面付预下单）。金额始终取自数据库。 */
+    public Map<String,String> start(CampusPrincipal user,long id) {
+        identities.requirePermission(user,"portal:read"); available();
+        if(!remote()) return Map.of("url",pay(user,id));
+        var bill=owned(user,id);
+        if(!bill.status().equals("UNPAID")) throw error(HttpStatus.CONFLICT,"BILL_PAID","账单已支付");
+        try {
+            var order=remoteClient().create(bill.orderNo(),BigDecimal.valueOf(bill.amountCents(),2).toPlainString(),"演示缴费："+bill.title());
+            if("PAID".equals(order.status())) { status(user,id); throw error(HttpStatus.CONFLICT,"BILL_PAID","账单已支付"); }
+            if(!"PENDING".equals(order.status()) || order.qrCode()==null) throw error(HttpStatus.CONFLICT,"PAYMENT_CLOSED","支付订单已关闭");
+            return Map.of("qrCode",order.qrCode());
+        } catch(ApiException ex) { throw ex; }
+        catch(Exception ex) { throw error(HttpStatus.SERVICE_UNAVAILABLE,"PAYMENT_UNAVAILABLE","暂时无法发起沙箱支付"); }
+    }
+    /** 查询本地账单状态；remote 渠道且未支付时向 pay-service 同步一次（校验金额）。 */
+    @Transactional
+    public Bill status(CampusPrincipal user,long id) {
+        identities.requirePermission(user,"portal:read"); requireDemo();
+        var bill=owned(user,id);
+        if(!bill.status().equals("UNPAID") || !remote() || !env.getProperty("app.payment.enabled",Boolean.class,false)) return bill;
+        try {
+            var order=remoteClient().status(bill.orderNo());
+            if("PAID".equals(order.status()) && bill.orderNo().equals(order.orderNo()) && order.tradeNo()!=null
+                && new BigDecimal(order.amount()).compareTo(BigDecimal.valueOf(bill.amountCents(),2))==0)
+                jdbc.sql("UPDATE payment_bill SET status='PAID',trade_no=:trade,paid_at=CURRENT_TIMESTAMP WHERE id=:id AND status='UNPAID'")
+                    .param("trade",order.tradeNo()).param("id",bill.id()).update();
+        } catch(Exception ex) { return bill; }
+        return bill(id);
+    }
+    public String pay(CampusPrincipal user,long id) {
+        identities.requirePermission(user,"portal:read"); available();
+        var bill=owned(user,id);
         if(!bill.status().equals("UNPAID")) throw error(HttpStatus.CONFLICT,"BILL_PAID","账单已支付");
         try {
             var client=AliPayApiConfig.builder().setAppId(setting("app-id")).setServiceUrl("https://openapi-sandbox.dl.alipaydev.com/gateway.do")

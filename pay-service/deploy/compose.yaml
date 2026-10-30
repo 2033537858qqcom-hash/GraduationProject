@@ -1,0 +1,16 @@
+name: pay-service
+services:
+  pay-service:
+    build: ..
+    image: pay-service:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PAY_DB_URL: jdbc:h2:file:/app/data/pay;MODE=MySQL
+    ports:
+      - "127.0.0.1:8081:8081"
+    volumes:
+      - pay-data:/app/data
+    mem_limit: 400m
+volumes:
+  pay-data:

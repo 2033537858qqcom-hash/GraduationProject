@@ -13,3 +13,5 @@ data/
 .vscode/
 artifacts/
 output/
+pay-service/target/
+pay-service/data/

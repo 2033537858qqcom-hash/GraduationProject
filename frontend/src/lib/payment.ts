@@ -12,3 +12,13 @@ export function safeSandboxPaymentUrl(value: string): boolean {
       && url.pathname === '/gateway.do' && !url.username && !url.password && !url.port
   } catch { return false }
 }
+
+/** 支付宝当面付二维码内容只允许 https://qr.alipay.com/ 开头。 */
+export function safeAlipayQrCode(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname === 'qr.alipay.com' && !url.username && !url.password && !url.port
+  } catch { return false }
+}
+
+export const PAYMENT_POLL_MS = 3000

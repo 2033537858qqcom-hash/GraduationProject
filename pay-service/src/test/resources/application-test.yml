@@ -1,0 +1,5 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:pay;MODE=MySQL;DB_CLOSE_DELAY=-1
+pay:
+  internal-token: test-token-0123456789abcdef

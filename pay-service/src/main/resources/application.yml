@@ -1,0 +1,19 @@
+server:
+  port: ${PORT:8081}
+spring:
+  datasource:
+    url: ${PAY_DB_URL:jdbc:h2:file:./data/pay;MODE=MySQL;AUTO_SERVER=FALSE}
+    username: sa
+    password: ""
+  sql:
+    init:
+      mode: always
+pay:
+  internal-token: ${PAY_INTERNAL_TOKEN:}
+  order-ttl-minutes: ${PAY_ORDER_TTL_MINUTES:15}
+  alipay:
+    gateway: ${ALIPAY_GATEWAY:https://openapi-sandbox.dl.alipaydev.com/gateway.do}
+    app-id: ${ALIPAY_APP_ID:}
+    private-key: ${ALIPAY_PRIVATE_KEY:}
+    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+    notify-url: ${ALIPAY_NOTIFY_URL:}

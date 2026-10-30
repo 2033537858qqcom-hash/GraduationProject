@@ -23,6 +23,14 @@ server:
     include-message: never
     include-stacktrace: never
 app:
+  payment:
+    enabled: ${PAYMENT_ENABLED:false}
+    app-id: ${PAYMENT_APP_ID:}
+    seller-id: ${PAYMENT_SELLER_ID:}
+    private-key: ${PAYMENT_PRIVATE_KEY:}
+    alipay-public-key: ${PAYMENT_ALIPAY_PUBLIC_KEY:}
+    notify-url: ${PAYMENT_NOTIFY_URL:}
+    return-url: ${PAYMENT_RETURN_URL:}
   repair:
     reminders:
       enabled: ${REPAIR_REMINDERS_ENABLED:true}

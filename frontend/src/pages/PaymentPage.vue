@@ -88,7 +88,7 @@ onMounted(load)
   <main class="payment-page">
     <header class="payment-heading">
       <span class="portal-context">校园服务 · 沙箱演示</span>
-      <h1>{{ admin ? '演示账单管理' : '我的演示缴费' }}</h1>
+      <h1>{{ admin ? '演示账单管理' : '缴费大厅' }}</h1>
       <p class="muted">{{ admin ? '为演示学生创建明确的测试账单。' : '查看本人测试账单并使用支付宝沙箱完成支付。' }}</p>
     </header>
     <p class="payment-note">本页面用于毕业设计演示，账单和支付均为沙箱测试。</p>

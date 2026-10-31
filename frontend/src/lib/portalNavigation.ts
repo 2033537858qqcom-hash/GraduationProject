@@ -23,7 +23,7 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     { to: '/portal/schedule', label: '我的日程', icon: 'calendar' },
     { to: '/portal/learning', label: '学习与课表', icon: 'book' },
     { to: '/portal/affairs', label: '我的办事', icon: 'clipboard', aliases: ['/portal/leave', '/portal/certificates'] },
-    { to: '/portal/payments', label: '演示缴费', icon: 'file' },
+    { to: '/portal/payments', label: '缴费大厅', icon: 'file' },
   )
   if (can('reservation:apply')) personal.push({ to: '/portal/reservations', label: '场地借用', icon: 'reservation' })
   if (can('housing:read')) personal.push({ to: '/housing/mine', label: '住宿与调宿', icon: 'bed', aliases: ['/housing/transfer'] })

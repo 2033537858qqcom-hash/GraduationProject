@@ -13,10 +13,12 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
     private final PaymentService payments;
     public PaymentController(PaymentService payments) { this.payments=payments; }
-    public record CreateBill(String requestKey,String username,String title,long amountCents) {}
+    public record CreateBill(String requestKey,String username,String title,long amountCents,String categoryCode) {}
+    @GetMapping({"/api/payments/categories", "/api/admin/payments/categories"})
+    List<PaymentService.Category> categories(@AuthenticationPrincipal CampusPrincipal user) { return payments.categories(user); }
     @GetMapping("/api/payments/mine") List<PaymentService.Bill> mine(@AuthenticationPrincipal CampusPrincipal user) { return payments.mine(user); }
     @PostMapping("/api/admin/payments") PaymentService.Bill create(@AuthenticationPrincipal CampusPrincipal user,@RequestBody CreateBill input) {
-        return payments.create(user,input.requestKey(),input.username(),input.title(),input.amountCents());
+        return payments.create(user,input.requestKey(),input.username(),input.title(),input.amountCents(),input.categoryCode());
     }
     @PostMapping("/api/payments/mine/{id}/pay") Map<String,String> pay(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) {
         return payments.start(user,id);

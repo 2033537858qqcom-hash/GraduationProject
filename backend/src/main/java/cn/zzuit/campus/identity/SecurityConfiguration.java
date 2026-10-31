@@ -43,6 +43,7 @@ public class SecurityConfiguration {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/payments/alipay/notify").permitAll()
                 .requestMatchers("/api/payments/mine", "/api/payments/mine/**").hasAuthority("portal:read")
+                .requestMatchers("/api/payments/categories").hasAuthority("portal:read")
                 .requestMatchers("/api/admin/payments", "/api/admin/payments/**").hasAuthority("foundation:manage")
                 .requestMatchers("/api/public/**", "/api/health", "/api/auth/csrf", "/api/auth/login", "/error").permitAll()
                 .requestMatchers("/api/portal/**").hasAuthority("portal:read")

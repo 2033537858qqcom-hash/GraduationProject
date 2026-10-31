@@ -22,45 +22,60 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class PaymentService {
+    private static final String BILL_QUERY = "SELECT b.*, c.name AS category_name FROM payment_bill b JOIN payment_category c ON c.code=b.category_code";
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final Environment env;
     public PaymentService(JdbcClient jdbc, IdentityService identities, Environment env) {
         this.jdbc=jdbc; this.identities=identities; this.env=env;
     }
-    public record Bill(long id,String orderNo,long studentId,String title,long amountCents,String status,String tradeNo) {}
+    public record Category(String code,String name,String description) {}
+    public record Bill(long id,String orderNo,long studentId,String title,String categoryCode,String categoryName,long amountCents,String status,String tradeNo) {}
     private Bill row(java.sql.ResultSet r,int n) throws java.sql.SQLException {
-        return new Bill(r.getLong("id"),r.getString("order_no"),r.getLong("student_id"),r.getString("title"),r.getLong("amount_cents"),r.getString("status"),r.getString("trade_no"));
+        return new Bill(r.getLong("id"),r.getString("order_no"),r.getLong("student_id"),r.getString("title"),r.getString("category_code"),r.getString("category_name"),r.getLong("amount_cents"),r.getString("status"),r.getString("trade_no"));
     }
     private ApiException error(HttpStatus status,String code,String message) { return new ApiException(status,code,message); }
     private void requireDemo() {
         if (!env.getProperty("app.demo.enabled",Boolean.class,false)) throw error(HttpStatus.FORBIDDEN,"DEMO_DISABLED","演示缴费未开放");
     }
+    public List<Category> categories(CampusPrincipal user) {
+        identities.requirePermission(user,user.permissions().contains("foundation:manage") ? "foundation:manage" : "portal:read");
+        requireDemo();
+        return jdbc.sql("SELECT code,name,description FROM payment_category ORDER BY sort_order,code")
+            .query((r,n) -> new Category(r.getString("code"),r.getString("name"),r.getString("description"))).list();
+    }
     @Transactional
     public Bill create(CampusPrincipal user,String key,String username,String title,long cents) {
+        return create(user,key,username,title,cents,null);
+    }
+    @Transactional
+    public Bill create(CampusPrincipal user,String key,String username,String title,long cents,String categoryCode) {
         identities.requirePermission(user,"foundation:manage"); requireDemo();
         if(key==null || !key.matches("[A-Za-z0-9-]{20,80}") || username==null || username.isBlank() || title==null || title.isBlank() || title.trim().length()>120 || cents<1 || cents>100000000L)
             throw error(HttpStatus.BAD_REQUEST,"INVALID_BILL","请检查账单信息");
+        String category = categoryCode == null ? "OTHER" : categoryCode;
+        if (!category.matches("[A-Z_]{1,32}") || !jdbc.sql("SELECT COUNT(*) FROM payment_category WHERE code=:code").param("code",category).query(Long.class).single().equals(1L))
+            throw error(HttpStatus.BAD_REQUEST,"INVALID_CATEGORY","请选择有效的收费分类");
         var student=jdbc.sql("SELECT u.id FROM app_user u JOIN user_role r ON r.user_id=u.id WHERE u.username=:name AND u.enabled=TRUE AND u.demo=TRUE AND r.role_code='STUDENT'")
             .param("name",username.trim()).query(Long.class).optional().orElseThrow(() -> error(HttpStatus.NOT_FOUND,"STUDENT_NOT_FOUND","未找到可用的演示学生"));
-        var existing=jdbc.sql("SELECT * FROM payment_bill WHERE request_key=:key").param("key",key).query(this::row).optional();
+        var existing=jdbc.sql(BILL_QUERY+" WHERE b.request_key=:key").param("key",key).query(this::row).optional();
         if(existing.isPresent()) {
             var bill=existing.get();
-            if(bill.studentId()!=student || !bill.title().equals(title.trim()) || bill.amountCents()!=cents) throw error(HttpStatus.CONFLICT,"REQUEST_CONFLICT","请求标识已用于其他账单");
+            if(bill.studentId()!=student || !bill.title().equals(title.trim()) || bill.amountCents()!=cents || !bill.categoryCode().equals(category)) throw error(HttpStatus.CONFLICT,"REQUEST_CONFLICT","请求标识已用于其他账单");
             return bill;
         }
         var id=new GeneratedKeyHolder();
-        jdbc.sql("INSERT INTO payment_bill(request_key,order_no,student_id,created_by,title,amount_cents) VALUES(:key,:order,:student,:creator,:title,:cents)")
+        jdbc.sql("INSERT INTO payment_bill(request_key,order_no,student_id,created_by,title,amount_cents,category_code) VALUES(:key,:order,:student,:creator,:title,:cents,:category)")
             .param("key",key).param("order",UUID.randomUUID().toString().replace("-", "")).param("student",student)
-            .param("creator",user.id()).param("title",title.trim()).param("cents",cents).update(id,"id");
+            .param("creator",user.id()).param("title",title.trim()).param("cents",cents).param("category",category).update(id,"id");
         return bill(id.getKey().longValue());
     }
     public List<Bill> mine(CampusPrincipal user) {
         identities.requirePermission(user,"portal:read"); requireDemo();
-        return jdbc.sql("SELECT * FROM payment_bill WHERE student_id=:id ORDER BY id DESC LIMIT 200").param("id",user.id()).query(this::row).list();
+        return jdbc.sql(BILL_QUERY+" WHERE b.student_id=:id ORDER BY b.id DESC LIMIT 200").param("id",user.id()).query(this::row).list();
     }
     private Bill bill(long id) {
-        return jdbc.sql("SELECT * FROM payment_bill WHERE id=:id").param("id",id).query(this::row).optional()
+        return jdbc.sql(BILL_QUERY+" WHERE b.id=:id").param("id",id).query(this::row).optional()
             .orElseThrow(() -> error(HttpStatus.NOT_FOUND,"BILL_NOT_FOUND","账单不存在"));
     }
     private String setting(String key) {
@@ -128,7 +143,7 @@ public class PaymentService {
         try {
             available();
             if(!"RSA2".equals(params.get("sign_type")) || !AlipaySignature.rsaCheckV1(new java.util.HashMap<>(params),setting("alipay-public-key"),"UTF-8","RSA2")) return false;
-            var found=jdbc.sql("SELECT * FROM payment_bill WHERE order_no=:order").param("order",params.get("out_trade_no")).query(this::row).optional();
+            var found=jdbc.sql(BILL_QUERY+" WHERE b.order_no=:order").param("order",params.get("out_trade_no")).query(this::row).optional();
             if(found.isEmpty()) return false;
             var bill=found.get();
             if(!matches(params,setting("app-id"),setting("seller-id"),bill.orderNo(),bill.amountCents())) return false;

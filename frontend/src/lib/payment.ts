@@ -1,3 +1,13 @@
+export interface PaymentCategory { code: string; name: string; description: string }
+
+export function filterPaymentBills<T extends { categoryCode?: string | null }>(bills: T[], category: string): T[] {
+  return category ? bills.filter(bill => (bill.categoryCode || 'OTHER') === category) : bills
+}
+
+export function paymentTitleForCategory(title: string, previousName: string, nextName: string): string {
+  return !title.trim() || title === previousName ? nextName : title
+}
+
 export function centsFromInput(value: string): number | null {
   if (!/^\d{1,7}(?:\.\d{1,2})?$/.test(value)) return null
   const [yuan, decimals = ''] = value.split('.')

@@ -3,35 +3,50 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import QRCode from 'qrcode'
 import { useRoute } from 'vue-router'
 import { api, errorMessage } from '../lib/api'
-import { PAYMENT_POLL_MS, centsFromInput, safeAlipayQrCode, safeSandboxPaymentUrl } from '../lib/payment'
+import { PAYMENT_POLL_MS, centsFromInput, filterPaymentBills, paymentTitleForCategory, safeAlipayQrCode, safeSandboxPaymentUrl, type PaymentCategory } from '../lib/payment'
 
-interface Bill { id: number; orderNo: string; title: string; amountCents: number; status: 'UNPAID' | 'PAID'; tradeNo: string | null }
+interface Bill { id: number; orderNo: string; title: string; categoryCode: string; categoryName: string; amountCents: number; status: 'UNPAID' | 'PAID'; tradeNo: string | null }
 const route = useRoute()
 const admin = computed(() => route.path.startsWith('/admin/'))
 const bills = ref<Bill[]>([])
+const categories = ref<PaymentCategory[]>([])
+const categoryFilter = ref('')
+const filteredBills = computed(() => filterPaymentBills(bills.value, categoryFilter.value))
+const selectedCategory = computed(() => categories.value.find(category => category.code === form.value.categoryCode))
 const loading = ref(false)
 const busy = ref(false)
 const error = ref('')
 const message = ref('')
-const form = ref({ username: '', title: '', amount: '' })
+const form = ref({ username: '', title: '', amount: '', categoryCode: '' })
 let requestKey = crypto.randomUUID()
 watch(form, () => { requestKey = crypto.randomUUID() }, { deep: true })
+watch(() => form.value.categoryCode, (code, previousCode) => {
+  const name = categories.value.find(category => category.code === code)?.name ?? ''
+  const previousName = categories.value.find(category => category.code === previousCode)?.name ?? ''
+  form.value.title = paymentTitleForCategory(form.value.title, previousName, name)
+})
 
 async function load() {
-  if (admin.value) return
   loading.value = true; error.value = ''
-  try { bills.value = await api<Bill[]>('/payments/mine') }
+  try {
+    const [catalog, items] = await Promise.all([
+      api<PaymentCategory[]>(admin.value ? '/admin/payments/categories' : '/payments/categories'),
+      admin.value ? Promise.resolve([] as Bill[]) : api<Bill[]>('/payments/mine'),
+    ])
+    categories.value = catalog; bills.value = items
+  }
   catch (cause) { error.value = errorMessage(cause) }
   finally { loading.value = false }
 }
 async function create() {
+  if (!selectedCategory.value) { error.value = '请选择收费分类。'; return }
   const amountCents = centsFromInput(form.value.amount.trim())
   if (amountCents === null) { error.value = '请输入大于零、最多两位小数的金额。'; return }
   busy.value = true; error.value = ''; message.value = ''
   try {
-    const result = await api<Bill>('/admin/payments', { method: 'POST', body: JSON.stringify({ requestKey, username: form.value.username.trim(), title: form.value.title.trim(), amountCents }) })
-    message.value = `演示账单已创建，订单号 ${result.orderNo}。`
-    form.value = { username: '', title: '', amount: '' }
+    const result = await api<Bill>('/admin/payments', { method: 'POST', body: JSON.stringify({ requestKey, username: form.value.username.trim(), title: form.value.title.trim(), amountCents, categoryCode: form.value.categoryCode }) })
+    message.value = `「${result.categoryName}」演示账单已创建，订单号 ${result.orderNo}。`
+    form.value = { username: '', title: '', amount: '', categoryCode: '' }
   } catch (cause) { error.value = errorMessage(cause) }
   finally { busy.value = false }
 }
@@ -65,7 +80,7 @@ function startPolling(id: number) {
   }, PAYMENT_POLL_MS)
 }
 onBeforeUnmount(stopPolling)
-watch(admin, () => { error.value = ''; message.value = ''; void load() })
+watch(admin, () => { error.value = ''; message.value = ''; categoryFilter.value = ''; closeQr(); void load() })
 onMounted(load)
 </script>
 
@@ -86,21 +101,36 @@ onMounted(load)
       <button class="button compact" @click="closeQr">关闭</button>
     </section>
     <section v-if="admin" class="portal-panel payment-panel">
-      <h2>创建演示账单</h2><p class="muted">仅支持已启用的演示学生账号。</p>
+      <h2>创建演示账单</h2><p class="muted">选择收费分类，再填写账单名称和金额。仅支持已启用的演示学生账号。</p>
+      <p v-if="loading" role="status">正在加载收费分类…</p>
+      <button v-else-if="!categories.length" class="button compact" @click="load">重新加载分类</button>
       <form class="payment-form" @submit.prevent="create">
-        <label>学生账号<input v-model="form.username" required maxlength="64" autocomplete="off" placeholder="例如 20260001" /></label>
-        <label>费用名称<input v-model="form.title" required maxlength="120" placeholder="例如 演示场地费用" /></label>
-        <label>金额（元）<input v-model="form.amount" required inputmode="decimal" placeholder="例如 12.50" /></label>
-        <button class="button primary" :disabled="busy">{{ busy ? '正在创建…' : '创建演示账单' }}</button>
+        <fieldset :disabled="busy || loading || !categories.length">
+          <label>学生账号<input v-model="form.username" required maxlength="64" autocomplete="off" placeholder="例如 20260001" /></label>
+          <label>收费分类<select v-model="form.categoryCode" required :aria-describedby="selectedCategory ? 'category-description' : undefined">
+            <option value="" disabled>请选择收费分类</option>
+            <option v-for="category in categories" :key="category.code" :value="category.code">{{ category.name }}</option>
+          </select></label>
+          <p v-if="selectedCategory" id="category-description" class="muted category-description">{{ selectedCategory.description }}</p>
+          <label>费用名称<input v-model="form.title" required maxlength="120" placeholder="例如 2026—2027 学年学费" /></label>
+          <label>金额（元）<input v-model="form.amount" required inputmode="decimal" placeholder="例如 12.50" /></label>
+          <p class="muted category-description">金额由管理员核定，选择分类不会自动计费。</p>
+          <button class="button primary" :disabled="!selectedCategory">{{ busy ? '正在创建…' : '创建演示账单' }}</button>
+        </fieldset>
       </form>
     </section>
     <section v-else class="portal-panel payment-panel" :aria-busy="loading">
       <div class="payment-list-heading"><div><h2>账单记录</h2><p class="muted">支付结果以服务端确认后的状态为准。</p></div><button class="button compact" :disabled="loading || busy" @click="load">刷新状态</button></div>
+      <nav v-if="categories.length" class="payment-categories" aria-label="按收费分类筛选">
+        <button type="button" :aria-pressed="categoryFilter === ''" @click="categoryFilter = ''">全部 <span>{{ bills.length }}</span></button>
+        <button v-for="category in categories" :key="category.code" type="button" :aria-pressed="categoryFilter === category.code" @click="categoryFilter = category.code">{{ category.name }} <span>{{ filterPaymentBills(bills, category.code).length }}</span></button>
+      </nav>
       <p v-if="loading">正在加载账单…</p>
       <p v-else-if="!bills.length && !error" class="muted">目前没有演示账单。</p>
+      <p v-else-if="!filteredBills.length && !error" class="muted">该分类下暂无账单，可切换其他分类或查看全部。</p>
       <ul v-else class="payment-list">
-        <li v-for="bill in bills" :key="bill.id">
-          <div><h3>{{ bill.title }}</h3><p class="muted">订单号 {{ bill.orderNo }}</p></div>
+        <li v-for="bill in filteredBills" :key="bill.id">
+          <div><span class="payment-category">{{ bill.categoryName || '其他费用' }}</span><h3>{{ bill.title }}</h3><p class="muted">订单号 {{ bill.orderNo }}</p></div>
           <div class="payment-amount"><strong>¥{{ (bill.amountCents / 100).toFixed(2) }}</strong><span>{{ bill.status === 'PAID' ? '已支付' : '待支付' }}</span></div>
           <button v-if="bill.status === 'UNPAID'" class="button primary compact" :disabled="busy" @click="pay(bill.id)">前往沙箱支付</button>
         </li>
@@ -116,9 +146,19 @@ onMounted(load)
 .payment-panel { padding: 26px; }
 .payment-panel h2 { margin: 0 0 8px; }
 .payment-form { display: grid; gap: 18px; max-width: 520px; margin-top: 24px; }
+.payment-form fieldset { display: grid; gap: 18px; padding: 0; margin: 0; border: 0; min-width: 0; }
 .payment-form label { display: grid; gap: 8px; font-weight: 600; }
-.payment-form input { width: 100%; padding: 11px 12px; border: 1px solid #ccd5d0; border-radius: 8px; font: inherit; }
+.payment-form input,.payment-form select { width: 100%; padding: 11px 12px; border: 1px solid #ccd5d0; border-radius: 8px; background: #fff; color: inherit; font: inherit; }
+.payment-form :is(input,select):focus-visible,.payment-categories button:focus-visible { outline: 2px solid #246c49; outline-offset: 3px; }
+.payment-form fieldset:disabled { opacity: .65; }
+.category-description { margin: -6px 0 0; font-size: .875rem; line-height: 1.6; }
 .payment-form button { justify-self: start; }
+.payment-categories { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.payment-categories button { display: inline-flex; gap: 8px; align-items: center; min-height: 40px; border: 1px solid #dce5df; border-radius: 8px; padding: 8px 12px; background: #fff; color: #466052; font: inherit; cursor: pointer; }
+.payment-categories button:hover { background: #f4f8f5; }
+.payment-categories button[aria-pressed="true"] { border-color: #246c49; background: #edf5ef; color: #205b3e; font-weight: 600; }
+.payment-categories button span { font-size: .8rem; font-variant-numeric: tabular-nums; }
+.payment-category { display: inline-block; margin-bottom: 8px; padding: 3px 8px; border-radius: 5px; background: #edf5ef; color: #326248; font-size: .75rem; }
 .payment-list-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
 .payment-list { margin: 20px 0 0; padding: 0; list-style: none; }
 .payment-list li { display: flex; align-items: center; gap: 24px; padding: 18px 0; border-top: 1px solid #e6ebe8; }

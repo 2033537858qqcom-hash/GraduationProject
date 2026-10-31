@@ -218,6 +218,31 @@ class FinanceWorkflowHttpTest {
         assertThat(operator.post("/api/finance/payments/batch",command).statusCode()).isEqualTo(404);
         assertThat(jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single()).isEqualTo(before);
     }
+    @Test void missingActionsAndRequestTypesAreRejectedAsInvalidInput() throws Exception {
+        var operator=login("finance1001");var reviewer=login("finance2001");
+        var bill=publish(operator,reviewer);long id=bill.path("id").asLong();
+        var invalid=new HashMap<String,Object>(command("SUBMIT",bill.path("version").asInt()));invalid.remove("action");
+        assertThat(operator.post("/api/finance/payments/"+id+"/actions",invalid).statusCode()).isEqualTo(400);
+        invalid=new HashMap<>(Map.of("requestKey",UUID.randomUUID().toString(),"version",bill.path("version").asInt(),"reason","缺少处理类型应当被拒绝"));
+        assertThat(operator.post("/api/finance/payments/"+id+"/requests",invalid).statusCode()).isEqualTo(400);
+    }
+    @Test void statementPreviewReportsDifferencesAndNeverTreatsUploadedDataAsPaymentConfirmation() throws Exception {
+        var operator=login("finance1001");var reviewer=login("finance2001");var bill=publish(operator,reviewer);
+        long id=bill.path("id").asLong();String order=bill.path("orderNo").asText();
+        String csv="\uFEFF订单号,金额（元）,交易号,支付状态\r\n"+order+",12.50,,UNPAID\r\n"+order+",12.50,FAKE-TRADE,PAID\r\nUNKNOWN-ORDER-0001,10.00,,UNPAID";
+        var preview=ok(operator.post("/api/finance/payments/reconciliation/preview",Map.of("csv",csv)));
+        assertThat(preview.path("matchedCount").asInt()).isEqualTo(1);
+        assertThat(preview.path("duplicateCount").asInt()).isEqualTo(1);
+        assertThat(preview.path("notFoundCount").asInt()).isEqualTo(1);
+        assertThat(ok(operator.get("/api/finance/payments/"+id)).path("status").asText()).isEqualTo("UNPAID");
+        String wrong="商户订单号,订单金额（元）,支付宝交易号,交易状态\n"+order+",99.00,FAKE-TRADE,交易成功";
+        var mismatch=ok(reviewer.post("/api/finance/payments/reconciliation/preview",Map.of("csv",wrong)));
+        assertThat(mismatch.path("differenceCount").asInt()).isEqualTo(1);
+        assertThat(mismatch.toString()).contains("金额", "支付状态");
+        assertThat(login("20260001").post("/api/finance/payments/reconciliation/preview",Map.of("csv",csv)).statusCode()).isEqualTo(403);
+        assertThat(operator.post("/api/finance/payments/reconciliation/preview",Map.of("csv","错误,表头\n1,2")).statusCode()).isEqualTo(400);
+        assertThat(operator.post("/api/finance/payments/reconciliation/preview",Map.of("csv","订单号,金额（元）,交易号,支付状态\n\"未闭合")).statusCode()).isEqualTo(400);
+    }
 
     private JsonNode publish(Browser operator, Browser reviewer) throws Exception {
         var draft = ok(operator.post("/api/finance/payments", fields())); long id = draft.path("id").asLong();

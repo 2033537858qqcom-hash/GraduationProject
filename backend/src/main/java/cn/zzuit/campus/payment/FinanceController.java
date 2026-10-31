@@ -16,7 +16,14 @@ public class FinanceController {
     private final PaymentManagementService finance;
     private final PaymentConfigurationService configuration;
     private final PaymentService payments;
-    public FinanceController(PaymentManagementService finance,PaymentConfigurationService configuration,PaymentService payments) { this.finance=finance;this.configuration=configuration;this.payments=payments; }
+    private final PaymentReconciliation reconciliation;
+    public FinanceController(PaymentManagementService finance,PaymentConfigurationService configuration,PaymentService payments,PaymentReconciliation reconciliation) { this.finance=finance;this.configuration=configuration;this.payments=payments;this.reconciliation=reconciliation; }
+    @PostMapping("/reconciliation/preview") PaymentReconciliation.Preview preview(@AuthenticationPrincipal CampusPrincipal user,@RequestBody PaymentReconciliation.Input input) { return reconciliation.compare(user,input); }
+    @GetMapping("/reconciliation/template") ResponseEntity<byte[]> template(@AuthenticationPrincipal CampusPrincipal user) {
+        configuration.catalog(user);
+        return ResponseEntity.ok().contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=payment-statement-template.csv")
+            .body("\uFEFF订单号,金额（元）,交易号,支付状态\r\n".getBytes(StandardCharsets.UTF_8));
+    }
     @GetMapping("/catalog") Catalog catalog(@AuthenticationPrincipal CampusPrincipal user) { return configuration.catalog(user); }
     @GetMapping("/categories") List<PaymentService.Category> categories(@AuthenticationPrincipal CampusPrincipal user) { return payments.categories(user); }
     @PostMapping("/standards") Standard standard(@AuthenticationPrincipal CampusPrincipal user,@RequestBody StandardInput input) { return configuration.createStandard(user,input); }

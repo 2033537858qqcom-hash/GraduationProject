@@ -57,6 +57,7 @@ public class PaymentConfigurationService {
         events.finance("payment:review",user.id(),"收费标准待复核","PAYMENT_BASIS",0,"请在财务工作台复核新收费标准。");return result;
     }
     @Transactional public Standard standardAction(CampusPrincipal user,long id,Action input) {
+        if(input.action()==null || !List.of("APPROVE","RETURN","RETIRE").contains(input.action())) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_PAYMENT_ACTION","请指定有效的标准处理操作");
         boolean retire="RETIRE".equals(input.action());access.require(user,retire?"payment:manage":"payment:review");
         jdbc.sql("SELECT id FROM payment_standard WHERE id=:id FOR UPDATE").param("id",id).query(Long.class).optional().orElseThrow(()->PaymentService.error(HttpStatus.NOT_FOUND,"STANDARD_NOT_FOUND","收费标准不存在"));
         var standard=standard(id);

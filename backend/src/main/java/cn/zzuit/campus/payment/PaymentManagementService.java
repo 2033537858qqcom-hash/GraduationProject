@@ -135,9 +135,11 @@ public class PaymentManagementService {
             .param("id",id).query(Long.class).single()==0) throw PaymentService.error(HttpStatus.CONFLICT,"NO_FINANCE_REVIEWER","该账单暂无未参与经办的有效财务复核人员，请先配置岗位");
     }
     public PaymentService.Bill action(CampusPrincipal user,long id,Action input) {
+        if(input.action()==null) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_PAYMENT_ACTION","请指定有效的账单操作");
         if("RECONCILE".equals(input.action())) { access.finance(user);return payments.synchronize(id,true); }
         boolean review=List.of("APPROVE","RETURN").contains(input.action());access.require(user,review?"payment:review":"payment:manage");
         return tx.execute(ignored->{
+            access.require(user,review?"payment:review":"payment:manage");
             var bill=repository.lock(id);if(events.repeated(user,input.requestKey(),"BILL",id,input.action(),input)) return bill;
             PaymentAccess.version(bill.version(),input.version());String reason=PaymentAccess.text(input.reason(),5,500,"操作说明");String state=bill.workflowStatus();
             switch(input.action()) {
@@ -192,6 +194,7 @@ public class PaymentManagementService {
         PaymentAccess.key(input.requestKey());
         if(student) { payments.owned(user,id);if(!"REFUND".equals(input.type())) throw PaymentService.error(HttpStatus.FORBIDDEN,"FORBIDDEN","学生仅可申请本人已付账单退款"); }
         else access.require(user,"payment:manage");
+        if(input.type()==null || !List.of("VOID","WAIVER","REFUND").contains(input.type())) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_REQUEST_TYPE","请指定作废、减免或退款类型");
         var bill=repository.lock(id);var previous=jdbc.sql("SELECT id FROM payment_request WHERE request_key=:key").param("key",input.requestKey()).query(Long.class).optional();
         if(previous.isPresent() && events.repeated(user,input.requestKey(),"REQUEST",previous.get(),"CREATE",input)) return request(previous.get());
         PaymentAccess.text(input.requestKey(),20,80,"请求标识");PaymentAccess.version(bill.version(),input.version());String reason=PaymentAccess.text(input.reason(),5,500,"申请原因");access.otherReviewer(user.id());
@@ -208,8 +211,10 @@ public class PaymentManagementService {
         events.finance("payment:review",user.id(),"有财务处理申请待复核","PAYMENT",id,input.type()+" · "+reason);return result;
     }
     public Request requestAction(CampusPrincipal user,long id,Action input) {
+        if(input.action()==null) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_PAYMENT_ACTION","请指定复核操作");
         boolean retry="RETRY".equals(input.action());if(retry) access.finance(user);else access.require(user,"payment:review");
         var reserved=tx.execute(ignored->{
+            if(retry) access.finance(user);else access.require(user,"payment:review");
             var value=request(id);var bill=repository.lock(value.billId());
             jdbc.sql("SELECT id FROM payment_request WHERE id=:id FOR UPDATE").param("id",id).query(Long.class).single();value=request(id);
             if(events.repeated(user,input.requestKey(),"REQUEST",id,input.action(),input)) return value;

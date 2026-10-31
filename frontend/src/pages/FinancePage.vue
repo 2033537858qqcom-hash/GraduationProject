@@ -5,13 +5,13 @@ import { api, errorMessage } from '../lib/api'
 import { currentUser } from '../stores/auth'
 import DownloadLink from '../components/DownloadLink.vue'
 import { centsFromInput, paymentActionLabels, paymentSettlementText, paymentWorkflowText, type PaymentBill } from '../lib/payment'
-import { financeRecordText, financeRequestTypes, type FeeBasis, type FeeStandard, type FinanceCatalog, type FinanceDetail, type FinancePage, type FinanceRequest } from '../finance'
+import { financeRecordText, financeRequestTypes, type FeeBasis, type FeeStandard, type FinanceCatalog, type FinanceDetail, type FinancePage, type FinanceRequest, type StatementPreview } from '../finance'
 import '../styles/finance.css'
 
 const route = useRoute(), router = useRouter()
 const canManage = computed(() => currentUser.value?.permissions.includes('payment:manage') ?? false)
 const canReview = computed(() => currentUser.value?.permissions.includes('payment:review') ?? false)
-const tabs = [{ key: 'ledger', label: '账单台账' }, { key: 'standards', label: '收费标准' }, { key: 'bases', label: '业务收费依据' }, { key: 'requests', label: '作废、减免与退款' }]
+const tabs = [{ key: 'ledger', label: '账单台账' }, { key: 'standards', label: '收费标准' }, { key: 'bases', label: '业务收费依据' }, { key: 'requests', label: '作废、减免与退款' }, { key: 'reconciliation', label: '交易明细核对' }]
 const tab = computed(() => tabs.some(item => item.key === route.query.tab) ? String(route.query.tab) : 'ledger')
 const catalog = ref<FinanceCatalog | null>(null), ledger = ref<FinancePage | null>(null), detail = ref<FinanceDetail | null>(null)
 const bases = ref<FeeBasis[]>([]), requests = ref<FinanceRequest[]>([])
@@ -32,6 +32,8 @@ const standardKey = ref(crypto.randomUUID())
 watch(standardForm, () => { standardKey.value = crypto.randomUUID() }, { deep: true })
 type ActionTarget = { kind: 'bill' | 'standard' | 'request' | 'basis' | 'billRequest'; id: number; action: string; version: number; title: string }
 const actionTarget = ref<ActionTarget | null>(null), actionReason = ref(''), actionKey = ref(crypto.randomUUID())
+const statementCsv = ref(''), statementPreview = ref<StatementPreview | null>(null)
+watch(statementCsv, () => { statementPreview.value = null })
 watch(actionReason, () => { actionKey.value = crypto.randomUUID() })
 let loadSequence = 0
 function queryParams() {
@@ -124,6 +126,20 @@ async function executeAction() {
 }
 function standardAction(item: FeeStandard, action: string) { chooseAction({ kind: 'standard', id: item.id, action, version: item.version, title: item.name }) }
 function requestAction(item: FinanceRequest, action: string) { chooseAction({ kind: 'request', id: item.id, action, version: item.version, title: `账单 #${item.billId} · ${financeRequestTypes[item.type]}` }) }
+async function readStatement(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  if (file.size > 262144) { error.value = '每次交易明细最多256KB，请分批核对。'; return }
+  try { statementCsv.value = await file.text() }
+  catch { error.value = '无法读取文件，请重新选择UTF-8 CSV文件。' }
+}
+async function compareStatement() {
+  busy.value = true; error.value = ''; message.value = ''
+  try { statementPreview.value = await api<StatementPreview>('/finance/payments/reconciliation/preview', { method: 'POST', body: JSON.stringify({ csv: statementCsv.value }) }); message.value = '明细核对已完成，未更改任何账单金额或到账状态。' }
+  catch (cause) { error.value = errorMessage(cause) }
+  finally { busy.value = false }
+}
+const statementResults: Record<string, string> = { MATCH: '一致', DIFFERENCE: '存在差异', NOT_FOUND: '本地无此订单', INVALID: '格式待核对', DUPLICATE: '重复订单' }
 const hasUnsaved = computed(() => showBillForm.value && (form.value.usernames || form.value.title || form.value.basis))
 onBeforeRouteLeave(() => busy.value ? false : !hasUnsaved.value || window.confirm('尚有未保存的账单内容，确定离开？'))
 watch(() => route.fullPath, () => { void load() }, { immediate: true })
@@ -186,5 +202,12 @@ watch(() => route.fullPath, () => { void load() }, { immediate: true })
     <section v-if="tab === 'bases'" class="portal-panel finance-panel"><h2>业务收费依据</h2><p class="muted">业务岗位只提供负责范围内的依据，金额由财务核定，发布仍需独立复核。</p><p v-if="!loading && !bases.length" class="empty-state">暂无业务部门提交的收费依据。</p><article v-for="basis in bases" :key="basis.id" class="finance-record" :class="{ 'finance-selected': String(basis.id) === route.query.id }"><div><span class="finance-badge">{{ basis.categoryName }} · {{ financeRecordText(basis.status) }}</span><h3>{{ basis.studentName }} · {{ basis.billingPeriod }}</h3><p>{{ basis.basis }}</p><p class="muted">{{ basis.sourceReference }} · 数量 {{ basis.quantity }} · 提供人 {{ basis.creatorName }}</p></div><div v-if="canManage && basis.status === 'SUBMITTED'" class="finance-actions"><button class="button compact" :disabled="busy" @click="useBasis(basis)">按此依据建单</button><button class="button compact" :disabled="busy" @click="chooseAction({ kind: 'basis', id: basis.id, action: 'RETURN', version: basis.version, title: basis.studentName + ' · ' + basis.billingPeriod })">退回补充</button></div></article></section>
 
     <section v-if="tab === 'requests'" class="portal-panel finance-panel"><h2>作废、减免与退款</h2><p class="muted">须由其他财务人员复核；只有支付平台确认后才会显示退款或关单完成。</p><p v-if="!loading && !requests.length" class="empty-state">暂无财务处理申请。</p><article v-for="request in requests" :key="request.id" class="finance-record"><div><span class="finance-badge">{{ financeRequestTypes[request.type] }} · {{ financeRecordText(request.status) }}</span><h3>账单 #{{ request.billId }}</h3><p>{{ request.reason }}</p><p class="muted">申请人 {{ request.requesterName }} · {{ request.createdAt.slice(0, 16).replace('T', ' ') }}</p><p v-if="request.lastError" class="finance-warning">{{ request.lastError }}</p></div><div class="finance-actions"><button class="button compact" :disabled="busy" @click="openBill(request.billId)">查看账单</button><template v-if="canReview && request.status === 'SUBMITTED' && request.requestedBy !== currentUser?.id"><button class="button compact" :disabled="busy" @click="requestAction(request, 'APPROVE')">复核通过</button><button class="button compact" :disabled="busy" @click="requestAction(request, 'REJECT')">不予通过</button></template><button v-if="request.status === 'FAILED'" class="button compact" :disabled="busy" @click="requestAction(request, 'RETRY')">核对并重试原申请</button></div></article></section>
+    <section v-if="tab === 'reconciliation'" class="portal-panel finance-panel">
+      <div class="finance-heading"><h2>交易明细核对</h2><DownloadLink href="/api/finance/payments/reconciliation/template" expected-type="text/csv" class="button compact">下载核对模板</DownloadLink></div>
+      <p class="muted">将支付平台导出的交易明细按模板整理为UTF-8 CSV，可比较订单号、金额、交易号及支付状态。每批最多256KB、2000笔。</p>
+      <p class="finance-note">导入明细只用于发现差异，不会将账单标记为已支付。发现差异后，请进入原账单使用“核验支付结果”向支付平台查单。</p>
+      <form class="finance-form" @submit.prevent="compareStatement"><label>选择交易明细文件<input type="file" accept=".csv,text/csv" :disabled="busy" @change="readStatement" /></label><label>交易明细内容<textarea v-model="statementCsv" required maxlength="262144" rows="8" :disabled="busy" placeholder="订单号,金额（元）,交易号,支付状态" /></label><button class="button primary" :disabled="busy">{{ busy ? '正在核对…' : '生成差异核对结果' }}</button></form>
+      <section v-if="statementPreview" class="finance-subsection"><p>一致 {{ statementPreview.matchedCount }} 笔 · 差异 {{ statementPreview.differenceCount }} 笔 · 本地无订单 {{ statementPreview.notFoundCount }} 笔 · 格式异常 {{ statementPreview.invalidCount }} 笔 · 重复 {{ statementPreview.duplicateCount }} 笔</p><article v-for="row in statementPreview.items" :key="row.line" class="finance-record"><div><span class="finance-badge">第 {{ row.line }} 行 · {{ statementResults[row.result] }}</span><h3>{{ row.orderNo }}</h3><p>明细金额 {{ row.amount }} 元 · 本地金额 {{ row.localAmountCents === null ? '—' : money(row.localAmountCents) }}</p><p>{{ row.explanation }}</p></div><button v-if="row.billId" class="button compact" :disabled="busy" @click="openBill(row.billId)">查看原账单</button></article></section>
+    </section>
   </div>
 </template>

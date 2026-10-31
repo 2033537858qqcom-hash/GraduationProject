@@ -75,6 +75,8 @@ public class PaymentService {
     public Map<String,String> start(CampusPrincipal user,long id) {
         owned(user,id);
         var result=tx.execute(ignored->{
+            repository.jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update();
+            identities.requirePermission(user,"portal:read");
             var bill=repository.lock(id);
             if(!"PUBLISHED".equals(bill.workflowStatus()) || bill.pendingRequestId()!=null || !bill.status().equals("UNPAID"))
                 throw error(HttpStatus.CONFLICT,"BILL_NOT_PAYABLE","账单当前不可支付，请刷新账单状态");

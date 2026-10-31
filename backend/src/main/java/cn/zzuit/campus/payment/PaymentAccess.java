@@ -12,7 +12,11 @@ public class PaymentAccess {
     private final PaymentService payments;
     private final JdbcClient jdbc;
     public PaymentAccess(IdentityService identities,PaymentService payments,JdbcClient jdbc) { this.identities=identities;this.payments=payments;this.jdbc=jdbc; }
-    void require(CampusPrincipal user,String permission) { identities.requirePermission(user,permission);payments.requireDemo(); }
+    void require(CampusPrincipal user,String permission) {
+        if(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive())
+            jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update();
+        identities.requirePermission(user,permission);payments.requireDemo();
+    }
     void finance(CampusPrincipal user) { require(user,user.permissions().contains("payment:manage")?"payment:manage":"payment:review"); }
     void otherReviewer(long author) {
         if(jdbc.sql("SELECT COUNT(DISTINCT u.id) FROM app_user u JOIN user_role ur ON ur.user_id=u.id JOIN role_permission rp ON rp.role_code=ur.role_code WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>:author AND rp.permission_code='payment:review'")

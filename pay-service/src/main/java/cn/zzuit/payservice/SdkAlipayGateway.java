@@ -6,6 +6,7 @@ import com.alipay.api.internal.util.AlipaySignature;
 import com.alipay.api.request.AlipayTradeCloseRequest;
 import com.alipay.api.request.AlipayTradePrecreateRequest;
 import com.alipay.api.request.AlipayTradeQueryRequest;
+import com.alipay.api.request.AlipayTradeRefundRequest;
 import java.util.HashMap;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
@@ -29,9 +30,8 @@ public class SdkAlipayGateway implements AlipayGateway {
     }
 
     static String json(Map<String, String> m) {
-        var sb = new StringBuilder("{");
-        m.forEach((k, v) -> { if (sb.length() > 1) sb.append(','); sb.append('"').append(k).append("\":\"").append(v.replace("\\", "\\\\").replace("\"", "\\\"")).append('"'); });
-        return sb.append('}').toString();
+        try { return com.fasterxml.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(m); }
+        catch(com.fasterxml.jackson.core.JsonProcessingException invalid) { throw new IllegalArgumentException("Invalid payment JSON",invalid); }
     }
 
     @Override public String precreate(String orderNo, String amount, String subject, int ttl) throws Exception {
@@ -54,7 +54,15 @@ public class SdkAlipayGateway implements AlipayGateway {
     @Override public void close(String orderNo) throws Exception {
         var req = new AlipayTradeCloseRequest();
         req.setBizContent(json(Map.of("out_trade_no", orderNo)));
-        client().execute(req);
+        var response=client().execute(req);
+        if(!response.isSuccess() && !"ACQ.TRADE_NOT_EXIST".equals(response.getSubCode()))
+            throw new IllegalStateException("关单未确认: "+response.getCode()+" "+response.getSubCode());
+    }
+
+    @Override public RefundResult refund(String orderNo,String requestNo,String amount,String reason) throws Exception {
+        var request=new AlipayTradeRefundRequest();request.setBizContent(json(Map.of("out_trade_no",orderNo,"out_request_no",requestNo,"refund_amount",amount,"refund_reason",reason)));
+        var response=client().execute(request);
+        return new RefundResult(response.getOutTradeNo(),requestNo,response.getRefundFee(),response.isSuccess());
     }
 
     @Override public boolean verify(Map<String, String> params) {

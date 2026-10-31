@@ -14,3 +14,15 @@ CREATE TABLE IF NOT EXISTS used_nonce (
   nonce VARCHAR(64) PRIMARY KEY,
   seen_at TIMESTAMP NOT NULL
 );
+CREATE TABLE IF NOT EXISTS pay_refund (
+  request_no VARCHAR(80) PRIMARY KEY,
+  order_no VARCHAR(64) NOT NULL,
+  amount VARCHAR(20) NOT NULL,
+  reason VARCHAR(500) NOT NULL,
+  status VARCHAR(16) NOT NULL,
+  last_error VARCHAR(200) NOT NULL DEFAULT '',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  refunded_at TIMESTAMP,
+  FOREIGN KEY(order_no) REFERENCES pay_order(order_no),
+  CHECK(status IN ('PENDING','REFUNDED'))
+);

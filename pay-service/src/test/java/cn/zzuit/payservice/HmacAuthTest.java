@@ -21,6 +21,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 class HmacAuthTest {
+    @Autowired PaymentStore store;
     @TestConfiguration static class Cfg { @Bean @Primary FakeGateway fake() { return new FakeGateway(); } }
     static final String TOKEN = "test-token-0123456789abcdef";
     @Autowired MockMvc mvc;
@@ -58,5 +59,22 @@ class HmacAuthTest {
     @Test void notifyIsPublicButRejectsUnsigned() throws Exception {
         mvc.perform(post("/api/alipay/notify").param("out_trade_no", "x").param("sign", "bad"))
             .andExpect(status().isOk()).andExpect(content().string("failure"));
+    }
+    @Test void closeAndRefundRequireSignaturesForTheirExactPathAndBody() throws Exception {
+        mvc.perform(post("/internal/payments/AUTHCLOSE01/close").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        mvc.perform(post("/internal/payments/AUTHREFUND01/refunds").contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .andExpect(status().isUnauthorized());
+        store.create("AUTHREFUND01","1.00","签名退款测试");
+        org.junit.jupiter.api.Assertions.assertTrue(store.notification(java.util.Map.of("app_id","app1","out_trade_no","AUTHREFUND01","total_amount","1.00",
+            "trade_status","TRADE_SUCCESS","trade_no","AUTH-TRADE-1","sign","ok","sign_type","RSA2")));
+        String path="/internal/payments/AUTHREFUND01/refunds",body="{\"requestNo\":\"AUTH-REFUND-REQUEST-01\",\"amount\":\"1.00\",\"reason\":\"独立复核后的测试退款\"}";
+        String ts=Long.toString(Instant.now().getEpochSecond()),nonce=UUID.randomUUID().toString();
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)
+            .header("X-Pay-Timestamp",ts).header("X-Pay-Nonce",nonce).header("X-Pay-Signature",HmacAuthFilter.sign(TOKEN,"POST",path,ts,nonce,body)))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.status").value("REFUNDED"));
+        mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)
+            .header("X-Pay-Timestamp",ts).header("X-Pay-Nonce",nonce).header("X-Pay-Signature",HmacAuthFilter.sign(TOKEN,"POST",path,ts,nonce,body)))
+            .andExpect(status().isUnauthorized());
     }
 }

@@ -25,6 +25,7 @@ class RefundWorkflowTest {
     @BeforeEach void reset() {
         jdbc.sql("DELETE FROM pay_refund").update(); jdbc.sql("DELETE FROM pay_order").update();
         gateway.next = null; gateway.precreates = 0; gateway.valid = true;
+        gateway.refundFailure=false;gateway.refunds=0;
     }
     @Test void closeIsConfirmedAndPaidOrdersCannotBeVoided() {
         store.create("CLOSE0001", "12.50", "独立关单演示");
@@ -45,6 +46,15 @@ class RefundWorkflowTest {
         store.create("REFUND002", "12.50", "尚未支付");
         assertThrows(ResponseStatusException.class, () -> store.refund("REFUND002", "REFUND-REQUEST-0003", "12.50", "不能退未付订单"));
         assertThrows(ResponseStatusException.class, () -> store.refund("NOT-FOUND", "REFUND-REQUEST-0004", "12.50", "不存在订单"));
+    }
+    @Test void anUnconfirmedRefundKeepsItsReservationAndRetryUsesTheSameGatewayRequest() {
+        store.create("REFUND003", "12.50", "平台超时退款"); markPaid("REFUND003");gateway.refundFailure=true;
+        assertThrows(ResponseStatusException.class,()->store.refund("REFUND003","REFUND-REQUEST-TIMEOUT","12.50","保留原请求核对退款结果"));
+        assertEquals("PENDING",jdbc.sql("SELECT status FROM pay_refund WHERE request_no='REFUND-REQUEST-TIMEOUT'").query(String.class).single());
+        assertThrows(ResponseStatusException.class,()->store.refund("REFUND003","REFUND-REQUEST-ANOTHER","12.50","不能换请求重复退款"));
+        gateway.refundFailure=false;
+        assertEquals("REFUNDED",store.refund("REFUND003","REFUND-REQUEST-TIMEOUT","12.50","保留原请求核对退款结果").status());
+        assertEquals(2,gateway.refunds);
     }
     private void markPaid(String order) {
         assertTrue(store.notification(Map.of("app_id", "app1", "out_trade_no", order, "total_amount", "12.50",

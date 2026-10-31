@@ -23,7 +23,7 @@ class PaymentStoreTest {
     @Autowired FakeGateway fake;
     @Autowired JdbcClient jdbc;
 
-    @BeforeEach void clean() { jdbc.sql("DELETE FROM pay_order").update(); fake.next = null; fake.precreates = 0; fake.valid = true; }
+    @BeforeEach void clean() { jdbc.sql("DELETE FROM pay_refund").update(); jdbc.sql("DELETE FROM pay_order").update(); fake.next = null; fake.precreates = 0; fake.valid = true; }
 
     Map<String, String> notify(String order, String amount, String status) {
         var m = new HashMap<String, String>();

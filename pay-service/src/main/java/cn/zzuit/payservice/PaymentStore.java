@@ -22,6 +22,7 @@ public class PaymentStore {
     private static final Logger log = LoggerFactory.getLogger(PaymentStore.class);
     private static final Set<String> PAID_STATES = Set.of("TRADE_SUCCESS", "TRADE_FINISHED");
     public record Order(String orderNo, String amount, String subject, String status, String qrCode, String tradeNo, Instant expiresAt) {}
+    public record Refund(String orderNo,String requestNo,String amount,String status) {}
 
     private final JdbcClient jdbc;
     private final AlipayGateway alipay;
@@ -73,6 +74,68 @@ public class PaymentStore {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "支付宝预下单失败");
         }
         return find(orderNo).orElseThrow();
+    }
+
+    /** Serializes against precreate so a closed order cannot later acquire a fresh QR code. */
+    public synchronized Order closeOrder(String orderNo) {
+        var current=status(orderNo).orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"订单不存在"));
+        if(!"PENDING".equals(current.status())) return current;
+        try { alipay.close(orderNo); }
+        catch(Exception failure) {
+            var latest=status(orderNo).orElseThrow();
+            if("PAID".equals(latest.status())) return latest;
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"平台关单结果尚未确认");
+        }
+        markClosed(orderNo);return find(orderNo).orElseThrow();
+    }
+    /** A tombstone also prevents a previously timed-out, never-created order from being recreated. */
+    public synchronized Order closeOrder(String orderNo,String amount,String subject) {
+        if(orderNo==null || !orderNo.matches("[A-Za-z0-9_-]{6,64}")) throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"订单号无效");
+        String normalized=normalize(amount);var current=find(orderNo);
+        if(current.isPresent() && !current.get().amount().equals(normalized)) throw new ResponseStatusException(HttpStatus.CONFLICT,"订单金额不一致");
+        if(current.isEmpty()) {
+            jdbc.sql("INSERT INTO pay_order(order_no,amount,subject,status,created_at,expires_at) VALUES(:o,:a,:s,'PENDING',CURRENT_TIMESTAMP,:expires)")
+                .param("o",orderNo).param("a",normalized).param("s",subject==null?"已撤销的校园账单":subject.substring(0,Math.min(128,subject.length())))
+                .param("expires",Timestamp.from(Instant.now().plus(ttl,ChronoUnit.MINUTES))).update();
+        }
+        return closeOrder(orderNo);
+    }
+    private Refund refundRow(java.sql.ResultSet r,int n) throws java.sql.SQLException {
+        return new Refund(r.getString("order_no"),r.getString("request_no"),r.getString("amount"),r.getString("status"));
+    }
+    public synchronized Refund refund(String orderNo,String requestNo,String amount,String reason) {
+        if(requestNo==null || !requestNo.matches("[A-Za-z0-9-]{8,80}") || reason==null || reason.trim().length()<5 || reason.trim().length()>500)
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,"退款请求标识或原因无效");
+        String normalized=normalize(amount),description=reason.trim();
+        var reserved=tx.execute(ignored->{
+            jdbc.sql("SELECT order_no FROM pay_order WHERE order_no=:o FOR UPDATE").param("o",orderNo).query(String.class).optional()
+                .orElseThrow(()->new ResponseStatusException(HttpStatus.NOT_FOUND,"订单不存在"));
+            var order=find(orderNo).orElseThrow();
+            if(!order.status().equals("PAID")) throw new ResponseStatusException(HttpStatus.CONFLICT,"仅已确认收款的订单可以退款");
+            var prior=jdbc.sql("SELECT * FROM pay_refund WHERE request_no=:r").param("r",requestNo).query((r,n)->new String[]{r.getString("order_no"),r.getString("amount"),r.getString("reason"),r.getString("status")}).optional();
+            if(prior.isPresent()) {
+                var p=prior.get();if(!p[0].equals(orderNo) || !p[1].equals(normalized) || !p[2].equals(description)) throw new ResponseStatusException(HttpStatus.CONFLICT,"退款请求标识已用于其他订单、金额或原因");
+                return new Refund(orderNo,requestNo,normalized,p[3]);
+            }
+            var total=jdbc.sql("SELECT amount FROM pay_refund WHERE order_no=:o").param("o",orderNo).query(String.class).list().stream().map(BigDecimal::new).reduce(BigDecimal.ZERO,BigDecimal::add);
+            if(new BigDecimal(normalized).compareTo(new BigDecimal(order.amount()))!=0 || total.add(new BigDecimal(normalized)).compareTo(new BigDecimal(order.amount()))>0)
+                throw new ResponseStatusException(HttpStatus.CONFLICT,"仅支持整单退款，累计及待核实退款不得超过实付金额");
+            jdbc.sql("INSERT INTO pay_refund(request_no,order_no,amount,reason,status) VALUES(:r,:o,:a,:reason,'PENDING')")
+                .param("r",requestNo).param("o",orderNo).param("a",normalized).param("reason",description).update();
+            return new Refund(orderNo,requestNo,normalized,"PENDING");
+        });
+        if(reserved.status().equals("REFUNDED")) return reserved;
+        try {
+            var result=alipay.refund(orderNo,requestNo,normalized,description);
+            if(result==null || !result.confirmed() || !orderNo.equals(result.orderNo()) || !requestNo.equals(result.requestNo()) || result.amount()==null || new BigDecimal(result.amount()).compareTo(new BigDecimal(normalized))!=0)
+                throw new IllegalStateException("Refund not confirmed");
+            jdbc.sql("UPDATE pay_refund SET status='REFUNDED',last_error='',refunded_at=CURRENT_TIMESTAMP WHERE request_no=:r").param("r",requestNo).update();
+        } catch(Exception failure) {
+            log.warn("Refund unconfirmed: requestNo={}, failureType={}",requestNo,failure.getClass().getSimpleName());
+            jdbc.sql("UPDATE pay_refund SET last_error='平台退款结果尚未确认，请使用原退款请求核对' WHERE request_no=:r").param("r",requestNo).update();
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,"平台退款结果尚未确认，请使用原退款请求重试");
+        }
+        return jdbc.sql("SELECT * FROM pay_refund WHERE request_no=:r").param("r",requestNo).query(this::refundRow).single();
     }
 
     /** 查询状态：PENDING 时主动向支付宝查询。 */

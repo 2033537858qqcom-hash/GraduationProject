@@ -1,6 +1,23 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { centsFromInput, safeAlipayQrCode, safeSandboxPaymentUrl } from '../src/lib/payment.ts'
+import { centsFromInput, filterPaymentBills, paymentTitleForCategory, safeAlipayQrCode, safeSandboxPaymentUrl } from '../src/lib/payment.ts'
+
+test('category filters show matching bills and preserve legacy bills under other fees', () => {
+  const bills = [{ id: 1, categoryCode: 'TUITION' }, { id: 2, categoryCode: 'WATER' }, { id: 3 }, { id: 4, categoryCode: 'OTHER' }]
+  assert.deepEqual(filterPaymentBills(bills, ''), bills)
+  assert.deepEqual(filterPaymentBills(bills, 'TUITION').map(bill => bill.id), [1])
+  assert.deepEqual(filterPaymentBills(bills, 'OTHER').map(bill => bill.id), [3, 4])
+  assert.deepEqual(filterPaymentBills(bills, 'ACCOMMODATION'), [])
+  assert.equal(bills.length, 4)
+})
+
+test('category changes suggest a title while preserving an administrator custom description', () => {
+  assert.equal(paymentTitleForCategory('', '', '学费'), '学费')
+  assert.equal(paymentTitleForCategory('学费', '学费', '住宿费'), '住宿费')
+  assert.equal(paymentTitleForCategory('2026 学年学费', '学费', '住宿费'), '2026 学年学费')
+  assert.equal(paymentTitleForCategory('   ', '学费', '水费'), '水费')
+  assert.equal(paymentTitleForCategory('手动备注', '学费', ''), '手动备注')
+})
 
 test('money input uses exact decimal cents and rejects malformed amounts', () => {
   assert.equal(centsFromInput('12.30'), 1230)

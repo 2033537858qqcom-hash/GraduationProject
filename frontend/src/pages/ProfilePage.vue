@@ -16,6 +16,11 @@ const roleNames: Record<string, string> = {
   ACADEMIC_STAFF: '教务人员',
   SERVICE_STAFF: '校园服务人员',
   ADMIN: '管理员',
+  FINANCE_OPERATOR: '财务经办人员',
+  FINANCE_REVIEWER: '财务复核人员',
+  DORM_MANAGER: '宿管',
+  REPAIR_DISPATCHER: '后勤派单人员',
+  REPAIR_TECHNICIAN: '维修人员',
   CONTENT_EDITOR: '内容编辑',
   CONTENT_REVIEWER: '内容审核',
 }

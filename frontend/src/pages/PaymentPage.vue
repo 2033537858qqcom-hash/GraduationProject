@@ -1,174 +1,111 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import QRCode from 'qrcode'
-import { useRoute } from 'vue-router'
-import { api, errorMessage } from '../lib/api'
-import { PAYMENT_POLL_MS, centsFromInput, filterPaymentBills, paymentTitleForCategory, safeAlipayQrCode, safeSandboxPaymentUrl, type PaymentCategory } from '../lib/payment'
+import { api, ApiError, errorMessage } from '../lib/api'
+import DownloadLink from '../components/DownloadLink.vue'
+import { PAYMENT_POLL_MS, filterPaymentBills, paymentActionLabels, paymentSettlementText, paymentWorkflowText, safeAlipayQrCode, safeSandboxPaymentUrl, type PaymentBill, type PaymentCategory, type PaymentHistory } from '../lib/payment'
+import '../styles/finance.css'
 
-interface Bill { id: number; orderNo: string; title: string; categoryCode: string; categoryName: string; amountCents: number; status: 'UNPAID' | 'PAID'; tradeNo: string | null }
-const route = useRoute()
-const admin = computed(() => route.path.startsWith('/admin/'))
-const bills = ref<Bill[]>([])
-const categories = ref<PaymentCategory[]>([])
-const categoryFilter = ref('')
-const filteredBills = computed(() => filterPaymentBills(bills.value, categoryFilter.value))
-const selectedCategory = computed(() => categories.value.find(category => category.code === form.value.categoryCode))
-const loading = ref(false)
-const busy = ref(false)
-const error = ref('')
-const message = ref('')
-const form = ref({ username: '', title: '', amount: '', categoryCode: '' })
-let requestKey = crypto.randomUUID()
-watch(form, () => { requestKey = crypto.randomUUID() }, { deep: true })
-watch(() => form.value.categoryCode, (code, previousCode) => {
-  const name = categories.value.find(category => category.code === code)?.name ?? ''
-  const previousName = categories.value.find(category => category.code === previousCode)?.name ?? ''
-  form.value.title = paymentTitleForCategory(form.value.title, previousName, name)
-})
-
-async function load() {
-  loading.value = true; error.value = ''
-  try {
-    const [catalog, items] = await Promise.all([
-      api<PaymentCategory[]>(admin.value ? '/admin/payments/categories' : '/payments/categories'),
-      admin.value ? Promise.resolve([] as Bill[]) : api<Bill[]>('/payments/mine'),
-    ])
-    categories.value = catalog; bills.value = items
-  }
-  catch (cause) { error.value = errorMessage(cause) }
-  finally { loading.value = false }
-}
-async function create() {
-  if (!selectedCategory.value) { error.value = '请选择收费分类。'; return }
-  const amountCents = centsFromInput(form.value.amount.trim())
-  if (amountCents === null) { error.value = '请输入大于零、最多两位小数的金额。'; return }
-  busy.value = true; error.value = ''; message.value = ''
-  try {
-    const result = await api<Bill>('/admin/payments', { method: 'POST', body: JSON.stringify({ requestKey, username: form.value.username.trim(), title: form.value.title.trim(), amountCents, categoryCode: form.value.categoryCode }) })
-    message.value = `「${result.categoryName}」演示账单已创建，订单号 ${result.orderNo}。`
-    form.value = { username: '', title: '', amount: '', categoryCode: '' }
-  } catch (cause) { error.value = errorMessage(cause) }
-  finally { busy.value = false }
-}
-async function pay(id: number) {
-  busy.value = true; error.value = ''
-  try {
-    const result = await api<{url?: string; qrCode?: string}>(`/payments/mine/${id}/pay`, { method: 'POST' })
-    if (result.qrCode) {
-      if (!safeAlipayQrCode(result.qrCode)) throw new Error('支付二维码无效，请稍后重试。')
-      qrImage.value = await QRCode.toDataURL(result.qrCode, { width: 240, margin: 1 })
-      qrBillId.value = id; busy.value = false; startPolling(id); return
-    }
-    if (!result.url || !safeSandboxPaymentUrl(result.url)) throw new Error('支付地址无效，请稍后重试。')
-    window.location.assign(result.url)
-  } catch (cause) { error.value = errorMessage(cause); busy.value = false }
-}
-const qrImage = ref('')
-const qrBillId = ref<number | null>(null)
-let pollTimer: ReturnType<typeof setTimeout> | undefined
+const route = useRoute(), router = useRouter()
+const categories = ref<PaymentCategory[]>([]), bills = ref<PaymentBill[]>([]), selected = ref<PaymentBill | null>(null), history = ref<PaymentHistory[]>([])
+const categoryFilter = ref(''), stateFilter = ref(''), loading = ref(true), busy = ref(false), error = ref(''), message = ref('')
+const qrImage = ref(''), qrBillId = ref<number | null>(null), refundReason = ref(''), showRefund = ref(false), refundKey = ref(crypto.randomUUID())
+const money = (cents: number) => '¥' + (cents / 100).toFixed(2)
+const outstanding = computed(() => bills.value.filter(bill => bill.workflowStatus === 'PUBLISHED' && bill.status === 'UNPAID'))
+const outstandingTotal = computed(() => outstanding.value.reduce((sum, bill) => sum + bill.amountCents, 0))
+const filtered = computed(() => filterPaymentBills(bills.value, categoryFilter.value).filter(bill => !stateFilter.value ||
+  (stateFilter.value === 'REFUNDED' ? bill.refundStatus === 'REFUNDED' : stateFilter.value === 'CLOSED' ? ['VOIDED', 'WAIVED'].includes(bill.workflowStatus) :
+    bill.status === stateFilter.value && bill.refundStatus !== 'REFUNDED' && bill.workflowStatus === 'PUBLISHED')))
+const canPay = (bill: PaymentBill) => bill.workflowStatus === 'PUBLISHED' && bill.status === 'UNPAID' && !bill.pendingRequestId
+const canRefund = (bill: PaymentBill) => bill.status === 'PAID' && !bill.pendingRequestId && ['NONE', 'REJECTED'].includes(bill.refundStatus)
+const overdue = (bill: PaymentBill) => bill.status === 'UNPAID' && bill.workflowStatus === 'PUBLISHED' && bill.dueDate && bill.dueDate < new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
+watch(refundReason, () => { refundKey.value = crypto.randomUUID() })
+let loadSequence = 0, pollTimer: ReturnType<typeof setTimeout> | undefined
 function stopPolling() { if (pollTimer) clearTimeout(pollTimer); pollTimer = undefined }
 function closeQr() { stopPolling(); qrImage.value = ''; qrBillId.value = null }
+function replaceBill(bill: PaymentBill) { bills.value = bills.value.map(item => item.id === bill.id ? bill : item); if (selected.value?.id === bill.id) selected.value = bill }
+async function load() {
+  const sequence = ++loadSequence; loading.value = true; error.value = ''
+  try {
+    const [catalog, items] = await Promise.all([api<PaymentCategory[]>('/payments/categories'), api<PaymentBill[]>('/payments/mine')])
+    const id = Number(route.query.id)
+    const detail = Number.isSafeInteger(id) && id > 0 ? await api<PaymentBill>(`/payments/mine/${id}`) : null
+    const events = detail ? await api<PaymentHistory[]>(`/payments/mine/${id}/history`) : []
+    if (sequence !== loadSequence) return
+    categories.value = catalog; bills.value = items; selected.value = detail; history.value = events; if (detail) replaceBill(detail)
+  } catch (cause) { if (sequence === loadSequence) error.value = errorMessage(cause) }
+  finally { if (sequence === loadSequence) loading.value = false }
+}
+async function openBill(bill: PaymentBill) { showRefund.value = false; refundReason.value = ''; await router.replace({ query: { id: String(bill.id), tab: 'details' } }) }
+async function pay(bill: PaymentBill) {
+  busy.value = true; error.value = ''; message.value = ''; closeQr()
+  try {
+    const result = await api<{ qrCode?: string; url?: string }>(`/payments/mine/${bill.id}/pay`, { method: 'POST' })
+    if (result.qrCode) {
+      if (!safeAlipayQrCode(result.qrCode)) throw new Error('支付二维码无效，请联系财务核验。')
+      qrImage.value = await QRCode.toDataURL(result.qrCode, { width: 240, margin: 1 }); qrBillId.value = bill.id; startPolling(bill.id)
+    } else {
+      if (!result.url || !safeSandboxPaymentUrl(result.url)) throw new Error('支付地址无效，请联系财务核验。')
+      window.location.assign(result.url)
+    }
+  } catch (cause) {
+    if (cause instanceof ApiError && cause.code === 'BILL_PAID') { await load(); message.value = '该账单已确认支付，请查看缴费记录。' }
+    else error.value = errorMessage(cause)
+  } finally { busy.value = false }
+}
 function startPolling(id: number) {
-  stopPolling()
-  pollTimer = setTimeout(async () => {
+  stopPolling(); pollTimer = setTimeout(async () => {
     if (qrBillId.value !== id) return
     try {
-      const bill = await api<Bill>(`/payments/mine/${id}`)
-      if (bill.status === 'PAID') { closeQr(); message.value = `「${bill.title}」已支付成功。`; await load(); return }
-    } catch { /* 网络抖动时继续轮询 */ }
+      const bill = await api<PaymentBill>(`/payments/mine/${id}`); replaceBill(bill)
+      if (bill.lastSyncError) error.value = bill.lastSyncError
+      else error.value = ''
+      if (bill.status === 'PAID') { closeQr(); message.value = `「${bill.title}」已确认支付，可查看并下载缴费凭证。`; await load(); return }
+      if (!canPay(bill)) { closeQr(); error.value = '账单正在办理财务调整，已暂停发起支付，请查看账单详情。'; return }
+    } catch (cause) { error.value = errorMessage(cause) }
     startPolling(id)
   }, PAYMENT_POLL_MS)
 }
+async function refund() {
+  if (!selected.value) return
+  busy.value = true; error.value = ''
+  try {
+    await api(`/payments/mine/${selected.value.id}/refund`, { method: 'POST', body: JSON.stringify({ requestKey: refundKey.value, version: selected.value.version, reason: refundReason.value.trim() }) })
+    showRefund.value = false; refundReason.value = ''; await load(); message.value = '退款申请已提交财务复核。实际退款结果以平台确认后显示的状态为准。'
+  } catch (cause) { error.value = errorMessage(cause) }
+  finally { busy.value = false }
+}
+watch(() => route.fullPath, () => { void load() }, { immediate: true })
 onBeforeUnmount(stopPolling)
-watch(admin, () => { error.value = ''; message.value = ''; categoryFilter.value = ''; closeQr(); void load() })
-onMounted(load)
 </script>
 
 <template>
-  <main class="payment-page">
-    <header class="payment-heading">
-      <span class="portal-context">校园服务 · 沙箱演示</span>
-      <h1>{{ admin ? '演示账单管理' : '缴费大厅' }}</h1>
-      <p class="muted">{{ admin ? '为演示学生创建明确的测试账单。' : '查看本人测试账单并使用支付宝沙箱完成支付。' }}</p>
-    </header>
-    <p class="payment-note">本页面用于毕业设计演示，账单和支付均为沙箱测试。</p>
-    <p v-if="error" class="payment-error" role="alert">{{ error }}</p>
-    <p v-if="message" class="payment-success" role="status">{{ message }}</p>
-    <section v-if="qrImage" class="portal-panel payment-panel payment-qr" aria-live="polite">
-      <h2>请使用支付宝沙箱 App 扫码支付</h2>
-      <img :src="qrImage" alt="支付宝付款二维码" width="240" height="240" />
-      <p class="muted">支付完成后页面会自动刷新状态（每 3 秒查询一次）。</p>
-      <button class="button compact" @click="closeQr">关闭</button>
+  <div class="payment-office">
+    <header class="page-heading-row"><div><span class="portal-context">我的校园 · 财务服务</span><h1>缴费大厅</h1><p class="muted">查看应缴费用、核对收费依据，跟进支付与退款记录。</p></div><button class="button compact" :disabled="loading || busy" @click="load">刷新账单</button></header>
+    <p class="finance-note">当前账单和支付宝支付用于毕业设计沙箱演示。缴费凭证为演示记录，不是学校正式收费票据。</p>
+    <p v-if="error" class="alert" role="alert">{{ error }}</p><p v-if="message" class="finance-success" role="status">{{ message }}</p>
+    <section class="finance-metrics" aria-label="本人缴费概况"><div><span>应缴金额</span><strong>{{ loading || error ? '—' : money(outstandingTotal) }}</strong><small>已发布、尚未支付的账单</small></div><div><span>待缴笔数</span><strong>{{ loading || error ? '—' : outstanding.length }}</strong><small>请逐笔核对账期与截止日期</small></div><div><span>已确认支付</span><strong>{{ loading || error ? '—' : bills.filter(bill => bill.status === 'PAID' && bill.refundStatus !== 'REFUNDED').length }}</strong><small>可下载本人缴费凭证</small></div><div><span>退款记录</span><strong>{{ loading || error ? '—' : bills.filter(bill => bill.refundStatus === 'REFUNDED').length }}</strong><small>以支付平台确认结果为准</small></div></section>
+    <section v-if="qrImage" class="portal-panel finance-panel payment-qr" aria-live="polite"><h2>使用支付宝沙箱 App 扫码支付</h2><img :src="qrImage" width="240" height="240" alt="支付宝沙箱付款二维码" /><p class="muted">支付后会自动核验结果。关闭二维码后仍可在账单中查看支付状态。</p><button class="button" @click="closeQr">关闭二维码</button></section>
+
+    <section v-if="selected" class="portal-panel finance-panel" aria-labelledby="bill-detail-heading">
+<div class="finance-heading"><div><span class="finance-badge">{{ selected.categoryName }} · {{ paymentWorkflowText(selected.workflowStatus) }} · {{ paymentSettlementText(selected) }}</span><h2 id="bill-detail-heading">{{ selected.title }}</h2><p class="muted">{{ selected.billingPeriod }}</p></div><strong class="finance-total">{{ money(selected.amountCents) }}</strong></div>
+      <dl class="finance-facts"><div><dt>缴费截止</dt><dd>{{ selected.dueDate || '历史账单未设置' }}<span v-if="overdue(selected)" class="finance-warning">逾期待缴</span></dd></div><div><dt>收费标准与数量</dt><dd>{{ selected.standardName || '财务手工核定' }} · {{ selected.quantity }}</dd></div><div class="finance-wide"><dt>收费依据</dt><dd>{{ selected.basis }}</dd></div><div class="finance-wide"><dt>订单号</dt><dd>{{ selected.orderNo }}</dd></div><div v-if="selected.tradeNo" class="finance-wide"><dt>交易号</dt><dd>{{ selected.tradeNo }}</dd></div></dl>
+      <p v-if="selected.lastSyncError" class="finance-warning">{{ selected.lastSyncError }}</p><p v-if="selected.pendingRequestId" class="finance-note">该账单有财务申请正在处理中。退款和账单调整尚未完成时，以当前确认状态为准。</p>
+      <div class="finance-actions"><button v-if="canPay(selected)" class="button primary" :disabled="busy" @click="pay(selected)">前往沙箱支付</button><DownloadLink v-if="selected.status === 'PAID'" :href="`/api/payments/mine/${selected.id}/receipt`" expected-type="application/pdf" class="button compact">下载缴费凭证</DownloadLink><button v-if="canRefund(selected)" class="button compact" :disabled="busy" @click="showRefund = !showRefund">申请全额退款</button></div>
+      <form v-if="showRefund && canRefund(selected)" class="finance-form finance-subsection" @submit.prevent="refund"><label>退款原因<textarea v-model="refundReason" required minlength="5" maxlength="500" rows="3" :disabled="busy" placeholder="请说明需要退款的原因，财务人员将进行复核" /></label><div class="finance-actions"><button class="button primary" :disabled="busy">提交退款申请</button><button type="button" class="button" :disabled="busy" @click="showRefund = false">取消</button></div></form>
+      <section class="finance-subsection"><h3>办理记录</h3><ol class="finance-history"><li v-for="event in history" :key="event.id"><strong>{{ paymentActionLabels[event.action] || event.action }}</strong><span>{{ event.actorName }} · {{ event.createdAt.slice(0, 16).replace('T', ' ') }}</span><p>{{ event.reason }}</p></li></ol><p v-if="!history.length" class="muted">历史账单尚无新增办理记录。</p></section>
     </section>
-    <section v-if="admin" class="portal-panel payment-panel">
-      <h2>创建演示账单</h2><p class="muted">选择收费分类，再填写账单名称和金额。仅支持已启用的演示学生账号。</p>
-      <p v-if="loading" role="status">正在加载收费分类…</p>
-      <button v-else-if="!categories.length" class="button compact" @click="load">重新加载分类</button>
-      <form class="payment-form" @submit.prevent="create">
-        <fieldset :disabled="busy || loading || !categories.length">
-          <label>学生账号<input v-model="form.username" required maxlength="64" autocomplete="off" placeholder="例如 20260001" /></label>
-          <label>收费分类<select v-model="form.categoryCode" required :aria-describedby="selectedCategory ? 'category-description' : undefined">
-            <option value="" disabled>请选择收费分类</option>
-            <option v-for="category in categories" :key="category.code" :value="category.code">{{ category.name }}</option>
-          </select></label>
-          <p v-if="selectedCategory" id="category-description" class="muted category-description">{{ selectedCategory.description }}</p>
-          <label>费用名称<input v-model="form.title" required maxlength="120" placeholder="例如 2026—2027 学年学费" /></label>
-          <label>金额（元）<input v-model="form.amount" required inputmode="decimal" placeholder="例如 12.50" /></label>
-          <p class="muted category-description">金额由管理员核定，选择分类不会自动计费。</p>
-          <button class="button primary" :disabled="!selectedCategory">{{ busy ? '正在创建…' : '创建演示账单' }}</button>
-        </fieldset>
-      </form>
+
+    <section class="portal-panel finance-panel">
+<div class="finance-heading"><h2>本人账单</h2><label>缴费状态<select v-model="stateFilter"><option value="">全部状态</option><option value="UNPAID">待支付</option><option value="PAID">已支付</option><option value="REFUNDED">已退款</option><option value="CLOSED">已作废 / 已减免</option></select></label></div>
+      <nav class="finance-tabs payment-category-tabs" aria-label="按收费分类筛选"><button type="button" :aria-pressed="categoryFilter === ''" @click="categoryFilter = ''">全部 {{ bills.length }}</button><button v-for="category in categories" :key="category.code" type="button" :aria-pressed="categoryFilter === category.code" @click="categoryFilter = category.code">{{ category.name }} {{ filterPaymentBills(bills, category.code).length }}</button></nav>
+      <p v-if="loading" role="status">正在读取本人账单…</p><p v-else-if="!bills.length && !error" class="empty-state">目前没有已发布账单。有新的应缴费用时，会通过站内消息通知你。</p><p v-else-if="!filtered.length && !error" class="empty-state">当前分类和状态下暂无账单，可切换筛选查看其他记录。</p>
+      <article v-for="bill in loading ? [] : filtered" :key="bill.id" class="finance-record"><div><span class="finance-badge">{{ bill.categoryName }}</span><h3>{{ bill.title }}</h3><p>{{ bill.billingPeriod }}<template v-if="bill.dueDate"> · 截止 {{ bill.dueDate }}</template><span v-if="overdue(bill)" class="payment-overdue">逾期待缴</span></p><small class="muted">{{ ['VOIDED', 'WAIVED'].includes(bill.workflowStatus) ? paymentWorkflowText(bill.workflowStatus) : paymentSettlementText(bill) }}<template v-if="bill.pendingRequestId"> · 财务申请办理中</template></small></div><div class="finance-record-end"><strong>{{ money(bill.amountCents) }}</strong><div class="finance-actions"><button class="button compact" :disabled="busy" @click="openBill(bill)">查看详情</button><button v-if="canPay(bill)" class="button primary compact" :disabled="busy" @click="pay(bill)">前往沙箱支付</button></div></div></article>
     </section>
-    <section v-else class="portal-panel payment-panel" :aria-busy="loading">
-      <div class="payment-list-heading"><div><h2>账单记录</h2><p class="muted">支付结果以服务端确认后的状态为准。</p></div><button class="button compact" :disabled="loading || busy" @click="load">刷新状态</button></div>
-      <nav v-if="categories.length" class="payment-categories" aria-label="按收费分类筛选">
-        <button type="button" :aria-pressed="categoryFilter === ''" @click="categoryFilter = ''">全部 <span>{{ bills.length }}</span></button>
-        <button v-for="category in categories" :key="category.code" type="button" :aria-pressed="categoryFilter === category.code" @click="categoryFilter = category.code">{{ category.name }} <span>{{ filterPaymentBills(bills, category.code).length }}</span></button>
-      </nav>
-      <p v-if="loading">正在加载账单…</p>
-      <p v-else-if="!bills.length && !error" class="muted">目前没有演示账单。</p>
-      <p v-else-if="!filteredBills.length && !error" class="muted">该分类下暂无账单，可切换其他分类或查看全部。</p>
-      <ul v-else class="payment-list">
-        <li v-for="bill in filteredBills" :key="bill.id">
-          <div><span class="payment-category">{{ bill.categoryName || '其他费用' }}</span><h3>{{ bill.title }}</h3><p class="muted">订单号 {{ bill.orderNo }}</p></div>
-          <div class="payment-amount"><strong>¥{{ (bill.amountCents / 100).toFixed(2) }}</strong><span>{{ bill.status === 'PAID' ? '已支付' : '待支付' }}</span></div>
-          <button v-if="bill.status === 'UNPAID'" class="button primary compact" :disabled="busy" @click="pay(bill.id)">前往沙箱支付</button>
-        </li>
-      </ul>
-    </section>
-  </main>
+  </div>
 </template>
 
 <style scoped>
-.payment-page { max-width: 1000px; margin: 0 auto; display: grid; gap: 20px; }
-.payment-heading h1 { margin: 8px 0; }
-.payment-note { border-left: 3px solid #b68b44; padding: 12px 16px; background: #fbf6ea; color: #6b542d; margin: 0; }
-.payment-panel { padding: 26px; }
-.payment-panel h2 { margin: 0 0 8px; }
-.payment-form { display: grid; gap: 18px; max-width: 520px; margin-top: 24px; }
-.payment-form fieldset { display: grid; gap: 18px; padding: 0; margin: 0; border: 0; min-width: 0; }
-.payment-form label { display: grid; gap: 8px; font-weight: 600; }
-.payment-form input,.payment-form select { width: 100%; padding: 11px 12px; border: 1px solid #ccd5d0; border-radius: 8px; background: #fff; color: inherit; font: inherit; }
-.payment-form :is(input,select):focus-visible,.payment-categories button:focus-visible { outline: 2px solid #246c49; outline-offset: 3px; }
-.payment-form fieldset:disabled { opacity: .65; }
-.category-description { margin: -6px 0 0; font-size: .875rem; line-height: 1.6; }
-.payment-form button { justify-self: start; }
-.payment-categories { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-.payment-categories button { display: inline-flex; gap: 8px; align-items: center; min-height: 40px; border: 1px solid #dce5df; border-radius: 8px; padding: 8px 12px; background: #fff; color: #466052; font: inherit; cursor: pointer; }
-.payment-categories button:hover { background: #f4f8f5; }
-.payment-categories button[aria-pressed="true"] { border-color: #246c49; background: #edf5ef; color: #205b3e; font-weight: 600; }
-.payment-categories button span { font-size: .8rem; font-variant-numeric: tabular-nums; }
-.payment-category { display: inline-block; margin-bottom: 8px; padding: 3px 8px; border-radius: 5px; background: #edf5ef; color: #326248; font-size: .75rem; }
-.payment-list-heading { display: flex; justify-content: space-between; align-items: start; gap: 16px; }
-.payment-list { margin: 20px 0 0; padding: 0; list-style: none; }
-.payment-list li { display: flex; align-items: center; gap: 24px; padding: 18px 0; border-top: 1px solid #e6ebe8; }
-.payment-list li > div:first-child { flex: 1; min-width: 0; }
-.payment-list h3 { margin: 0 0 6px; font-size: 1rem; }
-.payment-list p { overflow-wrap: anywhere; margin: 0; font-size: .85rem; }
-.payment-amount { display: grid; text-align: right; gap: 5px; white-space: nowrap; }
-.payment-amount span { color: #587264; font-size: .85rem; }
-.payment-qr { display: grid; justify-items: center; gap: 12px; text-align: center; }
-.payment-error,.payment-success { padding: 12px 16px; margin: 0; border-radius: 8px; }
-.payment-error { color: #9e3030; background: #fff1f0; }.payment-success { color: #246c49; background: #effaf3; }
-@media(max-width: 640px) { .payment-panel { padding: 20px; }.payment-list li { flex-wrap: wrap; gap: 12px; }.payment-list li > div:first-child { flex-basis: 60%; }.payment-list li button { width: 100%; } }
+.payment-qr { display: grid; justify-items: center; gap: 14px; text-align: center; }.payment-qr img { max-width: 100%; height: auto; }.payment-category-tabs { margin: 22px 0 14px; }.payment-overdue { display: inline-block; margin-left: 10px; color: #936023; font-size: .8rem; }.finance-form .finance-actions { margin-top: 16px; }
 </style>

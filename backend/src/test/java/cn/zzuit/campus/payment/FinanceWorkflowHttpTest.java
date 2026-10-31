@@ -195,6 +195,7 @@ class FinanceWorkflowHttpTest {
         assertThat(basis.path("status").asText()).isEqualTo("SUBMITTED");
         assertThat(academic.post("/api/finance/payments", input).statusCode()).isEqualTo(403);
         input.put("categoryCode", "WATER");
+        input.put("requestKey", UUID.randomUUID().toString());
         assertThat(academic.post("/api/payment-bases", input).statusCode()).isEqualTo(403);
         assertThat(login("dorm1001").post("/api/payment-bases", fields()).statusCode()).isEqualTo(403);
     }
@@ -206,6 +207,16 @@ class FinanceWorkflowHttpTest {
         var response = admin.post("/api/admin/foundation/users/" + user.path("id").asLong() + "/state",
             Map.of("enabled", false, "version", user.path("version").asInt(), "reason", "测试常规离岗交接保护"));
         assertThat(response.statusCode()).isEqualTo(409);
+    }
+    @Test void batchDraftCreationIsAtomicAndRetriesDoNotDuplicateStudentBills() throws Exception {
+        var operator=login("finance1001");String key=UUID.randomUUID().toString();
+        var command=new HashMap<String,Object>(Map.of("requestKey",key,"usernames",java.util.List.of("20260001","20260002"),"template",fields()));
+        var first=ok(operator.post("/api/finance/payments/batch",command));assertThat(first.size()).isEqualTo(2);
+        assertThat(ok(operator.post("/api/finance/payments/batch",command))).isEqualTo(first);
+        long before=jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single();
+        command.put("requestKey",UUID.randomUUID().toString());command.put("usernames",java.util.List.of("20260001","missing-student"));
+        assertThat(operator.post("/api/finance/payments/batch",command).statusCode()).isEqualTo(404);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single()).isEqualTo(before);
     }
 
     private JsonNode publish(Browser operator, Browser reviewer) throws Exception {

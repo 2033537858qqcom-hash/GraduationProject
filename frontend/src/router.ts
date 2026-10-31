@@ -55,7 +55,9 @@ export const router = createRouter({
         { path: 'workbench', component: () => import('./pages/WorkbenchPage.vue'), meta: { title: '岗位工作台', permission: 'workbench:read' } },
         { path: 'admin/content', component: () => import('./pages/ContentManager.vue'), meta: { title: '官网内容', contentPermission: true } },
         { path: 'admin/foundation', component: () => import('./pages/FoundationPage.vue'), meta: { title: '账号与组织管理', permission: 'foundation:manage' } },
-        { path: 'admin/payments', component: () => import('./pages/PaymentPage.vue'), meta: { title: '演示账单管理', permission: 'foundation:manage' } },
+        { path: 'admin/payments', redirect: '/finance/payments' },
+        { path: 'finance/payments', component: () => import('./pages/FinancePage.vue'), meta: { title: '财务收费', financePermission: true } },
+        { path: 'payment-bases', component: () => import('./pages/PaymentBasisPage.vue'), meta: { title: '收费依据', permission: 'payment:source' } },
         { path: 'admin/resources', component: () => import('./pages/ResourcesPage.vue'), meta: { title: '教室资源目录', permission: 'foundation:manage' } },
         { path: 'admin/counselors', component: () => import('./pages/CounselorAssignmentsPage.vue'), meta: { title: '辅导员负责班级', permission: 'foundation:manage' } },
         { path: 'admin/repair-settings', component: () => import('./pages/RepairSettingsPage.vue'), meta: { title: '报修地点与人员范围', permission: 'repair:configure' } },
@@ -91,6 +93,7 @@ router.beforeEach(async to => {
   if (to.meta.authenticated && currentUser.value?.passwordChangeRequired && to.path !== '/account/password') return '/account/password'
   if (to.path === '/login' && currentUser.value) return safeLoginDestination(to.query.redirect) ?? landingPage()
   if (to.meta.permission && !currentUser.value?.permissions.includes(String(to.meta.permission))) return '/forbidden'
+  if (to.meta.financePermission && !currentUser.value?.permissions.some(p => p === 'payment:manage' || p === 'payment:review')) return '/forbidden'
   if (to.meta.contentPermission && !currentUser.value?.permissions.some(p => p.startsWith('content:'))) return '/forbidden'
   if (to.meta.repairResponsibility && !currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work')) return '/forbidden'
 })

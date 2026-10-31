@@ -35,6 +35,10 @@ app:
     alipay-public-key: ${PAYMENT_ALIPAY_PUBLIC_KEY:}
     notify-url: ${PAYMENT_NOTIFY_URL:}
     return-url: ${PAYMENT_RETURN_URL:}
+    followup:
+      enabled: ${PAYMENT_FOLLOWUP_ENABLED:true}
+      interval-ms: ${PAYMENT_FOLLOWUP_INTERVAL_MS:60000}
+      initial-delay-ms: ${PAYMENT_FOLLOWUP_INITIAL_DELAY_MS:60000}
   repair:
     reminders:
       enabled: ${REPAIR_REMINDERS_ENABLED:true}

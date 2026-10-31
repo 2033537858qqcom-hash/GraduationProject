@@ -5,11 +5,12 @@ export function safeLoginDestination(value: unknown): string | null {
   if (path === '/' || path === '/campus/explore' || path === '/verify/certificate') return value
   if (/^\/content\/[a-z0-9][a-z0-9-]{0,79}$/.test(path)) return value
   if (/^\/assistant\/guides\/[a-z0-9][a-z0-9-]{0,79}$/.test(path)) return value
-  return /^\/(?:portal(?:\/(?:learning(?:\/(?:timetable|grades|exams))?|timetable|schedule|affairs|leave|certificates|notices|reservations))?|profile|workbench|notices|admin\/(?:content|foundation|resources|counselors|repair-settings|housing)|logistics\/(?:repair-responsibilities|repairs\/(?:dispatch|tasks|statistics))|repairs(?:\/mine)?|housing(?:\/(?:mine|assignments|transfer))?|teaching(?:\/timetable)?|academic|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(path) ? value : null
+  return /^\/(?:portal(?:\/(?:learning(?:\/(?:timetable|grades|exams))?|timetable|schedule|affairs|leave|certificates|notices|reservations|payments))?|profile|workbench|notices|finance\/payments|payment-bases|admin\/(?:content|foundation|resources|counselors|repair-settings|housing|payments)|logistics\/(?:repair-responsibilities|repairs\/(?:dispatch|tasks|statistics))|repairs(?:\/mine)?|housing(?:\/(?:mine|assignments|transfer))?|teaching(?:\/timetable)?|academic|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(path) ? value : null
 }
 export function safeAffairDestination(value: unknown): string | null {
   if (typeof value !== 'string') return null
-  return /^\/(?:portal\/(?:leave|certificates|reservations)|student-affairs\/(?:leave|certificates|housing|reservations)|repairs\/mine|housing\/(?:transfer|assignments)|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value) ? value : null
+  return /^\/(?:portal\/(?:leave|certificates|reservations|payments)|finance\/payments|payment-bases|student-affairs\/(?:leave|certificates|housing|reservations)|repairs\/mine|housing\/(?:transfer|assignments)|logistics\/repairs\/(?:dispatch|tasks))\?id=[1-9]\d*&tab=details$/.test(value)
+    || /^\/finance\/payments\?id=[1-9]\d*&tab=bases$/.test(value) ? value : null
 }
 
 /** Reconnect may resume login itself, but must never return to an error page or external URL. */

@@ -1,7 +1,7 @@
 import { api } from './lib/api.ts'
 import type { Profile } from './types.ts'
 
-export type TaskDomain = 'ALL' | 'LEAVE' | 'CERTIFICATE' | 'RESERVATION' | 'HOUSING' | 'REPAIR' | 'CONTENT'
+export type TaskDomain = 'ALL' | 'LEAVE' | 'CERTIFICATE' | 'RESERVATION' | 'HOUSING' | 'REPAIR' | 'CONTENT' | 'PAYMENT'
 export interface AggregatedTask {
   id: string
   domain: string

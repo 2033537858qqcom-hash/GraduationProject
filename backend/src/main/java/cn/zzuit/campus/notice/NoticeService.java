@@ -42,6 +42,30 @@ public class NoticeService {
         if(type==null || id==null || view==null) return null;
         String mode=view.equals("MINE")?"mine":"review";
         try {
+            if(type.equals("PAYMENT")) {
+                if(view.equals("MINE")) {
+                    identities.requirePermission(user,"portal:read");
+                    if(jdbc.sql("SELECT COUNT(*) FROM payment_bill WHERE id=:id AND student_id=:u AND published_at IS NOT NULL").param("id",id).param("u",user.id()).query(Long.class).single()!=1) return null;
+                    return "/portal/payments?id="+id+"&tab=details";
+                }
+                if(view.equals("FINANCE")) {
+                    identities.requirePermission(user,user.permissions().contains("payment:manage")?"payment:manage":"payment:review");
+                    if(jdbc.sql("SELECT COUNT(*) FROM payment_bill WHERE id=:id").param("id",id).query(Long.class).single()!=1) return null;
+                    return "/finance/payments?id="+id+"&tab=details";
+                }
+            }
+            if(type.equals("PAYMENT_BASIS")) {
+                if(view.equals("SOURCE")) {
+                    identities.requirePermission(user,"payment:source");
+                    if(jdbc.sql("SELECT COUNT(*) FROM payment_basis WHERE id=:id AND created_by=:u").param("id",id).param("u",user.id()).query(Long.class).single()!=1) return null;
+                    return "/payment-bases?id="+id+"&tab=details";
+                }
+                if(view.equals("FINANCE")) {
+                    identities.requirePermission(user,user.permissions().contains("payment:manage")?"payment:manage":"payment:review");
+                    if(jdbc.sql("SELECT COUNT(*) FROM payment_basis WHERE id=:id").param("id",id).query(Long.class).single()!=1) return null;
+                    return "/finance/payments?id="+id+"&tab=bases";
+                }
+            }
             if(type.equals("HOUSING") && List.of("MINE","REVIEW","ASSIGN").contains(view)) {
                 housing.requireNoticeAccess(user,id,view);
                 return (view.equals("MINE")?"/housing/transfer":view.equals("REVIEW")?"/student-affairs/housing":"/housing/assignments")+"?id="+id+"&tab=details";

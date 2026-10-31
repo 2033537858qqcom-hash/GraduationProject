@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClient;
 /** 独立 pay-service 的客户端：请求使用 HMAC-SHA256 签名（method+path+timestamp+nonce+body）。 */
 public class RemotePayClient {
     public record Order(String orderNo, String amount, String status, String qrCode, String tradeNo) {}
+    public record Refund(String orderNo,String requestNo,String amount,String status) {}
     private final String baseUrl, token;
     private final RestClient http;
 
@@ -43,7 +44,7 @@ public class RemotePayClient {
         return sb.append('"').toString();
     }
 
-    private Order call(String method, String path, String body) {
+    private Map<?,?> request(String method, String path, String body) {
         String ts = String.valueOf(Instant.now().getEpochSecond()), nonce = UUID.randomUUID().toString();
         var spec = http.method(org.springframework.http.HttpMethod.valueOf(method)).uri(baseUrl + path)
             .header("X-Pay-Timestamp", ts).header("X-Pay-Nonce", nonce)
@@ -51,7 +52,10 @@ public class RemotePayClient {
         if (!body.isEmpty()) spec = spec.contentType(MediaType.APPLICATION_JSON).body(body.getBytes(StandardCharsets.UTF_8));
         Map<?, ?> m = spec.retrieve().body(Map.class);
         if (m == null) throw new IllegalStateException("empty response");
-        return new Order(str(m, "orderNo"), str(m, "amount"), str(m, "status"), str(m, "qrCode"), str(m, "tradeNo"));
+        return m;
+    }
+    private Order call(String method,String path,String body) {
+        var m=request(method,path,body);return new Order(str(m,"orderNo"),str(m,"amount"),str(m,"status"),str(m,"qrCode"),str(m,"tradeNo"));
     }
     private static String str(Map<?, ?> m, String k) { Object v = m.get(k); return v == null ? null : v.toString(); }
 
@@ -59,4 +63,9 @@ public class RemotePayClient {
         return call("POST", "/internal/payments", "{\"orderNo\":" + quote(orderNo) + ",\"amount\":" + quote(amount) + ",\"subject\":" + quote(subject) + "}");
     }
     public Order status(String orderNo) { return call("GET", "/internal/payments/" + orderNo, ""); }
+    public Order close(String orderNo,String amount,String subject) { return call("POST","/internal/payments/"+orderNo+"/close","{\"amount\":"+quote(amount)+",\"subject\":"+quote(subject)+"}"); }
+    public Refund refund(String orderNo,String requestNo,String amount,String reason) {
+        var m=request("POST","/internal/payments/"+orderNo+"/refunds","{\"requestNo\":"+quote(requestNo)+",\"amount\":"+quote(amount)+",\"reason\":"+quote(reason)+"}");
+        return new Refund(str(m,"orderNo"),str(m,"requestNo"),str(m,"amount"),str(m,"status"));
+    }
 }

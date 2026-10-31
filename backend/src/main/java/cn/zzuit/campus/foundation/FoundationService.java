@@ -61,6 +61,8 @@ public class FoundationService {
                 case "CONTENT_EDITOR" -> "官网内容编辑与本人草稿";
                 case "CONTENT_REVIEWER" -> "官网内容审核，禁止自审";
                 case "ADMIN" -> "账号与组织管理；教学、审批岗位需另行分配";
+                case "FINANCE_OPERATOR" -> "校级统一财务经办；维护标准、草拟账单、催缴与查单，不具备财务复核权";
+                case "FINANCE_REVIEWER" -> "校级统一财务复核；复核收费标准和账单，审核作废、减免与退款，禁止自审";
                 default -> "岗位工作台；具体事项随业务模块接入";
             };
             return new Role(code,r.getString("name"),scope,permissions);
@@ -125,6 +127,7 @@ public class FoundationService {
         if(jdbc.sql("SELECT COUNT(*) FROM campus WHERE id=:c").param("c",campus).query(Long.class).single()==0) bad("所选校区不存在");
         var dept=jdbc.sql("SELECT * FROM department WHERE id=:d").param("d",department).query(this::departmentRow).optional().orElseThrow(()->invalid("所选组织不存在"));
         if(roles.contains("COUNSELOR") && !roles.contains("TEACHER")) bad("辅导员岗位须同时具有教师身份");
+        if(roles.stream().anyMatch(r->r.equals("FINANCE_OPERATOR") || r.equals("FINANCE_REVIEWER")) && !dept.kind().equals("ADMIN")) bad("财务岗位须归属财务等行政部门");
         if(roles.stream().anyMatch(r->List.of("STUDENT","TEACHER","ACADEMIC_STAFF","COUNSELOR","STUDENT_AFFAIRS").contains(r)) && !dept.kind().equals("COLLEGE")) bad("学生、教师、教务、辅导员和学生事务岗位须归属学院");
         if(roles.contains("STUDENT") && group==null) bad("学生须分配行政班");
         if(!roles.contains("STUDENT") && group!=null) bad("只有学生身份可分配行政班");

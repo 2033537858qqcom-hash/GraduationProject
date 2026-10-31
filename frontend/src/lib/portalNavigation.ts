@@ -14,6 +14,7 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     'teaching:manage', 'academic:manage', 'leave:review', 'certificate:review', 'reservation:review',
     'housing:review', 'housing:assign', 'housing:configure', 'repair:dispatch', 'repair:work',
     'repair:configure', 'foundation:manage', 'content:edit', 'content:review',
+    'payment:manage', 'payment:review', 'payment:source',
   ].includes(permission))
   const personal: PortalNavItem[] = []
   const work: PortalNavItem[] = []
@@ -42,13 +43,14 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     ['repair:work', '/logistics/repairs/tasks', '我的维修任务', 'wrench'],
   ]
   for (const [permission, to, label, icon] of workEntries) if (can(permission)) work.push({ to, label, icon })
+  if (can('payment:manage') || can('payment:review')) work.push({ to: '/finance/payments', label: '财务收费', icon: 'file' })
+  if (can('payment:source')) work.push({ to: '/payment-bases', label: '收费依据', icon: 'clipboard' })
   if (can('repair:dispatch') || can('repair:work')) work.push({ to: '/logistics/repair-responsibilities', label: '我的负责范围', icon: 'users' })
   if (permissions.some(permission => permission.startsWith('content:'))) work.push({ to: '/admin/content', label: '官网内容管理', icon: 'news' })
   if (can('foundation:manage')) management.push(
     { to: '/admin/foundation', label: '账号与组织', icon: 'users' },
     { to: '/admin/resources', label: '教室资源', icon: 'building' },
     { to: '/admin/counselors', label: '辅导员负责班级', icon: 'users' },
-    { to: '/admin/payments', label: '演示账单管理', icon: 'file' },
   )
   if (can('repair:configure')) management.push({ to: '/admin/repair-settings', label: '报修配置', icon: 'wrench' })
   if (can('housing:configure')) management.push({ to: '/admin/housing', label: '宿舍资源', icon: 'bed' })

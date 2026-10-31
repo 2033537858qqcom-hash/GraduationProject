@@ -29,7 +29,7 @@ public class ResponsibilityService {
         int version=jdbc.sql("SELECT version FROM app_user WHERE id=:u").param("u",id).query(Integer.class).optional()
             .orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"NOT_FOUND","账号不存在"));
         var groups=groups(id);
-        long blocking=groups.stream().mapToLong(g->g.scopeCount()+(g.code().equals("ACADEMY") || g.code().equals("REPAIR_WORK")?g.pendingCount():0)).sum();
+        long blocking=groups.stream().mapToLong(g->g.scopeCount()+(g.code().equals("ACADEMY") || g.code().equals("REPAIR_WORK") || g.code().startsWith("FINANCE")?g.pendingCount():0)).sum();
         return new Impact(id,version,blocking,groups);
     }
     private long count(String sql,long id) { return jdbc.sql(sql).param("u",id).query(Long.class).single(); }
@@ -48,6 +48,17 @@ public class ResponsibilityService {
         long academy=count("SELECT COUNT(*) FROM certificate_request r JOIN app_user target ON target.id=:u AND target.department_id=r.department_id WHERE "+REVIEW_OPEN+" AND r.student_id<>:u AND "+permission("target.id","certificate:review")+" AND NOT EXISTS(SELECT 1 FROM app_user other WHERE other.enabled=TRUE AND other.department_id=r.department_id AND other.id<>:u AND other.id<>r.student_id AND "+permission("other.id","certificate:review")+")",id);
         academy+=count("SELECT COUNT(*) FROM housing_transfer r JOIN app_user target ON target.id=:u AND target.department_id=r.department_id WHERE r.status='SUBMITTED' AND r.student_id<>:u AND "+permission("target.id","housing:review")+" AND NOT EXISTS(SELECT 1 FROM app_user other WHERE other.enabled=TRUE AND other.department_id=r.department_id AND other.id<>:u AND other.id<>r.student_id AND "+permission("other.id","housing:review")+")",id);
         result.add(new Group("ACADEMY","学院审核的独有待办",0,academy,"/admin/foundation","foundation:manage"));
+        long financeWork=0;
+        if(identities.permissions(id).contains("payment:manage") && count("SELECT COUNT(*) FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>:u AND "+permission("u.id","payment:manage"),id)==0)
+            financeWork=count("SELECT (SELECT COUNT(*) FROM payment_bill WHERE workflow_status IN ('DRAFT','RETURNED','PENDING_REVIEW','PUBLISHED') AND (status='UNPAID' OR pending_request_id IS NOT NULL))+(SELECT COUNT(*) FROM payment_basis WHERE status='SUBMITTED')+(SELECT COUNT(*) FROM payment_request WHERE status IN ('FAILED','PROCESSING'))",id);
+        result.add(new Group("FINANCE_OPERATOR","财务经办统一队列的接任保护",0,financeWork,"/admin/foundation","foundation:manage"));
+        long financeReview=0;
+        if(identities.permissions(id).contains("payment:review")) {
+            financeReview=count("SELECT COUNT(*) FROM payment_bill b WHERE b.workflow_status='PENDING_REVIEW' AND b.created_by<>:u AND NOT EXISTS(SELECT 1 FROM payment_history h WHERE h.entity_type='BILL' AND h.entity_id=b.id AND h.actor_id=:u AND h.action IN ('CREATE','UPDATE')) AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>:u AND u.id<>b.created_by AND "+permission("u.id","payment:review")+" AND NOT EXISTS(SELECT 1 FROM payment_history h WHERE h.entity_type='BILL' AND h.entity_id=b.id AND h.actor_id=u.id AND h.action IN ('CREATE','UPDATE')))",id);
+            financeReview+=count("SELECT COUNT(*) FROM payment_standard s WHERE s.status='PENDING_REVIEW' AND s.created_by<>:u AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>:u AND u.id<>s.created_by AND "+permission("u.id","payment:review")+")",id);
+            financeReview+=count("SELECT COUNT(*) FROM payment_request r WHERE r.status='SUBMITTED' AND r.requested_by<>:u AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>:u AND u.id<>r.requested_by AND "+permission("u.id","payment:review")+")",id);
+        }
+        result.add(new Group("FINANCE_REVIEWER","财务复核的独有待办",0,financeReview,"/admin/foundation","foundation:manage"));
         return result;
     }
     public void requireNormalDisable(CampusPrincipal actor,long id) {
@@ -56,7 +67,7 @@ public class ResponsibilityService {
     public void requireRoleHandoff(long id,List<String> roles,boolean departmentChanged) {
         var permissions=jdbc.sql("SELECT DISTINCT permission_code FROM role_permission WHERE role_code IN (:roles)").param("roles",roles).query(String.class).list();
         for(var group:groups(id)) {
-            String required=switch(group.code()) {case "VENUE"->"reservation:review";case "REPAIR_DISPATCH"->"repair:dispatch";case "REPAIR_WORK"->"repair:work";case "HOUSING"->"housing:assign";default->null;};
+            String required=switch(group.code()) {case "VENUE"->"reservation:review";case "REPAIR_DISPATCH"->"repair:dispatch";case "REPAIR_WORK"->"repair:work";case "HOUSING"->"housing:assign";case "FINANCE_OPERATOR"->"payment:manage";case "FINANCE_REVIEWER"->"payment:review";default->null;};
             if(required!=null && !permissions.contains(required) && (group.scopeCount()>0 || group.pendingCount()>0)) conflict();
             if(group.code().equals("ACADEMY") && group.pendingCount()>0 && (departmentChanged || !permissions.contains("certificate:review") || !permissions.contains("housing:review"))) conflict();
         }
@@ -80,7 +91,10 @@ public class ResponsibilityService {
             exception("HOUSING_REVIEW","调宿申请缺少学院初审人员","SELECT COUNT(*) FROM housing_transfer r WHERE r.status='SUBMITTED' AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.department_id=r.department_id AND u.id<>r.student_id AND "+permission("u.id","housing:review")+")","条事项","/admin/foundation","foundation:manage"),
             exception("REPAIR_DISPATCH","在办报修缺少有效派工人员","SELECT COUNT(*) FROM repair_request r WHERE r.status IN ('SUBMITTED','ASSIGNED','IN_PROGRESS') AND NOT "+repairOwner+"s.capability='DISPATCH' AND "+permission("u.id","repair:dispatch")+")","条事项","/admin/repair-settings","repair:configure"),
             exception("REPAIR_WORK","已派维修任务的负责人失效","SELECT COUNT(*) FROM repair_request r WHERE r.status IN ('ASSIGNED','IN_PROGRESS') AND NOT "+repairOwner+"s.capability='WORK' AND s.user_id=r.technician_id AND "+permission("u.id","repair:work")+")","条事项","/admin/repair-settings","repair:configure"),
-            exception("HOUSING","调宿分配或入住确认无人办理","SELECT COUNT(*) FROM housing_transfer t WHERE t.status IN ('AWAITING_ASSIGNMENT','AWAITING_CHECKIN') AND NOT "+housingOwner,"条事项","/admin/housing","housing:configure")
+            exception("HOUSING","调宿分配或入住确认无人办理","SELECT COUNT(*) FROM housing_transfer t WHERE t.status IN ('AWAITING_ASSIGNMENT','AWAITING_CHECKIN') AND NOT "+housingOwner,"条事项","/admin/housing","housing:configure"),
+            exception("FINANCE_WORK","财务收费队列缺少有效经办人员","SELECT COUNT(*) FROM payment_bill b WHERE b.workflow_status IN ('DRAFT','RETURNED','PENDING_REVIEW','PUBLISHED') AND (b.status='UNPAID' OR b.pending_request_id IS NOT NULL) AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND "+permission("u.id","payment:manage")+")","条账单","/admin/foundation","foundation:manage"),
+            exception("FINANCE_REVIEW","收费账单缺少独立复核人员","SELECT COUNT(*) FROM payment_bill b WHERE b.workflow_status='PENDING_REVIEW' AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>b.created_by AND "+permission("u.id","payment:review")+" AND NOT EXISTS(SELECT 1 FROM payment_history h WHERE h.entity_type='BILL' AND h.entity_id=b.id AND h.actor_id=u.id AND h.action IN ('CREATE','UPDATE')))","条账单","/admin/foundation","foundation:manage"),
+            exception("FINANCE_REQUEST","财务申请缺少独立复核人员","SELECT COUNT(*) FROM payment_request r WHERE r.status='SUBMITTED' AND NOT EXISTS(SELECT 1 FROM app_user u WHERE u.enabled=TRUE AND u.must_change_password=FALSE AND u.id<>r.requested_by AND "+permission("u.id","payment:review")+")","条申请","/admin/foundation","foundation:manage")
         );
     }
 }

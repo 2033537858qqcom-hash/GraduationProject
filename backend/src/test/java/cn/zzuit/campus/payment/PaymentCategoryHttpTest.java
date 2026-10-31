@@ -38,7 +38,7 @@ class PaymentCategoryHttpTest {
     }
 
     @Test void administratorsAndStudentsReceiveTheSameOrderedPresetCatalog() throws Exception {
-        var adminCatalog = ok(login("admin").get("/api/admin/payments/categories"));
+        var adminCatalog = ok(login("finance1001").get("/api/finance/payments/categories"));
         var studentCatalog = ok(login("20260001").get("/api/payments/categories"));
         assertThat(studentCatalog).isEqualTo(adminCatalog);
         assertThat(values(adminCatalog, "code")).containsExactly(
@@ -49,11 +49,11 @@ class PaymentCategoryHttpTest {
     }
 
     @Test void everyPresetIsStoredAndReturnedInTheOwnersListAndDetail() throws Exception {
-        var admin = login("admin");
+        var admin = login("finance1001");
         var student = login("20260001");
         var other = login("20260002");
         for (var code : List.of("TUITION", "ACCOMMODATION", "WATER", "ELECTRICITY", "UTILITIES", "TEXTBOOK", "VENUE", "OTHER")) {
-            var bill = ok(admin.post("/api/admin/payments", fields(code)));
+            var bill = published(admin, fields(code));
             long id = bill.path("id").asLong();
             assertThat(bill.path("categoryCode").asText()).isEqualTo(code);
             assertThat(bill.path("categoryName").asText()).isNotBlank();
@@ -67,10 +67,10 @@ class PaymentCategoryHttpTest {
     }
 
     @Test void unknownAndBlankCategoriesAreRejectedWithoutCreatingBills() throws Exception {
-        var admin = login("admin");
+        var admin = login("finance1001");
         long before = jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single();
         for (var code : List.of("UNKNOWN", "", " ", "tuition", "TUITION' OR 1=1")) {
-            var response = admin.post("/api/admin/payments", fields(code));
+            var response = admin.post("/api/finance/payments", fields(code));
             assertThat(response.statusCode()).as(response.body()).isEqualTo(400);
             assertThat(json.readTree(response.body()).path("code").asText()).isEqualTo("INVALID_CATEGORY");
         }
@@ -78,19 +78,19 @@ class PaymentCategoryHttpTest {
     }
 
     @Test void retriesPreserveTheOrderAndCannotChangeItsCategory() throws Exception {
-        var admin = login("admin");
+        var admin = login("finance1001");
         var input = fields("TUITION");
-        var first = ok(admin.post("/api/admin/payments", input));
-        var repeated = ok(admin.post("/api/admin/payments", input));
+        var first = ok(admin.post("/api/finance/payments", input));
+        var repeated = ok(admin.post("/api/finance/payments", input));
         assertThat(repeated.path("orderNo").asText()).isEqualTo(first.path("orderNo").asText());
         input.put("categoryCode", "ACCOMMODATION");
-        assertThat(admin.post("/api/admin/payments", input).statusCode()).isEqualTo(409);
+        assertThat(admin.post("/api/finance/payments", input).statusCode()).isEqualTo(409);
     }
 
     @Test void legacyRequestsDefaultToOtherAndRetainTheirTitleAndAmount() throws Exception {
         var input = fields("OTHER");
         input.remove("categoryCode");
-        var bill = ok(login("admin").post("/api/admin/payments", input));
+        var bill = ok(login("finance1001").post("/api/finance/payments", input));
         assertThat(bill.path("categoryCode").asText()).isEqualTo("OTHER");
         assertThat(bill.path("categoryName").asText()).isEqualTo("其他费用");
         assertThat(bill.path("title").asText()).isEqualTo(input.get("title"));
@@ -99,15 +99,21 @@ class PaymentCategoryHttpTest {
 
     @Test void categorySelectionDoesNotGrantStudentsBillCreationOrBypassCsrf() throws Exception {
         assertThat(login("20260001").post("/api/admin/payments", fields("TUITION")).statusCode()).isEqualTo(403);
-        var admin = login("admin");
-        var request = admin.builder("/api/admin/payments").header("Content-Type", "application/json")
+        var admin = login("finance1001");
+        var request = admin.builder("/api/finance/payments").header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(fields("TUITION")))).build();
         assertThat(admin.http.send(request, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(403);
     }
 
     private HashMap<String, Object> fields(String category) {
         return new HashMap<>(Map.of("requestKey", UUID.randomUUID().toString(), "username", "20260001",
-            "title", "2026 学年演示费用", "amountCents", 1250, "categoryCode", category));
+            "title", "2026 学年演示费用", "amountCents", 1250, "categoryCode", category,
+            "billingPeriod","独立分类测试账期","dueDate",java.time.LocalDate.now().plusDays(30).toString(),"basis","分类持久化测试的明确收费依据"));
+    }
+    private JsonNode published(Browser operator,Map<String,Object> fields) throws Exception {
+        var draft=ok(operator.post("/api/finance/payments",fields));long id=draft.path("id").asLong();
+        var submitted=ok(operator.post("/api/finance/payments/"+id+"/actions",Map.of("action","SUBMIT","version",0,"requestKey",UUID.randomUUID().toString(),"reason","经办核对分类测试账单")));
+        return ok(login("finance2001").post("/api/finance/payments/"+id+"/actions",Map.of("action","APPROVE","version",submitted.path("version").asInt(),"requestKey",UUID.randomUUID().toString(),"reason","独立复核分类测试账单")));
     }
     private List<String> values(JsonNode rows, String field) {
         var values = new ArrayList<String>();

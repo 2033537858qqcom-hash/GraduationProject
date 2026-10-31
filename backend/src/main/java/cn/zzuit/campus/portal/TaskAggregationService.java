@@ -42,12 +42,13 @@ public class TaskAggregationService {
     private final VenueReservationService reservations;
     private final HousingTransferService housingTransfer;
     private final RepairService repairs;
+    private final cn.zzuit.campus.payment.PaymentManagementService finance;
 
     public TaskAggregationService(JdbcClient jdbc, IdentityService identities, LeaveService leaves,
         CertificateService certificates, VenueReservationService reservations,
-        HousingTransferService housingTransfer, RepairService repairs) {
+        HousingTransferService housingTransfer, RepairService repairs,cn.zzuit.campus.payment.PaymentManagementService finance) {
         this.jdbc=jdbc; this.identities=identities; this.leaves=leaves; this.certificates=certificates;
-        this.reservations=reservations; this.housingTransfer=housingTransfer; this.repairs=repairs;
+        this.reservations=reservations; this.housingTransfer=housingTransfer; this.repairs=repairs;this.finance=finance;
     }
 
     public TaskSummary aggregate(CampusPrincipal user) { return aggregate(user, null); }
@@ -58,6 +59,13 @@ public class TaskAggregationService {
         var counts = new LinkedHashMap<String, Long>();
         var tasks = new ArrayList<AggregatedTask>();
         var errors = new ArrayList<TaskSourceError>();
+
+        String financePermission=permissions.contains("payment:manage")?"payment:manage":"payment:review";
+        source(user,permissions,financePermission,"payment","财务收费",counts,tasks,errors,()->finance.tasks(user));
+        source(user,permissions,"payment:source","paymentSource","收费依据",counts,tasks,errors,()->
+            jdbc.sql("SELECT id,billing_period,review_comment,created_at FROM payment_basis WHERE created_by=:actor AND status='RETURNED' ORDER BY id")
+                .param("actor",user.id()).query((r,n)->new AggregatedTask("PAYMENT-BASIS-RETURNED-"+r.getLong("id"),"PAYMENT","收费依据",r.getString("billing_period"),
+                    "RETURNED","收费依据待补充","本人提交","退回说明："+r.getString("review_comment"),"/payment-bases?id="+r.getLong("id")+"&tab=details",r.getTimestamp("created_at").toLocalDateTime(),"NORMAL")).list());
 
         source(user, permissions, "leave:review", "leave", "班级请假", counts, tasks, errors, () -> {
             var items=java.util.stream.Stream.of("SUBMITTED","RETURN_PENDING","APPROVED")
@@ -175,12 +183,18 @@ public class TaskAggregationService {
             case "REPAIRDISPATCH","REPAIR_DISPATCH" -> Set.of("REPAIR_DISPATCH");
             case "REPAIRWORK","REPAIR_WORK" -> Set.of("REPAIR_WORK");
             case "CONTENT" -> Set.of("CONTENT");
+            case "PAYMENT" -> Set.of("PAYMENT");
             default -> throw new ApiException(HttpStatus.BAD_REQUEST,"INVALID_TASK_DOMAIN","待办分类无效");
         };
     }
 
     public List<WorkspaceInfo> resolveWorkspaces(IdentityService.Profile profile, Collection<String> permissions) {
         List<WorkspaceInfo> list = new ArrayList<>();
+        if(permissions.contains("payment:manage") || permissions.contains("payment:review"))
+            list.add(new WorkspaceInfo("FINANCE","财务收费",permissions.contains("payment:manage")?"财务经办人员":"财务复核人员",
+                "校级统一财务队列 · 经办与复核分离，禁止本人复核本人经办事项",List.of("/finance/payments")));
+        if(permissions.contains("payment:source"))
+            list.add(new WorkspaceInfo("PAYMENT_SOURCE","收费依据","业务收费依据提供人员","按当前学院、楼栋或后勤校区负责范围提交依据",List.of("/payment-bases")));
 
         // 1. 教学工作空间
         if (permissions.contains("teaching:manage")) {

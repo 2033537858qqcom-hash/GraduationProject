@@ -49,6 +49,7 @@ const categoryDefinitions: { domain: TaskDomain; label: string; sources: string[
   { domain: 'HOUSING', label: '调宿', sources: ['housingReview', 'housingAssign'] },
   { domain: 'REPAIR', label: '报修', sources: ['repairDispatch', 'repairWork'] },
   { domain: 'CONTENT', label: '官网', sources: ['content'] },
+  { domain: 'PAYMENT', label: '收费', sources: ['payment', 'paymentSource'] },
 ]
 const taskCategories = computed(() => categoryDefinitions
   .filter(category => category.domain === 'ALL' || category.domain === taskFilter.value || category.sources.some(source =>
@@ -67,6 +68,8 @@ function entryVisible(pathPrefix: string) {
   if (code === 'HOUSING') return pathPrefix.startsWith('/housing/assignments') || pathPrefix.startsWith('/admin/housing')
   if (code === 'LOGISTICS') return pathPrefix.startsWith('/logistics')
   if (code === 'ACADEMIC') return pathPrefix.startsWith('/academic')
+  if (code === 'FINANCE') return pathPrefix.startsWith('/finance/payments')
+  if (code === 'PAYMENT_SOURCE') return pathPrefix.startsWith('/payment-bases')
   if (code === 'ADMIN') return pathPrefix.startsWith('/admin')
   if (code === 'PERSONAL') return pathPrefix.startsWith('/profile') || pathPrefix.startsWith('/repairs/mine') || pathPrefix.startsWith('/portal/reservations')
   return true
@@ -343,6 +346,14 @@ onBeforeUnmount(() => { overviewRequest++; invalidate() })
           :icon="Wrench"
           category="设施配置"
           theme="amber"
+        />
+        <ServiceEntry
+          v-if="currentUser?.permissions.some(permission => permission === 'payment:manage' || permission === 'payment:review') && entryVisible('/finance/payments')"
+          to="/finance/payments" title="财务收费" description="经办与独立复核收费标准和账单，跟进缴费、减免与退款" :icon="FileCheck2" category="财务服务" theme="teal"
+        />
+        <ServiceEntry
+          v-if="currentUser?.permissions.includes('payment:source') && entryVisible('/payment-bases')"
+          to="/payment-bases" title="收费业务依据" description="提供本学院、负责楼栋或校区范围内的收费依据与用量" :icon="NotebookPen" category="业务协同" theme="teal"
         />
         <ServiceEntry
           v-if="housingConfiguration && entryVisible('/admin/housing')"

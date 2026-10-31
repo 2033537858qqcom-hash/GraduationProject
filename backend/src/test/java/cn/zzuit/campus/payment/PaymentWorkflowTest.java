@@ -30,14 +30,16 @@ class PaymentWorkflowTest {
         r.add("app.payment.return-url", () -> "http://localhost/portal/payments");
     }
     @Autowired PaymentService service;
+    @Autowired PaymentManagementService finance;
     @Autowired IdentityService identities;
 
     @Test void billBelongsToStudentAndRepeatedCreationUsesSameOrder() {
-        var admin = user("admin"); var student = user("20260001"); var other = user("20260002");
+        var admin = user("finance1001"); var student = user("20260001"); var other = user("20260002");
         String key = UUID.randomUUID().toString();
-        var bill = service.create(admin, key, "20260001", "演示费用", 1250);
-        assertThat(service.create(admin, key, "20260001", "演示费用", 1250).id()).isEqualTo(bill.id());
-        assertThatThrownBy(() -> service.create(admin, key, "20260001", "不同费用", 1250)).isInstanceOf(ApiException.class);
+        var draft = finance.create(admin, input(key,"演示费用",1250));
+        assertThat(finance.create(admin, input(key,"演示费用",1250)).id()).isEqualTo(draft.id());
+        assertThatThrownBy(() -> finance.create(admin, input(key,"不同费用",1250))).isInstanceOf(ApiException.class);
+        var bill = publish(draft);
         assertThat(service.mine(student)).extracting(PaymentService.Bill::id).contains(bill.id());
         assertThat(service.mine(other)).extracting(PaymentService.Bill::id).doesNotContain(bill.id());
         assertThatThrownBy(() -> service.pay(other, bill.id())).isInstanceOf(ApiException.class);
@@ -47,7 +49,8 @@ class PaymentWorkflowTest {
 
     @Test void callbackMustHaveValidSignatureAndMatchingFieldsAndIsIdempotent() throws Exception {
         var student = user("20260001");
-        var bill = service.create(user("admin"), UUID.randomUUID().toString(), "20260001", "演示回调", 1234);
+        var bill = publish(finance.create(user("finance1001"),input(UUID.randomUUID().toString(),"演示回调",1234)));
+        service.pay(student,bill.id());
         var values = new HashMap<>(Map.of("app_id", "test-app", "seller_id", "test-seller", "out_trade_no", bill.orderNo(),
             "trade_no", "external-" + UUID.randomUUID(), "total_amount", "12.34", "trade_status", "TRADE_SUCCESS"));
         String signature = AlipaySignature.rsaSign(AlipaySignature.getSignContent(values), Base64.getEncoder().encodeToString(KEYS.getPrivate().getEncoded()), "UTF-8", "RSA2");
@@ -62,5 +65,12 @@ class PaymentWorkflowTest {
     }
 
     private CampusPrincipal user(String name) { return (CampusPrincipal) identities.loadUserByUsername(name); }
+    private FinanceModels.BillInput input(String key,String title,long amount) {
+        return new FinanceModels.BillInput(key,"20260001","OTHER",title,"独立测试账期",java.time.LocalDate.now().plusDays(10),null,"1",amount,"独立支付回归测试的明确收费依据",null,null,null);
+    }
+    private PaymentService.Bill publish(PaymentService.Bill bill) {
+        var submitted=finance.action(user("finance1001"),bill.id(),new FinanceModels.Action("SUBMIT",bill.version(),UUID.randomUUID().toString(),"已核对测试账单依据",null));
+        return finance.action(user("finance2001"),bill.id(),new FinanceModels.Action("APPROVE",submitted.version(),UUID.randomUUID().toString(),"独立复核测试账单依据",null));
+    }
     private static KeyPair keys() { try { var g=KeyPairGenerator.getInstance("RSA"); g.initialize(2048); return g.generateKeyPair(); } catch(Exception e) { throw new IllegalStateException(e); } }
 }

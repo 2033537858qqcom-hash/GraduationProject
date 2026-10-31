@@ -4,10 +4,11 @@ import { portalNavigation, currentPortalNavigation } from '../src/lib/portalNavi
 
 const paths = groups => groups.flatMap(group => group.items.map(item => item.to))
 
-test('payment entries follow student and administrator permissions', () => {
+test('payment entries follow student and finance permissions independently from system administration', () => {
   assert.ok(paths(portalNavigation(['portal:read'])).includes('/portal/payments'))
   assert.ok(!paths(portalNavigation(['portal:read'])).includes('/admin/payments'))
-  assert.ok(paths(portalNavigation(['foundation:manage'])).includes('/admin/payments'))
+  assert.ok(!paths(portalNavigation(['foundation:manage'])).includes('/admin/payments'))
+  assert.ok(paths(portalNavigation(['payment:manage'])).includes('/finance/payments'))
   assert.ok(!paths(portalNavigation(['foundation:manage'])).includes('/portal/payments'))
 })
 

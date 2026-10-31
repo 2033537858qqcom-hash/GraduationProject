@@ -50,7 +50,7 @@ async function submit() {
         <button class="button primary" :disabled="busy">{{ busy ? '正在登录…' : '进入校园服务' }} <ArrowRight :size="17" /></button>
         <details class="demo-accounts">
           <summary>本地演示账号</summary>
-          <p>学生：20260001 / 20260002<br>教师：teacher1001 / teacher1002<br>辅导员：counselor1001<br>学生事务：affairs1001<br>教务：academic1001<br>后勤派单：dispatcher1001<br>维修人员：technician1001<br>服务人员：staff1001<br>内容编辑：editor · 审核：reviewer<br>管理员：admin</p>
+          <p>学生：20260001 / 20260002<br>教师：teacher1001 / teacher1002<br>辅导员：counselor1001<br>学生事务：affairs1001<br>教务：academic1001<br>后勤派单：dispatcher1001<br>维修人员：technician1001<br>财务经办：finance1001<br>财务复核：finance2001<br>服务人员：staff1001<br>内容编辑：editor · 审核：reviewer<br>管理员：admin</p>
           <p>本地初始密码：<code>Demo@2026</code><br>账号与个人记录均为演示数据。</p>
         </details>
       </form>

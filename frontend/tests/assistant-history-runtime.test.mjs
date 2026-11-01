@@ -5,11 +5,13 @@ import { createServer } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 test('restoring an ordinal question requires its saved business context', async () => {
- const descriptors = ['localStorage', 'window', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)])
+ const descriptors = ['localStorage', 'window', 'document', 'history', 'fetch'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)])
  let server
  try {
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => null } })
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { search: '' }, addEventListener() {}, removeEventListener() {} } })
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: { hidden: true, documentElement: { scrollTop: 0 }, querySelector: () => null, addEventListener() {}, removeEventListener() {} } })
+  Object.defineProperty(globalThis, 'history', { configurable: true, value: { state: null } })
   globalThis.fetch = async () => { throw Error('network disabled') }
   server = await createServer({ configFile: false, root: fileURLToPath(new URL('../', import.meta.url)), cacheDir: fileURLToPath(new URL('../node_modules/.vite-tests/assistant-history', import.meta.url)), plugins: [vue()], server: { middlewareMode: true, hmr: false, watch: null }, appType: 'custom', optimizeDeps: { noDiscovery: true, include: [] } })
   const { checkPageSetup } = await server.ssrLoadModule('/tests/fixtures/page-runtime.ts')

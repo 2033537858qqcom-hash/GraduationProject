@@ -163,7 +163,13 @@ function taskUpdated(value: AssistantTaskView) {
   session.value.tasks = [value, ...session.value.tasks.filter(old => old.id !== value.id)]
   if (task.value === value.kind) selectedTask.value = value
 }
-function requery(turn: AssistantTurn) { question.value = turn.question; requeryContext.value = turn.context; contextEnabled.value = true; consent.value = false; queryKey.value = crypto.randomUUID(); input.value?.focus() }
+function requery(turn: AssistantTurn) {
+  if (!turn.context && /第[一二三四五六七八九十两\d]+(?:笔|条)|这笔|这条账单/.test(turn.question)) {
+    error.value = '这条历史提问缺少明确的业务关联，请先进入具体业务页面选择事项，再重新提问。'
+    return
+  }
+  error.value = ''; question.value = turn.question; requeryContext.value = turn.context; contextEnabled.value = true; consent.value = false; queryKey.value = crypto.randomUUID(); input.value?.focus()
+}
 async function send() {
   if (!canSend.value) return
   const text = question.value.trim(), current = ++generation

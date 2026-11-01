@@ -32,7 +32,11 @@ public final class AgentModels {
     public record HousingPreview(String runId,Mode mode,boolean modelUsed,HousingFields fields,List<String> missing,List<String> issues,
         boolean ready,String summary,Guide source,String eligibilityMessage,String currentPlace,String stayToken,LocalDateTime preparedAt) {}
     public record Fact(String key,String title,String description,String targetPath) {}
-    public record ToolResult(String name,String title,String status,String message,long total,List<Fact> items,List<Guide> sources,String targetPath) {}
+    public record ToolResult(String name,String title,String status,String message,long total,List<Fact> items,List<Guide> sources,String targetPath,List<String> followUps) {
+        public ToolResult(String name,String title,String status,String message,long total,List<Fact> items,List<Guide> sources,String targetPath) {
+            this(name,title,status,message,total,items,sources,targetPath,List.of());
+        }
+    }
     public record Call(String name,JsonNode arguments) {}
     public record Plan(List<Call> calls,Integer promptTokens,Integer completionTokens) {}
     public record Capability(String name,String title) {}

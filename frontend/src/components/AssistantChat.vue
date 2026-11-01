@@ -323,11 +323,12 @@ onBeforeUnmount(() => {
           <p class="assistant-summary">{{ entry.answer.summary }}</p>
           <section v-for="result in entry.answer.results" :key="result.name" class="assistant-result" :class="{ 'query-issue': result.status !== 'OK' }">
             <h3>{{ result.title }}</h3><p>{{ result.message }}</p>
+            <div v-if="result.status === 'NEEDS_INPUT' && result.followUps?.length && entry.answer.runId === messages.at(-1)?.answer.runId" class="assistant-prompts" role="group" aria-label="补充查询条件"><button v-for="text in result.followUps" :key="text" type="button" :disabled="busy || sessionLoading" @click="choose(text)">{{ text }}</button></div>
             <template v-for="item in result.items" :key="item.key"><RouterLink v-if="safeAssistantDestination(item.targetPath)" :to="safeAssistantDestination(item.targetPath)!" class="assistant-fact" @click="followResult($event, item.targetPath)"><strong>{{ item.title }}</strong><span>{{ item.description }}</span><ArrowUpRight :size="13" /></RouterLink><div v-else class="assistant-fact no-target"><strong>{{ item.title }}</strong><span>{{ item.description }}</span></div></template>
             <div v-for="source in result.sources" :key="source.slug" class="assistant-source"><strong>{{ source.title }}</strong><p>{{ source.body.slice(0, 220) }}{{ source.body.length > 220 ? '…' : '' }}</p><RouterLink v-if="safeAssistantDestination(source.targetPath)" :to="source.targetPath" @click="followResult($event, source.targetPath)">来源 · V{{ source.version }} · 查看完整指南 <ArrowUpRight :size="12" /></RouterLink></div>
             <RouterLink v-if="safeAssistantDestination(result.targetPath) && (!result.items.length || result.total > result.items.length)" :to="result.targetPath!" class="assistant-more" @click="followResult($event, result.targetPath)">{{ result.items.length ? '查看完整业务列表' : '查看业务页面' }} <ArrowUpRight :size="13" /></RouterLink>
           </section>
-          <small class="assistant-time">{{ entry.answer.modelUsed ? 'DeepSeek 规划 · 本地执行' : entry.answer.mode === 'LOCAL' ? '本地查询' : '本地边界检查 · 未调用模型' }} · {{ entry.answer.queriedAt.replace('T', ' ').slice(0, 19) }}</small>
+          <small class="assistant-time">{{ entry.answer.modelUsed ? 'DeepSeek 规划 · 本地执行' : entry.answer.mode === 'LOCAL' ? '本地查询' : '本地处理 · 未调用模型' }} · {{ entry.answer.queriedAt.replace('T', ' ').slice(0, 19) }}</small>
         </article>
       </div>
       <div v-if="context && task === 'QUERY'" class="assistant-context"><span>当前上下文：{{ contextLabel }}</span><button class="assistant-icon" aria-label="清除当前业务上下文" @click="contextEnabled = false"><X :size="13" /></button></div>

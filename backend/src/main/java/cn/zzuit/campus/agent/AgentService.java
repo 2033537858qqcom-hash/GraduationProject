@@ -175,7 +175,7 @@ public class AgentService {
     }
     private Plan local(CampusPrincipal user,String q,Context context) {
         var calls=new ArrayList<Call>();
-        for(String clause:q.split("(?:[；;\\n]+|以及|并且|另外|同时|顺便|[，,](?=再|还|也|并)|[和与](?=充|查|看|我|本周|下周|课表|成绩|考试|未读|宿舍))")) {
+        for(String clause:q.split("(?:[；;\\n]+|(?:以及|并且|另外|同时|顺便)(?=充|查|看|我|本周|下周|课表|成绩|考试|未读|宿舍|请|再|帮|给)|[，,](?=再|还|也|并)|[和与](?=充|查|看|我|本周|下周|课表|成绩|考试|未读|宿舍))")) {
             if(!clause.isBlank())calls.addAll(localSingle(user,clause.trim(),context).calls());
         }
         return new Plan(calls.stream().distinct().toList(),null,null);

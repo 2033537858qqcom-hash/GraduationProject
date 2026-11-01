@@ -90,7 +90,11 @@ public class AgentPaymentQueries {
             return result(name,facts.isEmpty()?"NO_DATA":"OK","当前入住宿舍的水电及最近充值记录。余额为演示到账用量，设备尚未接入，未扣减实际消耗；分摊由室友自行处理。",facts.size(),facts,"/portal/payments");
         }
         String category=text(a,"category",Set.of("WATER","ELECTRICITY")),mode=text(a,"mode",Set.of("AMOUNT","QUANTITY")),value=text(a,"value",null);Long meter=id(a,"meterId");
-        if(category==null||mode==null||value==null)return result(name,"NEEDS_INPUT","请明确充值水费还是电费，以及金额或用量，例如：充20度电要多少钱，或充10元水费。",0,List.of(),"/portal/payments");
+        if(category==null||mode==null||value==null) {
+            String message=category==null?"请先明确充值水费还是电费。":"请补充充值金额或用量，输入数字和单位，例如10元或"+(category.equals("WATER")?"5吨。":"20度。");
+            var choices=category==null?List.of("电费","水费"):List.of(category.equals("WATER")?"5吨":"20度","10元");
+            return new ToolResult(name,TITLES.get(name),"NEEDS_INPUT",message,0,List.of(),List.of(),"/portal/payments",choices);
+        }
         var choices=meters.stream().filter(m->m.category().equals(category)&&m.enabled()&&m.standardAvailable()&&(meter==null||m.id()==meter)).toList();
         if(choices.size()!=1)return result(name,"NEEDS_INPUT","当前没有唯一可用的对应宿舍表计，请进入缴费大厅选择或联系财务配置。",0,List.of(),"/portal/payments");
         var m=choices.get(0);var quote=dorm.quote(user,new DormRechargeService.RechargeInput(null,m.id(),mode,value,m.unitPriceCents()));
@@ -116,7 +120,7 @@ public class AgentPaymentQueries {
         var number=Pattern.compile("([+-]?\\d+(?:\\.\\d+)?)\\s*(元|块|度|吨)").matcher(question);
         if(number.find()) {
             String value=number.group(1),unit=number.group(2);
-            if(!number.find()){args.put("value",value);args.put("mode",Set.of("元","块").contains(unit)?"AMOUNT":"QUANTITY");}
+            if(!number.find()&&value.length()<=40){args.put("value",value);args.put("mode",Set.of("元","块").contains(unit)?"AMOUNT":"QUANTITY");}
         }
         return args;
     }

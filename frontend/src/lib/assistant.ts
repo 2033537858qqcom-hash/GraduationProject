@@ -4,7 +4,7 @@ import { safeCampusExploreDestination } from './campusServiceNavigation.ts'
 export interface AssistantContext { type: 'LEAVE_MINE' | 'LEAVE_REVIEW' | 'CERTIFICATE_MINE' | 'CERTIFICATE_REVIEW' | 'REPAIR_MINE' | 'REPAIR_DISPATCH' | 'REPAIR_WORK' | 'HOUSING_MINE' | 'RESERVATION_MINE' | 'PAYMENT_MINE'; id: number }
 export interface AssistantGuide { slug: string; title: string; body: string; version: number; updatedAt: string; targetPath: string }
 export interface AssistantFact { key: string; title: string; description: string; targetPath: string | null }
-export interface AssistantResult { name: string; title: string; status: string; message: string; total: number; items: AssistantFact[]; sources: AssistantGuide[]; targetPath: string | null }
+export interface AssistantResult { name: string; title: string; status: string; message: string; total: number; items: AssistantFact[]; sources: AssistantGuide[]; targetPath: string | null; followUps?: string[] }
 export interface AssistantAnswer { runId: string; mode: 'LOCAL' | 'DEEPSEEK'; modelUsed: boolean; summary: string; results: AssistantResult[]; queriedAt: string; promptTokens: number | null; completionTokens: number | null }
 export interface AssistantCapabilities { deepseekReady: boolean; model: string; tools: { name: string; title: string }[]; message: string }
 export function assistantContext(path: string, id: unknown): AssistantContext | null {

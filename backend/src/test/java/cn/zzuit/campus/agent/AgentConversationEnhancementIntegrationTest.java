@@ -80,7 +80,9 @@ class AgentConversationEnhancementIntegrationTest {
  @Test void rechargeClarificationCanBeCompletedWithoutSendingHistoryToModel()throws Exception{
   var student=login("20260001");long session=ok(student.post("/api/assistant/sessions",Map.of("requestKey",UUID.randomUUID().toString()))).path("id").asLong();
   String path="/api/assistant/sessions/"+session+"/query";
-  assertThat(ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("我想充值")))).toString()).contains("NEEDS_INPUT");
+  var incomplete=ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("我想充值"))));
+  assertThat(incomplete.toString()).contains("NEEDS_INPUT");
+  assertThat(incomplete.path("answer").path("results").get(0).path("followUps").get(0).asText()).isEqualTo("电费");
   assertThat(ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("电费")))).toString()).contains("NEEDS_INPUT");
   long before=jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single();
   var answer=ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("20度"))));
@@ -89,6 +91,19 @@ class AgentConversationEnhancementIntegrationTest {
   long other=ok(student.post("/api/assistant/sessions",Map.of("requestKey",UUID.randomUUID().toString()))).path("id").asLong();
   var unlinked=ok(student.post("/api/assistant/sessions/"+other+"/query",Map.of("requestKey",UUID.randomUUID().toString(),"input",query("20度"))));
   assertThat(unlinked.toString()).doesNotContain("应付 ¥");
+ }
+ @Test void localClarificationDoesNotInvokeModelAndUnrelatedTopicsClearPendingQuote()throws Exception{
+  var student=login("20260001");long session=ok(student.post("/api/assistant/sessions",Map.of("requestKey",UUID.randomUUID().toString()))).path("id").asLong();
+  String path="/api/assistant/sessions/"+session+"/query";
+  ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("我想充电费"))));
+  var completed=ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",Map.of("message","20度","mode","DEEPSEEK","externalConsent",true))));
+  assertThat(completed.path("answer").path("modelUsed").asBoolean()).isFalse();
+  assertThat(completed.toString()).contains("12.20");
+  verify(model,never()).plan(anyString(),anyList(),nullable(String.class));
+  ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("我想充水费"))));
+  ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("我的已发布成绩"))));
+  var cleared=ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("10元"))));
+  assertThat(cleared.toString()).doesNotContain("应付 ¥");
  }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());

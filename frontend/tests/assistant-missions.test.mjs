@@ -14,6 +14,7 @@ test('saving requires explicit confirmation of the unchanged proposal', () => {
  assert.deepEqual(missionConfirmationPayload(mission, fields, true, 'request-key'), { requestKey: 'request-key', version: 4, action: 'CONFIRM', confirmed: true, proposalHash: 'a'.repeat(64) })
 })
 test('blank or non-integer participants cannot silently become a valid count', () => {
+ assert.equal(missionFieldsPayload(fields).startsAt, '2026-11-05T09:00')
  assert.equal(missionFieldsPayload({ ...fields, participants: '' }).participants, null)
  assert.equal(missionFieldsPayload({ ...fields, participants: '2.5' }).participants, null)
  assert.equal(missionFieldsPayload({ ...fields, participants: '30' }).participants, 30)

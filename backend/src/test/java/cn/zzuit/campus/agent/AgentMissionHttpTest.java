@@ -143,6 +143,13 @@ class AgentMissionHttpTest {
   doAnswer(invocation->{List<String> allowed=invocation.getArgument(1);return new Plan(List.of(new Call(allowed.get(0),JSON.valueToTree(Map.of()))),10,2);}).when(model).nextMissionStep(anyString(),anyList(),anyList());
   task=act(user,session,task,command(task,"CONTINUE"));assertThat(task.path("stage").asText()).isEqualTo("WAITING_SELECTION");
  }
+ @Test void taskCanBeDiscoveredByItsRequestKeyAndCancellationDoesNotDependOnAnOldVersion()throws Exception {
+  var user=login(username);long session=session(user);String key=UUID.randomUUID().toString();
+  var task=ok(user.post(path(session),Map.of("requestKey",key,"goal","准备预约草稿","mode","LOCAL","externalConsent",false,"fields",fields())));
+  assertThat(ok(user.get(path(session))).get(0).path("requestKey").asText()).isEqualTo(key);
+  var cancel=command(task,"CANCEL");cancel.put("version",0);task=act(user,session,task,cancel);
+  assertThat(task.path("stage").asText()).isEqualTo("CANCELLED");
+ }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());
     }

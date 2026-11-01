@@ -150,6 +150,33 @@ class AgentMissionHttpTest {
   var cancel=command(task,"CANCEL");cancel.put("version",0);task=act(user,session,task,cancel);
   assertThat(task.path("stage").asText()).isEqualTo("CANCELLED");
  }
+ @Test void noCandidatesAndPersonalConflictsPauseAndCanBeReplanned()throws Exception {
+  var user=login(username);long session=session(user);var f=new HashMap<String,Object>(fields());f.put("keyword","绝不匹配的资源");
+  var task=ok(user.post(path(session),Map.of("requestKey",UUID.randomUUID().toString(),"goal","准备预约草稿","mode","LOCAL","externalConsent",false,"fields",f)));
+  assertThat(task.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(task.path("message").asText()).contains("没有可用候选");
+  var revise=command(task,"REVISE");revise.put("fields",fields());task=act(user,session,task,revise);assertThat(task.path("stage").asText()).isEqualTo("WAITING_SELECTION");
+  long block=jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE applicant_id=:u").param("u",studentId).query(Long.class).single();
+  jdbc.sql("INSERT INTO venue_reservation(applicant_id,request_key,venue_id,applicant_name,identity_number,contact_phone,department_name,venue_name,location_detail,activity_theme,expected_participants,starts_at,ends_at,status) VALUES(:u,:key,:v,'任务学生','fixture','fixture','演示部门','冲突场地','本地','本人已有活动',1,:start,:end,'SUBMITTED')").param("u",studentId).param("key","mission-conflict").param("v",venueId).param("start",LocalDateTime.parse(fields().get("startsAt").toString())).param("end",LocalDateTime.parse(fields().get("endsAt").toString())).update();
+  try {
+   var blocked=start(user,session(user),"LOCAL");assertThat(blocked.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(blocked.path("conflicts").size()).isGreaterThan(0);
+   assertThat(jdbc.sql("SELECT COUNT(*) FROM venue_reservation WHERE applicant_id=:u").param("u",studentId).query(Long.class).single()).isEqualTo(block+1);
+  }finally{jdbc.sql("DELETE FROM venue_reservation WHERE request_key='mission-conflict'").update();}
+ }
+ @Test void staleVersionWrongHashAndConflictingRetryCannotCreateDraft()throws Exception {
+  var user=login(username);long session=session(user);String key=UUID.randomUUID().toString();var body=new HashMap<String,Object>(Map.of("requestKey",key,"goal","准备预约草稿","mode","LOCAL","externalConsent",false,"fields",fields()));
+  var task=ok(user.post(path(session),body));body.put("goal","修改预约目标");assertThat(user.post(path(session),body).statusCode()).isEqualTo(409);
+  var select=command(task,"SELECT");select.put("optionKey","arbitrary");assertThat(user.post(path(session)+"/"+task.path("id").asLong()+"/actions",select).statusCode()).isEqualTo(409);
+  select.put("optionKey",task.path("options").get(0).path("key").asText());task=act(user,session,task,select);
+  var confirm=command(task,"CONFIRM");confirm.put("confirmed",true);confirm.put("proposalHash","a".repeat(64));assertThat(user.post(path(session)+"/"+task.path("id").asLong()+"/actions",confirm).statusCode()).isEqualTo(409);
+  confirm.put("proposalHash",task.path("proposalHash").asText());confirm.put("version",0);assertThat(user.post(path(session)+"/"+task.path("id").asLong()+"/actions",confirm).statusCode()).isEqualTo(409);
+  assertThat(task.path("business").isNull()).isTrue();
+ }
+ @Test void anonymousOrWrongRoleCannotStartMissionsAndMalformedModelArgumentsFailClosed()throws Exception {
+  var user=login(username);long session=session(user);assertThat(new Browser().get(path(session)).statusCode()).isEqualTo(401);
+  var finance=login("finance1001");long staffSession=session(finance);assertThat(finance.post(path(staffSession),Map.of("requestKey",UUID.randomUUID().toString(),"goal","准备预约草稿","mode","LOCAL","externalConsent",false,"fields",fields())).statusCode()).isEqualTo(403);
+  doReturn(true).when(model).ready();doReturn(new Plan(List.of(new Call("check_schedule",JSON.valueToTree(Map.of("userId",2)))),10,2)).when(model).nextMissionStep(anyString(),anyList(),anyList());
+  assertThat(start(user,session,"DEEPSEEK").path("stage").asText()).isEqualTo("FAILED");
+ }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());
     }

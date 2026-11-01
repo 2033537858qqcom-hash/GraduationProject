@@ -44,6 +44,56 @@ test('reservation page initializes its filter state before starting navigation w
   assert.ifError(errors[0])
 })
 
+test('agent mission retains the exact request after a lost response and prevents edited confirmation', async () => {
+ const oldFetch = globalThis.fetch, commands = []
+ const fields = { campus: 'EAST', startsAt: '2026-11-05T09:00', endsAt: '2026-11-05T11:00', participants: 30, keyword: null, activityTheme: '学习交流', activityType: 'ACADEMIC', contactPhone: null }
+ const view = { id: 7, sessionId: 1, goal: '准备预约草稿', mode: 'LOCAL', stage: 'WAITING_CONFIRMATION', version: 4, fields, missing: [], options: [], selectedKey: 'option', proposalHash: 'a'.repeat(64), conflicts: [], message: '请确认', steps: [], business: null, canContinue: false }
+ let attempts = 0
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  if (options.method === 'POST') {
+   commands.push(JSON.parse(options.body))
+   if (++attempts === 1) throw Error('response lost')
+   return Response.json(view)
+  }
+  return Response.json([])
+ }
+ try {
+  const errors = await checkPageSetup('/assistant-mission-test', undefined, async state => {
+   state.goal.value = '准备预约草稿'
+   state.form.value = fields
+   await Promise.resolve()
+   await state.create()
+   assert.equal(state.pending.value.body.requestKey, commands[0].requestKey)
+   assert.equal(state.mission.value, null)
+   await state.retry()
+   assert.equal(commands[1].requestKey, commands[0].requestKey)
+   assert.deepEqual(commands[1], commands[0])
+   state.confirmed.value = true
+   state.form.value.participants = 31
+   await state.confirm()
+   assert.equal(commands.length, 2)
+   assert.equal(state.readyToConfirm.value, false)
+  }, { sessionId: 1, active: false, modelReady: false })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})
+
+test('reopening the agent panel preserves unsaved fields instead of restoring over them', async () => {
+ const oldFetch = globalThis.fetch
+ globalThis.fetch = async () => Response.json([{ id: 9 }])
+ try {
+  const errors = await checkPageSetup('/assistant-mission-test', undefined, async state => {
+   state.goal.value = '尚未开始的预约目标'
+   state.form.value.activityTheme = '没有保存的主题'
+   await state.load()
+   assert.equal(state.mission.value, null)
+   assert.equal(state.form.value.activityTheme, '没有保存的主题')
+  }, { sessionId: 1, active: false, modelReady: false })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})
+
 test('workbench initializes its task queue before starting filter watchers', async () => {
   const errors = await checkPageSetup('/workbench')
   assert.ifError(errors[0])

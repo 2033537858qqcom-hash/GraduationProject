@@ -1,0 +1,2 @@
+ALTER TABLE agent_mission ADD COLUMN kind VARCHAR(24) NOT NULL DEFAULT 'RESERVATION';
+ALTER TABLE agent_mission ADD CONSTRAINT ck_agent_mission_kind CHECK(kind IN ('RESERVATION','REPAIR'));

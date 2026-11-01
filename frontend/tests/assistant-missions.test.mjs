@@ -1,9 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { missionFieldsPayload, canConfirmMission, missionConfirmationPayload, missionStageLabel, missionNeedsPolling } from '../src/lib/assistantMissions.ts'
+import { missionFieldsPayload, repairMissionFieldsPayload, canConfirmMission, missionConfirmationPayload, missionStageLabel, missionNeedsPolling } from '../src/lib/assistantMissions.ts'
 
 const fields = { campus: 'EAST', startsAt: '2026-11-05T09:00', endsAt: '2026-11-05T11:00', participants: 30, keyword: null, activityTheme: '学习交流', activityType: 'ACADEMIC', contactPhone: '' }
 const mission = { id: 7, version: 4, stage: 'WAITING_CONFIRMATION', fields, proposalHash: 'a'.repeat(64) }
+test('repair confirmation includes every local repair field and does not depend on reservation fields', () => {
+ const repairFields={category:'ELECTRICITY',title:'灯不亮',description:'无法开启',locationId:5,locationDetail:'东侧',contact:'user@example.test',contactWindow:'白天'}
+ const repair={...mission,kind:'REPAIR',fields:null,repairFields}
+ assert.equal(canConfirmMission(repair,repairFields,true),true)
+ assert.equal(canConfirmMission(repair,{...repairFields,contact:'another@example.test'},true),false)
+ assert.equal(canConfirmMission(repair,{...repairFields,locationId:6},true),false)
+ assert.equal(repairMissionFieldsPayload({...repairFields,locationId:''}).locationId,null)
+ assert.equal(repairMissionFieldsPayload({...repairFields,locationId:'5.5'}).locationId,null)
+})
 test('saving requires explicit confirmation of the unchanged proposal', () => {
  assert.equal(canConfirmMission(mission, fields, false), false)
  assert.equal(canConfirmMission(mission, fields, true), true)

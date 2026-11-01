@@ -25,10 +25,14 @@ public class AgentMissionTools {
     private final VenueReservationService reservations;
     private final PhysicalRoomService rooms;
     private final JdbcClient jdbc;
+    private final AgentRepairMissionTools repair;
     private final JsonMapper json=JsonMapper.builder().build();
-    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc) {
-        this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;
+    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair) {
+        this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;this.repair=repair;
     }
+    public boolean repair(State s){return "REPAIR".equals(s.kind);}
+    public RepairFields normalizeRepair(RepairFields f){return repair.normalize(f);}
+    public List<cn.zzuit.campus.repair.RepairSettingsModels.PublicLocation> repairLocations(CampusPrincipal user,State s){return repair(s)?repair.locations(user):List.of();}
     public record Outcome(String stage,Observation observation) {}
     static LocalDateTime now(){return LocalDateTime.now(ZoneId.of("Asia/Shanghai"));}
     private String text(String value){return value==null||value.isBlank()?null:value.trim();}
@@ -53,6 +57,7 @@ public class AgentMissionTools {
     }
     private boolean scheduleBlocked(State state){return !state.scheduleStatus.equals("OK")||state.conflictCount>0;}
     public List<String> allowed(State state) {
+        if(repair(state))return repair.allowed(state);
         if(!missing(state.fields).isEmpty())return List.of("request_input");
         if(state.draftId!=null)return List.of(state.verified?"finish":"verify_reservation");
         if(state.scheduleChecked&&scheduleBlocked(state)||state.venuesChecked&&!state.venueStatus.equals("OK"))return List.of("request_input");
@@ -83,16 +88,18 @@ public class AgentMissionTools {
         if(scheduleBlocked(state))throw changed("本人日程存在冲突或部分来源不可核对，请修改时段后重新规划");
         if(reservations.checkConflict(new CheckConflictCommand(venue.id(),date(state.fields.startsAt()),date(state.fields.endsAt()),null)).hasConflict())throw changed("场地已有新的占用，请重新选择时段或场地");
     }
-    public String fingerprint(State state,CampusPrincipal user){return hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
+    public String fingerprint(State state,CampusPrincipal user){return repair(state)?hash(repair.fingerprint(state,user)):hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
     public String hash(Object input) {
         try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsString(input).getBytes(StandardCharsets.UTF_8)));}
         catch(Exception failure){throw new IllegalStateException("任务请求摘要生成失败",failure);}
     }
     public void invalidate(State state,String message) {
+        if(repair(state)){repair.invalidate(state,message);return;}
         state.options=List.of();state.selectedKey=null;state.proposalHash=null;state.proposalReady=false;state.confirmed=false;
         state.scheduleChecked=false;state.venuesChecked=false;state.conflicts=List.of();state.conflictCount=0;state.message=message;state.missing=List.of("startsAt","endsAt","keyword");
     }
     public Outcome execute(CampusPrincipal user,String action,State state,String businessKey) {
+        if(repair(state))return repair.execute(user,action,state,businessKey,this::hash);
         switch(action) {
             case "request_input" -> {
                 state.missing=missing(state.fields);
@@ -135,6 +142,7 @@ public class AgentMissionTools {
         }
     }
     public Business business(CampusPrincipal user,State state) {
+        if(repair(state))return repair.business(user,state);
         if(state.draftId==null)return null;var detail=reservations.getDetail(user,state.draftId);
         if(detail.applicantId()!=user.id())throw changed("原申请归属已变化");
         return new Business(detail.id(),detail.status(),detail.version(),"/portal/reservations?id="+detail.id()+"&tab=details");

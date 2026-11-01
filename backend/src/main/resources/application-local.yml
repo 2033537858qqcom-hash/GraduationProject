@@ -1,4 +1,10 @@
 spring:
+  config:
+    # IDEA may start from the repository root or from backend/.
+    # Local credentials remain in ignored files, with real environment variables taking precedence.
+    import:
+      - optional:file:./backend/.env.local[.properties]
+      - optional:file:${CAMPUS_LOCAL_ENV_FILE:./.env.local}[.properties]
   datasource:
     url: jdbc:h2:file:./data/campus;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_ON_EXIT=FALSE
     username: sa

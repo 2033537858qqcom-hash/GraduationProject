@@ -18,6 +18,7 @@ import tools.jackson.databind.JsonNode;import tools.jackson.databind.json.JsonMa
 class AgentConversationEnhancementIntegrationTest {
  static final JsonMapper JSON=JsonMapper.builder().build();
  @LocalServerPort int port;@Autowired JdbcClient jdbc;@MockitoSpyBean DeepSeekClient model;
+ @MockitoSpyBean AgentTools tools;
  long first,second,foreign;
  @BeforeAll void fixture() throws Exception {
   var op=login("finance1001");var rev=login("finance2001");
@@ -104,6 +105,15 @@ class AgentConversationEnhancementIntegrationTest {
   ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("我的已发布成绩"))));
   var cleared=ok(student.post(path,Map.of("requestKey",UUID.randomUUID().toString(),"input",query("10元"))));
   assertThat(cleared.toString()).doesNotContain("应付 ¥");
+ }
+ @Test void conjunctionInsideVenueRequirementsDoesNotDiscardTimeAndCampus()throws Exception{
+  ask("明天东校区09:00-11:00查找一个同时容纳20人的空闲场地");
+  var call=org.mockito.ArgumentCaptor.forClass(Call.class);
+  verify(tools).execute(any(),call.capture(),nullable(Context.class));
+  assertThat(call.getValue().name()).isEqualTo("find_available_venues");
+  assertThat(call.getValue().arguments().path("campus").asText()).isEqualTo("EAST");
+  assertThat(call.getValue().arguments().path("startsAt").asText()).endsWith("T09:00");
+  assertThat(call.getValue().arguments().path("participants").asInt()).isEqualTo(20);
  }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());

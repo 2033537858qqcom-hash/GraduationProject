@@ -18,6 +18,7 @@ import tools.jackson.databind.JsonNode;import tools.jackson.databind.json.JsonMa
 class AgentMissionHttpTest {
  static final JsonMapper JSON=JsonMapper.builder().build();
  @LocalServerPort int port;@Autowired JdbcClient jdbc;@MockitoSpyBean DeepSeekClient model;
+ @MockitoSpyBean AgentMissionTools missionTools;
  long studentId,venueId;String username="mission_student";
  @BeforeAll void fixture(){
   jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id,class_group_id,demo) SELECT :name,password_hash,'任务测试学生',:name,campus_id,department_id,class_group_id,TRUE FROM app_user WHERE username='20260001'").param("name",username).update();
@@ -91,6 +92,56 @@ class AgentMissionHttpTest {
   try{var confirm=command(task,"CONFIRM");confirm.put("confirmed",true);confirm.put("proposalHash",task.path("proposalHash").asText());
    var changed=act(user,session,task,confirm);assertThat(changed.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(changed.path("business").isNull()).isTrue();
   }finally{jdbc.sql("UPDATE venue_resource SET enabled=TRUE,version=version+1 WHERE id=:v").param("v",option.path("venueId").asLong()).update();}
+ }
+ java.util.concurrent.CompletableFuture<HttpResponse<String>> asyncPost(Browser user,String path,Map<String,?> body)throws Exception {
+  return user.http.sendAsync(user.builder(path).header(user.header,user.token).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build(),HttpResponse.BodyHandlers.ofString());
+ }
+ @Test void replayDuringInitialPlanningCannotAcquireTheSameRunnerTwice()throws Exception {
+  var user=login(username);long session=session(user);var entered=new java.util.concurrent.CountDownLatch(1);var resume=new java.util.concurrent.CountDownLatch(1);var first=new java.util.concurrent.atomic.AtomicBoolean(true);
+  doAnswer(invocation->{if(first.compareAndSet(true,false)){entered.countDown();if(!resume.await(10,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("planner did not resume");}return invocation.callRealMethod();}).when(missionTools).allowed(any());
+  var body=Map.<String,Object>of("requestKey",UUID.randomUUID().toString(),"goal","准备预约草稿","mode","LOCAL","externalConsent",false,"fields",fields());
+  var initial=asyncPost(user,path(session),body);
+  try {
+   assertThat(entered.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+   var replay=ok(user.post(path(session),body));assertThat(replay.path("stage").asText()).isEqualTo("RUNNING");
+  } finally {resume.countDown();}
+  var result=ok(initial.get(10,java.util.concurrent.TimeUnit.SECONDS));assertThat(result.path("stage").asText()).isEqualTo("WAITING_SELECTION");assertThat(result.path("steps").size()).isEqualTo(3);
+ }
+ @Test void anExecutingTaskProtectsItsParentSessionFromDeletion()throws Exception {
+  doReturn(true).when(model).ready();var entered=new java.util.concurrent.CountDownLatch(1);var resume=new java.util.concurrent.CountDownLatch(1);
+  doAnswer(invocation->{entered.countDown();if(!resume.await(10,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("model did not resume");List<String> allowed=invocation.getArgument(1);return new Plan(List.of(new Call(allowed.get(0),JSON.valueToTree(Map.of()))),10,2);}).when(model).nextMissionStep(anyString(),anyList(),anyList());
+  var user=login(username);long session=session(user);
+  var work=asyncPost(user,path(session),Map.of("requestKey",UUID.randomUUID().toString(),"goal","准备预约草稿","mode","DEEPSEEK","externalConsent",true,"fields",fields()));
+  try {assertThat(entered.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();assertThat(user.send("DELETE","/api/assistant/sessions/"+session,Map.of()).statusCode()).isEqualTo(409);}
+  finally{resume.countDown();work.get(15,java.util.concurrent.TimeUnit.SECONDS);}
+ }
+ @Test void cancellingWhileModelIsRunningStopsLaterActions()throws Exception {
+  doReturn(true).when(model).ready();var entered=new java.util.concurrent.CountDownLatch(1);var resume=new java.util.concurrent.CountDownLatch(1);
+  doAnswer(invocation->{entered.countDown();if(!resume.await(10,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("model did not resume");List<String> allowed=invocation.getArgument(1);return new Plan(List.of(new Call(allowed.get(0),JSON.valueToTree(Map.of()))),10,2);}).when(model).nextMissionStep(anyString(),anyList(),anyList());
+  var user=login(username);long session=session(user);long before=jdbc.sql("SELECT COUNT(*) FROM venue_reservation").query(Long.class).single();
+  var work=asyncPost(user,path(session),Map.of("requestKey",UUID.randomUUID().toString(),"goal","准备预约草稿","mode","DEEPSEEK","externalConsent",true,"fields",fields()));
+  try {
+   assertThat(entered.await(10,java.util.concurrent.TimeUnit.SECONDS)).isTrue();long id=ok(user.get(path(session))).get(0).path("id").asLong();var task=ok(user.get(path(session)+"/"+id));
+   var cancelled=act(user,session,task,command(task,"CANCEL"));assertThat(cancelled.path("stage").asText()).isEqualTo("CANCELLED");assertThat(cancelled.path("steps").toString()).doesNotContain("RUNNING");
+  }finally{resume.countDown();work.get(15,java.util.concurrent.TimeUnit.SECONDS);}
+  assertThat(jdbc.sql("SELECT COUNT(*) FROM venue_reservation").query(Long.class).single()).isEqualTo(before);
+ }
+ @Test void interruptedLeaseCanResumeAndTaskBudgetCannotBeBypassed()throws Exception {
+  var user=login(username);long session=session(user);var task=start(user,session,"LOCAL");long id=task.path("id").asLong();
+  jdbc.sql("UPDATE agent_mission SET stage='RUNNING',runner_token='expired',lease_until=:time WHERE id=:id").param("time",LocalDateTime.now(ZoneId.of("Asia/Shanghai")).minusMinutes(2)).param("id",id).update();
+  task=ok(user.get(path(session)+"/"+id));assertThat(task.path("stage").asText()).isEqualTo("INTERRUPTED");
+  task=act(user,session,task,command(task,"CONTINUE"));assertThat(task.path("stage").asText()).isEqualTo("WAITING_SELECTION");
+  jdbc.sql("UPDATE agent_mission SET stage='PAUSED',step_count=24 WHERE id=:id").param("id",id).update();
+  task=ok(user.get(path(session)+"/"+id));task=act(user,session,task,command(task,"CONTINUE"));
+  assertThat(task.path("stage").asText()).isEqualTo("FAILED");assertThat(task.path("canContinue").asBoolean()).isFalse();
+ }
+ @Test void modelTimeoutLeavesRecoverableTraceAndConsentIsRequired()throws Exception {
+  doReturn(true).when(model).ready();var user=login(username);long session=session(user);
+  assertThat(user.post(path(session),Map.of("requestKey",UUID.randomUUID().toString(),"goal","准备预约草稿","mode","DEEPSEEK","externalConsent",false,"fields",fields())).statusCode()).isEqualTo(400);
+  doThrow(new cn.zzuit.campus.common.ApiException(org.springframework.http.HttpStatus.GATEWAY_TIMEOUT,"MODEL_TIMEOUT","模型调用超时")).when(model).nextMissionStep(anyString(),anyList(),anyList());
+  var task=start(user,session,"DEEPSEEK");assertThat(task.path("stage").asText()).isEqualTo("FAILED");assertThat(task.path("steps").toString()).contains("MODEL_TIMEOUT");
+  doAnswer(invocation->{List<String> allowed=invocation.getArgument(1);return new Plan(List.of(new Call(allowed.get(0),JSON.valueToTree(Map.of()))),10,2);}).when(model).nextMissionStep(anyString(),anyList(),anyList());
+  task=act(user,session,task,command(task,"CONTINUE"));assertThat(task.path("stage").asText()).isEqualTo("WAITING_SELECTION");
  }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());

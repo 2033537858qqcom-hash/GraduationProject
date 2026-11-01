@@ -19,6 +19,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 class AgentSessionConcurrencyTest {
     @Test void deletionReservesUserOperationUntilTransactionCompletes() throws Exception {
         var jdbc=mock(JdbcClient.class, RETURNS_DEEP_STUBS);
+        when(jdbc.sql("SELECT COUNT(*) FROM agent_mission WHERE session_id=:id AND stage='RUNNING' AND lease_until>:now").param("id",1L).param(eq("now"),any(LocalDateTime.class)).query(Long.class).single()).thenReturn(0L);
         var manager=mock(PlatformTransactionManager.class);
         var entered=new CountDownLatch(1); var resume=new CountDownLatch(1);
         when(manager.getTransaction(any())).thenAnswer(invocation->{

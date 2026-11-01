@@ -21,7 +21,7 @@ public final class AgentMissionModels {
     public record Observation(String action,String status,long count,List<String> missing) {}
     public record Step(int number,String action,String status,String message,Observation observation,Integer promptTokens,Integer completionTokens,LocalDateTime createdAt) {}
     public record Business(long id,String status,int version,String targetPath) {}
-    public record Summary(long id,String goal,Mode mode,String stage,int version,LocalDateTime updatedAt) {}
+    public record Summary(long id,String requestKey,String goal,Mode mode,String stage,int version,LocalDateTime updatedAt) {}
     public record View(long id,long sessionId,String goal,Mode mode,String stage,int version,Fields fields,List<String> missing,
         List<Option> options,String selectedKey,String proposalHash,List<Fact> conflicts,String message,List<Step> steps,Business business,boolean canContinue,LocalDateTime updatedAt) {}
     public static class State {

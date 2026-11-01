@@ -64,6 +64,8 @@ public class AgentSessions {
         try {
             write(()->{
                 session(user,id);
+                long executing=jdbc.sql("SELECT COUNT(*) FROM agent_mission WHERE session_id=:id AND stage='RUNNING' AND lease_until>:now").param("id",id).param("now",AgentMissionTools.now()).query(Long.class).single();
+                if(executing>0)throw conflict("当前对话有正在执行的Agent任务，请先取消或等待执行结束");
                 jdbc.sql("DELETE FROM agent_task WHERE session_id=:id").param("id",id).update();
                 jdbc.sql("DELETE FROM agent_turn WHERE session_id=:id").param("id",id).update();
                 jdbc.sql("DELETE FROM agent_session WHERE id=:id AND user_id=:u").param("id",id).param("u",user.id()).update();

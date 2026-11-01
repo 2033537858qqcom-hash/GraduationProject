@@ -30,6 +30,7 @@ public class AgentMissionService {
     private final TransactionTemplate tx;
     private final JsonMapper json=JsonMapper.builder().build();
     private record Row(long id,long session,long owner,String goal,Mode mode,boolean consent,String stage,State state,String businessKey,int count,int version,String token,LocalDateTime lease,String lastKey,String lastHash,LocalDateTime updated) {}
+    private record Claim(Row row,boolean execute) {}
     public AgentMissionService(JdbcClient jdbc,IdentityService identities,AgentSessions sessions,AgentMissionTools tools,DeepSeekClient model,TransactionTemplate tx) {
         this.jdbc=jdbc;this.identities=identities;this.sessions=sessions;this.tools=tools;this.model=model;this.tx=tx;
     }
@@ -41,7 +42,7 @@ public class AgentMissionService {
     }
     private Row load(CampusPrincipal user,long session,long id){require(user,session);return jdbc.sql("SELECT * FROM agent_mission WHERE id=:id AND session_id=:s AND user_id=:u").param("id",id).param("s",session).param("u",user.id()).query(this::row).optional().orElseThrow(this::missing);}
     private boolean running(Row r){return r.stage().equals("RUNNING")&&r.lease()!=null&&r.lease().isAfter(now());}
-    public List<Summary> list(CampusPrincipal user,long session){require(user,session);return jdbc.sql("SELECT id,goal,mode,stage,version,updated_at,lease_until FROM agent_mission WHERE session_id=:s AND user_id=:u ORDER BY id DESC LIMIT 10").param("s",session).param("u",user.id()).query((r,n)->new Summary(r.getLong(1),r.getString(2),Mode.valueOf(r.getString(3)),r.getString(4).equals("RUNNING")&&(r.getObject(7,LocalDateTime.class)==null||r.getObject(7,LocalDateTime.class).isBefore(now()))?"INTERRUPTED":r.getString(4),r.getInt(5),r.getObject(6,LocalDateTime.class))).list();}
+    public List<Summary> list(CampusPrincipal user,long session){require(user,session);return jdbc.sql("SELECT id,request_key,goal,mode,stage,version,updated_at,lease_until FROM agent_mission WHERE session_id=:s AND user_id=:u ORDER BY id DESC LIMIT 10").param("s",session).param("u",user.id()).query((r,n)->new Summary(r.getLong(1),r.getString(2),r.getString(3),Mode.valueOf(r.getString(4)),r.getString(5).equals("RUNNING")&&(r.getObject(8,LocalDateTime.class)==null||r.getObject(8,LocalDateTime.class).isBefore(now()))?"INTERRUPTED":r.getString(5),r.getInt(6),r.getObject(7,LocalDateTime.class))).list();}
     public View detail(CampusPrincipal user,long session,long id){return view(user,load(user,session,id));}
     private List<Step> steps(long id){return jdbc.sql("SELECT * FROM agent_mission_step WHERE mission_id=:id ORDER BY step_number").param("id",id).query((r,n)->new Step(r.getInt("step_number"),r.getString("action"),r.getString("status"),r.getString("message"),r.getString("observation_json")==null?null:json.readValue(r.getString("observation_json"),Observation.class),r.getObject("prompt_tokens",Integer.class),r.getObject("completion_tokens",Integer.class),r.getObject("created_at",LocalDateTime.class))).list();}
     private View view(CampusPrincipal user,Row r){
@@ -52,20 +53,19 @@ public class AgentMissionService {
     private void consent(Mode mode,boolean agreed){if(mode==Mode.DEEPSEEK&&!agreed)throw error(HttpStatus.BAD_REQUEST,"MODEL_CONSENT_REQUIRED","请确认将本次目标和后续脱敏执行观察发送至DeepSeek，或选择本地任务流程");if(mode==Mode.DEEPSEEK&&!model.ready())throw error(HttpStatus.SERVICE_UNAVAILABLE,"MODEL_NOT_CONFIGURED","DeepSeek尚未连接，可选择本地任务流程");}
     public View create(CampusPrincipal user,long session,Create input){
         require(user,session);String hash=tools.hash(input);
-        Row created=write(()->{
+        Claim created=write(()->{
             require(user,session);var prior=jdbc.sql("SELECT * FROM agent_mission WHERE session_id=:s AND request_key=:k").param("s",session).param("k",input.requestKey()).query(this::row).optional();
-            if(prior.isPresent()){String oldHash=jdbc.sql("SELECT create_hash FROM agent_mission WHERE id=:id").param("id",prior.get().id()).query(String.class).single();if(!oldHash.equals(hash))throw conflict("重复任务请求与原目标不同，请新建任务");return prior.get();}
+            if(prior.isPresent()){String oldHash=jdbc.sql("SELECT create_hash FROM agent_mission WHERE id=:id").param("id",prior.get().id()).query(String.class).single();if(!oldHash.equals(hash))throw conflict("重复任务请求与原目标不同，请新建任务");return new Claim(prior.get(),false);}
             consent(input.mode(),input.externalConsent());
             if(!input.goal().matches("(?s).*(预约|借用|场地|教室|会议室|报告厅|研讨室).*"))throw error(HttpStatus.BAD_REQUEST,"MISSION_SCOPE","当前任务Agent支持查询场地并准备本人预约草稿，请描述预约目标");
             if(jdbc.sql("SELECT COUNT(*) FROM agent_mission WHERE session_id=:s").param("s",session).query(Long.class).single()>=10)throw conflict("当前对话已有10个任务，请新建对话");
             var state=new State();state.fields=tools.initial(input.goal(),input.fields());state.message="正在规划并执行预约目标。";String token=UUID.randomUUID().toString();var key=new GeneratedKeyHolder();
             jdbc.sql("INSERT INTO agent_mission(session_id,user_id,request_key,create_hash,goal,mode,external_consent,stage,state_json,business_key,runner_token,lease_until) VALUES(:s,:u,:key,:hash,:goal,:mode,:consent,'RUNNING',:state,:business,:token,:lease)")
                 .param("s",session).param("u",user.id()).param("key",input.requestKey()).param("hash",hash).param("goal",input.goal().trim()).param("mode",input.mode().name()).param("consent",input.externalConsent()).param("state",json.writeValueAsString(state)).param("business","agent-mission-"+UUID.randomUUID()).param("token",token).param("lease",now().plus(LEASE)).update(key,"id");
-            touch(session,input.goal());return load(user,session,key.getKey().longValue());
+            touch(session,input.goal());return new Claim(load(user,session,key.getKey().longValue()),true);
         });
         // Only the creator of this new lease executes it. Replayed creates return the stored state.
-        boolean original=created.count()==0&&created.version()==0;
-        return original?run(user,created.session(),created.id(),created.token()):view(user,created);
+        var row=created.row();return created.execute()?run(user,row.session(),row.id(),row.token()):view(user,row);
     }
     private Row persist(Row r,State state,String stage,String token){
         if(jdbc.sql("UPDATE agent_mission SET state_json=:state,stage=:stage,runner_token=:token,lease_until=:lease,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v")
@@ -73,14 +73,15 @@ public class AgentMissionService {
         return jdbc.sql("SELECT * FROM agent_mission WHERE id=:id").param("id",r.id()).query(this::row).single();
     }
     public View action(CampusPrincipal user,long session,long id,Action input){
-        Row claimed=write(()->{
+        Claim claimed=write(()->{
             var r=load(user,session,id);String hash=tools.hash(input);
-            if(input.requestKey().equals(r.lastKey())){if(!hash.equals(r.lastHash()))throw conflict("重复操作请求与原内容不同");return r;}
-            if(input.version()!=r.version())throw conflict("任务版本已变化，请刷新后核对");
+            if(input.requestKey().equals(r.lastKey())){if(!hash.equals(r.lastHash()))throw conflict("重复操作请求与原内容不同");return new Claim(r,false);}
             if(input.action().equals("CANCEL")){
-                if(r.stage().equals("DONE"))return r;var s=r.state();s.message="已取消后续任务动作；已保存的业务草稿仍保留，可在原页面处理。";
-                remember(r,input,hash);return persist(r,s,"CANCELLED",null);
+                if(Set.of("DONE","CANCELLED").contains(r.stage()))return new Claim(r,false);var s=r.state();s.message="已取消后续任务动作；已保存的业务草稿仍保留，可在原页面处理。";
+                jdbc.sql("UPDATE agent_mission_step SET status='CANCELLED',message='已取消后续任务动作' WHERE mission_id=:id AND status='RUNNING'").param("id",id).update();
+                remember(r,input,hash);return new Claim(persist(r,s,"CANCELLED",null),false);
             }
+            if(input.version()!=r.version())throw conflict("任务版本已变化，请刷新后核对");
             if(running(r))throw conflict("任务正在执行，请等待或取消");
             if(Set.of("DONE","CANCELLED").contains(r.stage()))throw conflict("任务已结束，请查看原业务记录或新建任务");
             var s=r.state();
@@ -101,11 +102,13 @@ public class AgentMissionService {
                 case "CONTINUE" -> {if(!Set.of("PAUSED","FAILED","RUNNING").contains(r.stage()))throw conflict("当前任务需要补充条件、选择候选或确认预览");}
                 default -> throw error(HttpStatus.BAD_REQUEST,"MISSION_ACTION","任务操作无效");
             }
-            if(r.count()>=TOTAL_STEPS){s.message="任务已达到24步上限，请核对记录后新建任务。";return persist(r,s,"FAILED",null);}
-            consent(r.mode(),r.consent());remember(r,input,hash);String token=UUID.randomUUID().toString();return persist(r,s,"RUNNING",token);
+            if(r.count()>=TOTAL_STEPS){s.message="任务已达到24步上限，请核对记录后新建任务。";return new Claim(persist(r,s,"FAILED",null),false);}
+            consent(r.mode(),r.consent());remember(r,input,hash);String token=UUID.randomUUID().toString();
+            jdbc.sql("UPDATE agent_mission_step SET status='INTERRUPTED',message='上轮执行已中断，保留记录并重新规划' WHERE mission_id=:id AND status='RUNNING'").param("id",id).update();
+            return new Claim(persist(r,s,"RUNNING",token),true);
         });
         // A successful claim changes version exactly once; duplicate request keys never re-enter the loop.
-        return claimed.stage().equals("RUNNING")&&claimed.version()==input.version()+1?run(user,session,id,claimed.token()):view(user,claimed);
+        return claimed.execute()?run(user,session,id,claimed.row().token()):view(user,claimed.row());
     }
     private void remember(Row r,Action input,String hash){jdbc.sql("UPDATE agent_mission SET last_request_key=:key,last_request_hash=:hash WHERE id=:id").param("key",input.requestKey()).param("hash",hash).param("id",r.id()).update();}
     private Row lease(CampusPrincipal user,long session,long id,String token){var r=load(user,session,id);if(!r.stage().equals("RUNNING")||!Objects.equals(token,r.token()))throw conflict("任务执行权已变化，请刷新当前状态");return r;}

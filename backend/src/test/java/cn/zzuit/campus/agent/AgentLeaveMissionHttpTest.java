@@ -47,6 +47,17 @@ class AgentLeaveMissionHttpTest {
  @Test void modelReceivesNoLeaveReasonContactOrIdentityInObservations()throws Exception{
   doReturn(true).when(model).ready();doAnswer(invocation->{List<String> allowed=invocation.getArgument(1);String obs=JSON.writeValueAsString(invocation.getArgument(2));assertThat(obs).doesNotContain("private@example.test","实际请假事由","studentId","classGroupId");assertThat(allowed).doesNotContain("save_repair","find_venues");return new Plan(List.of(new Call(allowed.get(0),JSON.valueToTree(Map.of()))),10,2);}).when(model).nextMissionStep(anyString(),anyList(),anyList());var user=login("20260001");var body=input(leave());body.put("mode","DEEPSEEK");body.put("externalConsent",true);var task=ok(user.post(path(session(user)),body));assertThat(task.path("stage").asText()).isEqualTo("WAITING_CONFIRMATION");
  }
+ @Test void missingClassAndExpiredStartTimeBlockPreview()throws Exception{
+  var user=login("20260002");long s=session(user);long group=jdbc.sql("SELECT class_group_id FROM app_user WHERE username='20260002'").query(Long.class).single();jdbc.sql("UPDATE app_user SET class_group_id=NULL WHERE username='20260002'").update();
+  try{assertThat(ok(user.post(path(s),input(leave()))).path("leavePreview").path("issues").toString()).contains("行政班");}finally{jdbc.sql("UPDATE app_user SET class_group_id=:id WHERE username='20260002'").param("id",group).update();}
+  var f=new HashMap<String,Object>(leave());String day=java.time.LocalDate.now(java.time.ZoneId.of("Asia/Shanghai")).minusDays(1).toString();f.put("startDate",day);f.put("endDate",day);assertThat(ok(user.post(path(s),input(f))).path("stage").asText()).isEqualTo("WAITING_INPUT");
+ }
+ @Test void modifyingFieldsRequiresNewPreviewAndWrongHashCannotSave()throws Exception{
+  var user=login("20260001");long s=session(user);var task=ok(user.post(path(s),input(leave())));String old=task.path("proposalHash").asText();var f=new HashMap<String,Object>(leave());f.put("contact","changed@example.test");var revise=command(task,"REVISE");revise.put("leaveFields",f);task=act(user,s,task,revise);assertThat(task.path("proposalHash").asText()).isNotEqualTo(old);var confirm=command(task,"CONFIRM");confirm.put("confirmed",true);confirm.put("proposalHash",old);assertThat(user.post(path(s)+"/"+task.path("id").asLong()+"/actions",confirm).statusCode()).isEqualTo(409);
+ }
+ @Test void wrongDomainModelActionFailsWithoutSaving()throws Exception{
+  doReturn(true).when(model).ready();doReturn(new Plan(List.of(new Call("save_repair",JSON.valueToTree(Map.of()))),10,2)).when(model).nextMissionStep(anyString(),anyList(),anyList());var user=login("20260001");var f=input(leave());f.put("mode","DEEPSEEK");f.put("externalConsent",true);long before=jdbc.sql("SELECT COUNT(*) FROM leave_request").query(Long.class).single();var task=ok(user.post(path(session(user)),f));assertThat(task.path("stage").asText()).isEqualTo("FAILED");assertThat(jdbc.sql("SELECT COUNT(*) FROM leave_request").query(Long.class).single()).isEqualTo(before);
+ }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());
     }

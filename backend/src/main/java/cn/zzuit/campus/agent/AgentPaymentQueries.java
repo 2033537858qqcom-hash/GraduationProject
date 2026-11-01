@@ -98,11 +98,9 @@ public class AgentPaymentQueries {
     }
     public List<Call> local(String q,Context context) {
         if(q.matches(".*(对账|差异).*(待办|待处理|处理|核查|复核).*"))return List.of(call("finance_reconciliation_pending",Map.of()));
-        if(q.matches(".*(充|充值).*")) {
-            String category=q.matches(".*(电|度).*")?"ELECTRICITY":q.matches(".*(水|吨).*")?"WATER":null;
-            var p=Pattern.compile("(?:充值|充)\\s*(?:电费|水费)?\\s*([+-]?\\d+(?:\\.\\d+)?)\\s*(元|块|度|吨)").matcher(q);
-            if(p.find()) {var a=new HashMap<String,Object>();if(category!=null)a.put("category",category);a.put("mode",Set.of("元","块").contains(p.group(2))?"AMOUNT":"QUANTITY");a.put("value",p.group(1));return List.of(call("quote_dorm_recharge",a));}
-            if(q.matches(".*(到账|记录|余额|单价|多少|水|电).*"))return List.of(call("my_dorm_utilities",Map.of()));
+        if(Pattern.compile("充值|充\\s*(?:电费|水费|[+-]?\\d)").matcher(q).find()) {
+            if(q.matches(".*(到账|记录|余额|单价).*"))return List.of(call("my_dorm_utilities",Map.of()));
+            return List.of(call("quote_dorm_recharge",quoteArguments(q)));
         }
         if(q.matches(".*(水费|电费|水价|电价|水电|水表|电表).*")&&!q.matches(".*(这笔|这条|账单|支付状态).*"))return List.of(call("my_dorm_utilities",Map.of()));
         if(q.matches(".*(第[一二三四五六七八12345678](?:笔|条)|当前账单|账单.*(?:依据|计算|状态)|这笔.*(?:费用|账单|支付|到账|退款)).*")||context!=null&&context.type().equals("PAYMENT_MINE")&&q.matches(".*(这笔|这条|当前|费用|支付|到账|退款|计算|依据|状态).*"))return List.of(call("payment_detail",Map.of()));
@@ -110,6 +108,33 @@ public class AgentPaymentQueries {
         return List.of();
     }
     private Call call(String name,Map<String,?> args){return new Call(name,json.valueToTree(args));}
+    private Map<String,String> quoteArguments(String question) {
+        var args=new HashMap<String,String>();
+        boolean electricity=question.matches(".*(电|度).*"),water=question.matches(".*(水|吨).*");
+        if(electricity&&water)return args;
+        if(electricity||water)args.put("category",electricity?"ELECTRICITY":"WATER");
+        var number=Pattern.compile("([+-]?\\d+(?:\\.\\d+)?)\\s*(元|块|度|吨)").matcher(question);
+        if(number.find()) {
+            String value=number.group(1),unit=number.group(2);
+            if(!number.find()){args.put("value",value);args.put("mode",Set.of("元","块").contains(unit)?"AMOUNT":"QUANTITY");}
+        }
+        return args;
+    }
+    public Call continueQuote(long session,Query query) {
+        String fragment=query.message().trim().replaceAll("[\\s，,。！？!?]","");
+        if(fragment.isEmpty()||!fragment.matches("(?:水费|电费|水|电)?(?:[+-]?\\d+(?:\\.\\d+)?(?:元|块|度|吨))?(?:水费|电费|水|电)?"))return null;
+        var prior=jdbc.sql("SELECT payment_quote_json FROM agent_turn WHERE session_id=:s AND status='SUCCESS' ORDER BY id DESC LIMIT 1").param("s",session).query((r,n)->r.getString(1)).optional();
+        if(prior.isEmpty())return null;
+        var args=new HashMap<String,String>();
+        json.readTree(prior.get()).properties().forEach(e->args.put(e.getKey(),e.getValue().asText()));
+        var patch=quoteArguments(fragment);
+        if(patch.isEmpty())args.clear();else args.putAll(patch);
+        return call("quote_dorm_recharge",args);
+    }
+    public String pendingQuote(Answer answer,Query query,Call continuation) {
+        if(answer.results().stream().noneMatch(r->r.name().equals("quote_dorm_recharge")&&r.status().equals("NEEDS_INPUT")))return null;
+        return continuation==null?json.writeValueAsString(quoteArguments(query.message())):json.writeValueAsString(continuation.arguments());
+    }
     public String references(Answer answer) {
         return json.writeValueAsString(answer.results().stream().filter(r->Set.of("my_payments","payment_detail").contains(r.name())).flatMap(r->r.items().stream()).map(Fact::key).filter(k->k.matches("PAYMENT:[1-9]\\d*")).map(k->Long.parseLong(k.substring(8))).limit(8).toList());
     }

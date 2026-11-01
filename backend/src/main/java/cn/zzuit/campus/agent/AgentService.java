@@ -30,9 +30,12 @@ public class AgentService {
         return new Capabilities(model.ready(),model.model(),tools.capabilities(user),model.ready()?"DeepSeek 可用：仅发送本次问题与页面业务类型，实际查询结果留在本地。":"DeepSeek 尚未连接，当前可使用本地关键词查询。");
     }
     public Answer query(CampusPrincipal user,Query input) {
+        return queryWithLocalContinuation(user,input,null);
+    }
+    Answer queryWithLocalContinuation(CampusPrincipal user,Query input,Call continuation) {
         identities.requirePermission(user,"agent:query"); tools.validateContext(user,input.context());
         if(input.mode()==Mode.DEEPSEEK && !input.externalConsent()) throw new ApiException(HttpStatus.BAD_REQUEST,"MODEL_CONSENT_REQUIRED","请确认将本次问题发送至 DeepSeek，或使用本地查询");
-        if(input.mode()==Mode.DEEPSEEK && !model.ready()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,"MODEL_NOT_CONFIGURED","DeepSeek 尚未连接，可使用本地查询");
+        if(input.mode()==Mode.DEEPSEEK && continuation==null && !model.ready()) throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,"MODEL_NOT_CONFIGURED","DeepSeek 尚未连接，可使用本地查询");
         if(!busy.add(user.id())) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"QUERY_RUNNING","上一项查询仍在进行，请等待结果");
         String run=UUID.randomUUID().toString(),outcome="FAILED"; var called=new ArrayList<String>(); Integer prompt=null,completion=null; long start=System.nanoTime();
         try {
@@ -41,8 +44,13 @@ public class AgentService {
             if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|取消|核销|发布|停用|开证明|派单|改派|验收|接单|支付|付款|退款)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿|日程|预约|借用|账单|缴费|充值|电费|水费)").matcher(question).find()) {
                 outcome="REFUSED"; return new Answer(run,input.mode(),false,"第一期仅查询本人或当前岗位获授权的信息。不能查询无关人员资料，也不能代替提交或审批，请通过原业务页面办理。",List.of(),now(),null,null);
             }
-            Plan plan=input.mode()==Mode.DEEPSEEK?model.plan(question,tools.schemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
+            boolean modelUsed=input.mode()==Mode.DEEPSEEK&&continuation==null;
+            Plan plan=continuation!=null?new Plan(List.of(continuation),null,null):modelUsed?model.plan(question,tools.schemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
             prompt=plan.promptTokens(); completion=plan.completionTokens();
+            if(input.mode()==Mode.LOCAL && plan.calls()!=null && (plan.calls().size()>4 || plan.calls().stream().map(Call::name).distinct().count()!=plan.calls().size())) {
+                outcome="NEEDS_INPUT";
+                return new Answer(run,input.mode(),false,"请拆分提问：一次最多查询4种不同事项；同一类事项有不同条件时，请分别查询，避免漏查或混用条件。",List.of(),now(),null,null);
+            }
             if(plan.calls()==null || plan.calls().size()>4) throw new ApiException(HttpStatus.BAD_GATEWAY,"MODEL_RESPONSE_INVALID","查询计划超出限制，未执行工具");
             // Reject unknown or duplicate tool names before execution; each tool then validates its arguments.
             var allowed=tools.capabilities(user).stream().map(Capability::name).toList(); var unique=new HashSet<String>();
@@ -58,7 +66,7 @@ public class AgentService {
             String summary=results.isEmpty()?"没有匹配到可用查询。可问请假、证明或报修办理规则、本人日程、课表、成绩考试、预约进度、空闲场地、报修进度或未读消息。"
                 :outcome.equals("SUCCESS")?"已按当前账号范围完成 "+results.size()+" 项查询，结果以本地业务和当前有效指南为准。"
                 :"已尝试 "+results.size()+" 项查询，其中有未完成的项目，请查看各项提示。";
-            return new Answer(run,input.mode(),input.mode()==Mode.DEEPSEEK,summary,List.copyOf(results),now(),prompt,completion);
+            return new Answer(run,input.mode(),modelUsed,summary,List.copyOf(results),now(),prompt,completion);
         } finally {
             try { jdbc.sql("INSERT INTO agent_run(id,user_id,mode,outcome,tool_names,prompt_tokens,completion_tokens,duration_ms) VALUES(:id,:u,:m,:o,:t,:p,:c,:d)")
                 .param("id",run).param("u",user.id()).param("m",input.mode().name()).param("o",outcome).param("t",String.join(",",called))
@@ -166,6 +174,13 @@ public class AgentService {
         if(bucket.count()>30) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"QUERY_RATE_LIMIT","查询较频繁，请稍后重试");
     }
     private Plan local(CampusPrincipal user,String q,Context context) {
+        var calls=new ArrayList<Call>();
+        for(String clause:q.split("(?:[；;\\n]+|以及|并且|另外|同时|顺便|[，,](?=再|还|也|并)|[和与](?=充|查|看|我|本周|下周|课表|成绩|考试|未读|宿舍))")) {
+            if(!clause.isBlank())calls.addAll(localSingle(user,clause.trim(),context).calls());
+        }
+        return new Plan(calls.stream().distinct().toList(),null,null);
+    }
+    private Plan localSingle(CampusPrincipal user,String q,Context context) {
         var payment=tools.localPayments(q,context);
         if(!payment.isEmpty())return new Plan(payment,null,null);
         var planning=tools.localPlanning(q,context);
@@ -174,7 +189,7 @@ public class AgentService {
         var result=new ArrayList<Call>();
         if(context!=null && context.type().equals("HOUSING_MINE") && q.matches(".*(这条|当前|这个|状态|进度).*")) result.add(tools.call("housing_transfer_status",Map.of()));
         else if(context!=null && context.type().startsWith("REPAIR_") && names.contains("repair_status") && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("repair_status",Map.of()));
-        else if(context!=null && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("application_status",Map.of()));
+        else if(context!=null && !context.type().equals("PAYMENT_MINE") && q.matches(".*(这条|当前|这个|处理状态|处理进度).*")) result.add(tools.call("application_status",Map.of()));
         if(names.contains("campus_navigation") && (q.matches(".*(怎么走|怎么去|在哪|在哪个位置|在什么位置|路线|导航|去往|怎么到|步行路线).*")
             || (q.contains("去") && (q.contains("楼") || q.contains("馆") || q.contains("门") || q.contains("餐厅") || q.contains("操场") || q.contains("食堂") || q.contains("食府") || q.contains("广场") || q.contains("湖"))))) {
             result.add(tools.call("campus_navigation",Map.of("destination",q,"origin","南门")));
@@ -201,7 +216,7 @@ public class AgentService {
         } else if(result.isEmpty() || q.matches(".*(我的办事|申请进度|需要补交|待处理|我的申请).*")) {
             if(q.matches(".*(办事|请假|销假|返校|证明|申请|補交|补交|待处理).*")) result.add(tools.call("my_affairs",Map.of("kind",q.contains("证明")?"CERTIFICATE":(q.contains("请假")||q.contains("销假")||q.contains("返校"))?"LEAVE":"ALL","status",q.contains("补交")?"RETURNED":"ALL")));
         }
-        return new Plan(result.stream().distinct().limit(4).toList(),null,null);
+        return new Plan(result.stream().distinct().toList(),null,null);
     }
     private LocalDateTime now() { return LocalDateTime.now(ZoneId.of("Asia/Shanghai")); }
 }

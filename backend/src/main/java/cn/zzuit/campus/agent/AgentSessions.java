@@ -89,7 +89,8 @@ public class AgentSessions {
             var query=input.input();
             var prior=jdbc.sql("SELECT * FROM agent_turn WHERE session_id=:id AND request_key=:key").param("id",id).param("key",input.requestKey()).query((r,n)->turnRow(r,user)).optional();
             if(prior.isPresent()) {
-                var old=prior.get(); if(!old.question().equals(query.message().trim()) || old.mode()!=query.mode() || !Objects.equals(old.context(),query.context())) throw conflict("重复请求与原问题不同，请新建一次查询");
+                var requestedContext=jdbc.sql("SELECT context_type,context_id FROM agent_turn WHERE session_id=:id AND request_key=:key").param("id",id).param("key",input.requestKey()).query((r,n)->r.getString(1)==null?null:new Context(r.getString(1),r.getLong(2))).optional().orElse(null);
+                var old=prior.get(); if(!old.question().equals(query.message().trim()) || old.mode()!=query.mode() || !Objects.equals(requestedContext,query.context())) throw conflict("重复请求与原问题不同，请新建一次查询");
                 return new QueryResult(old,null,true);
             }
             turnId=write(()->{
@@ -100,8 +101,9 @@ public class AgentSessions {
                 touch(id,query.message().trim()); return key.getKey().longValue();
             });
             activeTurns.put(user.id(),turnId);
-            var answer=agent.query(user,paymentQueries.followUp(user,id,query)); long completeId=turnId;
-            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false); });
+            var resolved=paymentQueries.followUp(user,id,query);var continuation=paymentQueries.continueQuote(id,query);
+            var answer=agent.queryWithLocalContinuation(user,resolved,continuation); long completeId=turnId;
+            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs,payment_quote_json=:quote,resolved_context_type=:type,resolved_context_id=:context WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("quote",paymentQueries.pendingQuote(answer,query,continuation)).param("type",resolved.context()==null?null:resolved.context().type()).param("context",resolved.context()==null?null:resolved.context().id()).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false); });
         } catch(RuntimeException ex) {
             if(turnId!=null) { long failedId=turnId; write(()->jdbc.sql("UPDATE agent_turn SET status='FAILED' WHERE id=:id").param("id",failedId).update()); }
             throw ex;
@@ -193,8 +195,10 @@ public class AgentSessions {
     private void editable(Task task,int version,String kind) { if(!task.kind().equals(kind)) throw missing(); if(!task.stage().equals("PREVIEW")) throw conflict("任务已关联业务申请，请进入原申请办理或新建准备任务"); if(task.version()!=version) throw conflict("任务进度已在其他窗口更新，请重新恢复后继续"); }
     private Session sessionRow(ResultSet r,int n) throws SQLException { return new Session(r.getLong("id"),r.getString("title"),r.getTimestamp("created_at").toLocalDateTime(),r.getTimestamp("updated_at").toLocalDateTime()); }
     private Turn turnRow(ResultSet r,CampusPrincipal user) throws SQLException {
-        String type=r.getString("context_type"),status=r.getString("status"); if(status.equals("RUNNING") && !Objects.equals(activeTurns.get(user.id()),r.getLong("id"))) status="INTERRUPTED";
-        return new Turn(r.getLong("id"),r.getString("question"),Mode.valueOf(r.getString("mode")),type==null?null:new Context(type,r.getLong("context_id")),status,r.getString("run_id"),r.getTimestamp("created_at").toLocalDateTime());
+        String type=r.getString("resolved_context_type"),status=r.getString("status");long context=r.getLong("resolved_context_id");
+        if(type==null){type=r.getString("context_type");context=r.getLong("context_id");}
+        if(status.equals("RUNNING") && !Objects.equals(activeTurns.get(user.id()),r.getLong("id"))) status="INTERRUPTED";
+        return new Turn(r.getLong("id"),r.getString("question"),Mode.valueOf(r.getString("mode")),type==null?null:new Context(type,context),status,r.getString("run_id"),r.getTimestamp("created_at").toLocalDateTime());
     }
     private Task taskRow(ResultSet r,int n) throws SQLException { long business=r.getLong("business_id"); Long businessId=r.wasNull()?null:business; return new Task(r.getLong("id"),r.getLong("session_id"),r.getString("business_key"),r.getString("kind"),r.getString("fields_json"),r.getString("stage"),businessId,r.getInt("version"),r.getTimestamp("updated_at").toLocalDateTime()); }
     private String encode(Object value) { return json.writeValueAsString(value); }

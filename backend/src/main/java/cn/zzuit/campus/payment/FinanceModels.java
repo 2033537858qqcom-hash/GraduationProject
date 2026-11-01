@@ -11,6 +11,8 @@ public final class FinanceModels {
     public record StandardInput(String requestKey,String name,String categoryCode,String unit,long unitPriceCents,
         Long campusId,Long majorId,String reason) {}
     public record BatchInput(String requestKey,List<String> usernames,BillInput template) {}
+    public record BatchPreviewRow(String username,String studentName,Long amountCents,String errorCode,String error) {}
+    public record BatchPreview(List<BatchPreviewRow> items,int validCount,long totalAmountCents,boolean canCreate) {}
     @com.fasterxml.jackson.annotation.JsonIgnoreProperties(ignoreUnknown=true)
     public record BasisInput(String requestKey,String username,String categoryCode,String billingPeriod,String quantity,
         String basis,String previousReading,String currentReading,Long correctionOf) {}

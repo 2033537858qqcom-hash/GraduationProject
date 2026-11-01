@@ -124,3 +124,33 @@ test('west campus return keeps the independent sandbox and selected west library
  assert.ifError(errors[0])
  assert.equal(inspected, true)
 })
+
+test('batch billing requires a valid preview and invalidates it after editing', async () => {
+ const oldFetch = globalThis.fetch, commands = []
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  if (options.method === 'POST') {
+   commands.push(path)
+   if (path.endsWith('/batch/preview')) return Response.json({ items: [], validCount: 2, totalAmountCents: 2500, canCreate: true })
+  }
+  throw Error('network disabled')
+ }
+ try {
+  const errors = await checkPageSetup('/finance/payments', undefined, async state => {
+   state.form.value = { ...state.form.value, usernames: '20260001,20260002', categoryCode: 'TUITION', title: '学费', billingPeriod: '测试', dueDate: '2099-01-01', amount: '12.50', basis: '按已核定标准进行收费测试' }
+   await Promise.resolve()
+   await state.saveBill()
+   assert.deepEqual(commands, ['/api/finance/payments/batch/preview'])
+   assert.equal(state.batchPreview.value.canCreate, true)
+   state.form.value.title = '修改后的学费'
+   await Promise.resolve()
+   assert.equal(state.batchPreview.value, null)
+   await state.saveBill()
+   assert.equal(commands.length, 2)
+   assert.equal(commands[1], '/api/finance/payments/batch/preview')
+   await state.saveBill()
+   assert.equal(commands[2], '/api/finance/payments/batch')
+  })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})

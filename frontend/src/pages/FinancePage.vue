@@ -23,9 +23,12 @@ const money = (cents: number) => '¥' + (cents / 100).toFixed(2)
 const showBillForm = ref(false), editingId = ref<number | null>(null)
 const emptyBill = () => ({ usernames: '', categoryCode: '', title: '', billingPeriod: '', dueDate: '', standardId: '', quantity: '1', amount: '', basis: '', basisId: null as number | null, version: 0, reason: '' })
 const form = ref(emptyBill()), formKey = ref(crypto.randomUUID())
+interface BatchPreview { items: { username: string; studentName: string | null; amountCents: number | null; errorCode: string | null; error: string | null }[]; validCount: number; totalAmountCents: number; canCreate: boolean }
+const batchPreview = ref<BatchPreview | null>(null)
+const isBatch = computed(() => !editingId.value && !form.value.basisId && form.value.usernames.split(/[\s,，]+/).filter(Boolean).length > 1)
 const standardsForForm = computed(() => catalog.value?.standards.filter(item => item.status === 'ACTIVE' && item.categoryCode === form.value.categoryCode) ?? [])
 const selectedStandard = computed(() => standardsForForm.value.find(item => String(item.id) === form.value.standardId))
-watch(form, () => { formKey.value = crypto.randomUUID() }, { deep: true })
+watch(form, () => { formKey.value = crypto.randomUUID(); batchPreview.value = null }, { deep: true, flush: 'sync' })
 watch(() => form.value.categoryCode, () => { if (!standardsForForm.value.some(item => String(item.id) === form.value.standardId)) form.value.standardId = '' })
 const standardForm = ref({ name: '', categoryCode: '', unit: '', price: '', campusId: '', majorId: '', reason: '' })
 const standardKey = ref(crypto.randomUUID())
@@ -83,6 +86,12 @@ async function saveBill() {
   busy.value = true; error.value = ''; message.value = ''
   try {
     if (usernames.length > 1) {
+      if (!batchPreview.value?.canCreate) {
+        const key = formKey.value
+        const preview = await api<BatchPreview>('/finance/payments/batch/preview', { method: 'POST', body: JSON.stringify({ usernames, template: payload }) })
+        if (key === formKey.value) batchPreview.value = preview
+        return
+      }
       const result = await api<PaymentBill[]>('/finance/payments/batch', { method: 'POST', body: JSON.stringify({ requestKey: formKey.value, usernames, template: payload }) })
       showBillForm.value = false; form.value = emptyBill(); await load(); message.value = `已生成 ${result.length} 笔草稿，请逐笔核对后提交复核。`
     } else {
@@ -169,7 +178,16 @@ watch(() => route.fullPath, () => { void load() }, { immediate: true })
         <label class="finance-wide">收费依据<textarea v-model="form.basis" required minlength="10" maxlength="1000" rows="3" placeholder="说明收费范围、依据文件或实际用量、分摊方式与金额核对情况" /></label>
         <label v-if="editingId" class="finance-wide">修改说明<textarea v-model="form.reason" required minlength="5" maxlength="500" rows="2" /></label>
         <p v-if="form.basisId" class="finance-wide muted">已关联业务收费依据 #{{ form.basisId }}，学生、分类、账期和用量须与原依据一致。</p>
-        <div class="finance-actions finance-wide"><button class="button primary">{{ busy ? '正在保存…' : editingId ? '保存修改' : '保存为草稿' }}</button><span class="muted">保存后仍需提交独立复核。</span></div>
+        <section v-if="isBatch && batchPreview" class="finance-wide finance-subsection" aria-label="批量建单预览" aria-live="polite">
+          <h3>批量建单预览</h3>
+          <p>校验通过 {{ batchPreview.validCount }} / {{ batchPreview.items.length }} 人 · 通过校验的金额合计 {{ money(batchPreview.totalAmountCents) }}</p>
+          <p class="muted">请核对学生和金额。确认生成时会再次校验，所有账单生成后仍须独立复核发布。</p>
+          <p v-if="!batchPreview.canCreate" class="finance-warning">请修正以下问题后重新预览，全部通过后才能生成草稿。</p>
+          <article v-for="row in batchPreview.items" :key="row.username" class="finance-record">
+            <div><strong>{{ row.username }}<template v-if="row.studentName"> · {{ row.studentName }}</template></strong><p v-if="row.error" class="finance-warning">{{ row.error }}</p><p v-else>校验通过 · {{ money(row.amountCents ?? 0) }}</p></div>
+          </article>
+        </section>
+        <div class="finance-actions finance-wide"><button class="button primary" :disabled="isBatch && !!batchPreview && !batchPreview.canCreate">{{ busy ? '正在处理…' : editingId ? '保存修改' : isBatch ? (batchPreview?.canCreate ? '确认生成草稿' : '预览批量账单') : '保存为草稿' }}</button><button v-if="isBatch && batchPreview" type="button" class="button" @click="batchPreview = null; saveBill()">重新预览</button><span class="muted">保存后仍需提交独立复核。</span></div>
       </fieldset>
 </form>
     </section>

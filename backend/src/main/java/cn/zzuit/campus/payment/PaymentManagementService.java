@@ -84,15 +84,36 @@ public class PaymentManagementService {
     }
     @Transactional public List<PaymentService.Bill> batch(CampusPrincipal user,BatchInput input) {
         access.require(user,"payment:manage");PaymentAccess.key(input.requestKey());
+        var names=batchNames(input);
+        var result=new ArrayList<PaymentService.Bill>();
+        for(var name:names) {
+            String key=UUID.nameUUIDFromBytes((input.requestKey()+"\n"+name).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
+            result.add(create(user,batchBill(input.template(),name,key)));
+        }return result;
+    }
+    @Transactional public BatchPreview previewBatch(CampusPrincipal user,BatchInput input) {
+        access.require(user,"payment:manage");
+        var names=batchNames(input);var rows=new ArrayList<BatchPreviewRow>();long total=0;int valid=0;
+        for(var name:names) {
+            try {
+                var value=validate(batchBill(input.template(),name,null),null);
+                String studentName=jdbc.sql("SELECT full_name FROM app_user WHERE id=:id").param("id",value.student()).query(String.class).single();
+                rows.add(new BatchPreviewRow(name,studentName,value.cents(),null,null));total+=value.cents();valid++;
+            } catch(ApiException invalid) {
+                rows.add(new BatchPreviewRow(name,null,null,invalid.code(),invalid.getMessage()));
+            }
+        }
+        return new BatchPreview(rows,valid,total,valid==names.size());
+    }
+    private BillInput batchBill(BillInput v,String name,String key) {
+        return new BillInput(key,name,v.categoryCode(),v.title(),v.billingPeriod(),v.dueDate(),v.standardId(),v.quantity(),v.amountCents(),v.basis(),null,null,null);
+    }
+    private List<String> batchNames(BatchInput input) {
         if(input.template()==null || input.usernames()==null || input.usernames().isEmpty() || input.usernames().size()>100 || input.template().basisId()!=null)
             throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_BATCH","批量建单需要1—100名学生，不能复用单条业务收费依据");
         var names=input.usernames().stream().map(name->PaymentAccess.text(name,1,64,"学生账号")).toList();
         if(new java.util.HashSet<>(names).size()!=names.size()) throw PaymentService.error(HttpStatus.BAD_REQUEST,"DUPLICATE_STUDENT","批量学生账号不能重复");
-        var result=new ArrayList<PaymentService.Bill>();var v=input.template();
-        for(var name:names) {
-            String key=UUID.nameUUIDFromBytes((input.requestKey()+"\n"+name).getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();
-            result.add(create(user,new BillInput(key,name,v.categoryCode(),v.title(),v.billingPeriod(),v.dueDate(),v.standardId(),v.quantity(),v.amountCents(),v.basis(),null,null,null)));
-        }return result;
+        return names;
     }
     private Map<String,Object> parameters(Validated v) {
         var p=new HashMap<String,Object>();p.put("student",v.student());p.put("title",v.title());p.put("cents",v.cents());p.put("category",v.category());p.put("period",v.period());p.put("due",v.dueDate());p.put("basis",v.basis());

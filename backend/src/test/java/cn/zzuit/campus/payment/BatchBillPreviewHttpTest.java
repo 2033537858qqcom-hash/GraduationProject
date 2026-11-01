@@ -47,6 +47,28 @@ class BatchBillPreviewHttpTest {
   assertThat(login("finance2001").post("/api/finance/payments/batch/preview",body).statusCode()).isEqualTo(403);
   assertThat(login("20260001").post("/api/finance/payments/batch/preview",body).statusCode()).isEqualTo(403);
  }
+ @Test void priceScopeAndChangesAfterPreviewAreRevalidated() throws Exception {
+  var op=login("finance1001");var reviewer=login("finance2001");
+  long campus=jdbc.sql("SELECT campus_id FROM app_user WHERE username='20260001'").query(Long.class).single();
+  var standard=ok(op.post("/api/finance/payments/standards",Map.of("requestKey",UUID.randomUUID().toString(),"name","批量价格测试","categoryCode","TUITION","unit","人","unitPriceCents",1300,"campusId",campus,"reason","依据隔离测试价格核定收费")));
+  ok(reviewer.post("/api/finance/payments/standards/"+standard.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"action","APPROVE","version",0,"reason","核对隔离价格适用范围")));
+  var original=input(List.of("20260001","20260002"));var template=new HashMap<String,Object>((Map<String,Object>)original.get("template"));
+  template.put("standardId",standard.path("id").asLong());template.put("quantity","2");
+  var body=new HashMap<String,Object>(original);body.put("template",template);
+  var preview=ok(op.post("/api/finance/payments/batch/preview",body));
+  assertThat(preview.path("items").get(0).path("amountCents").asLong()).isEqualTo(2600);
+  long before=jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single();
+  jdbc.sql("UPDATE app_user SET enabled=FALSE WHERE username='20260002'").update();
+  try {
+   var changed=ok(op.post("/api/finance/payments/batch/preview",body));
+   assertThat(changed.path("canCreate").asBoolean()).isFalse();
+   assertThat(op.post("/api/finance/payments/batch",body).statusCode()).isEqualTo(404);
+   assertThat(jdbc.sql("SELECT COUNT(*) FROM payment_bill").query(Long.class).single()).isEqualTo(before);
+  } finally { jdbc.sql("UPDATE app_user SET enabled=TRUE WHERE username='20260002'").update(); }
+  jdbc.sql("UPDATE payment_standard SET campus_id=(SELECT id FROM campus WHERE id<>:campus LIMIT 1) WHERE id=:id").param("campus",campus).param("id",standard.path("id").asLong()).update();
+  var wrongScope=ok(op.post("/api/finance/payments/batch/preview",body));
+  assertThat(wrongScope.path("items").get(0).path("errorCode").asText()).isEqualTo("STANDARD_SCOPE_MISMATCH");
+ }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());
     }

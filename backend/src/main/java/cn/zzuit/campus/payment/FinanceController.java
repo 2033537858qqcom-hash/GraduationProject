@@ -37,6 +37,7 @@ public class FinanceController {
     }
     @PostMapping PaymentService.Bill create(@AuthenticationPrincipal CampusPrincipal user,@RequestBody BillInput input) { return finance.create(user,input); }
     @PostMapping("/batch") List<PaymentService.Bill> batch(@AuthenticationPrincipal CampusPrincipal user,@RequestBody BatchInput input) { return finance.batch(user,input); }
+    @PostMapping("/batch/preview") BatchPreview batchPreview(@AuthenticationPrincipal CampusPrincipal user,@RequestBody BatchInput input) { return finance.previewBatch(user,input); }
     @PutMapping("/{id}") PaymentService.Bill update(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@RequestBody BillInput input) { return finance.update(user,id,input); }
     @GetMapping("/{id}") PaymentService.Bill get(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) { return finance.get(user,id); }
     @GetMapping("/{id}/detail") Detail detail(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) { return finance.detail(user,id); }

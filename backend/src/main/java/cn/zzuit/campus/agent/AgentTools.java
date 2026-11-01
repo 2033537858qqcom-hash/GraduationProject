@@ -27,6 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class AgentTools {
     private final IdentityService identities;
     private final AgentPlanningQueries planning;
+    private final AgentPaymentQueries paymentQueries;
     private final AgentGuides guides;
     private final TeachingService teaching;
     private final LeaveService leaves;
@@ -38,8 +39,8 @@ public class AgentTools {
     private final cn.zzuit.campus.portal.TaskAggregationService taskAggregator;
     private final JsonMapper json=JsonMapper.builder().build();
     private static final List<String> REPAIR_STATUSES=List.of("ALL","DRAFT","SUBMITTED","RETURNED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","COMPLETED","REJECTED","WITHDRAWN","CANCELLED");
-    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers,cn.zzuit.campus.portal.TaskAggregationService taskAggregator,AgentPlanningQueries planning) {
-        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;this.taskAggregator=taskAggregator;this.planning=planning;
+    public AgentTools(IdentityService identities,AgentGuides guides,TeachingService teaching,LeaveService leaves,CertificateService certificates,NoticeService notices,RepairService repairs,HousingService housing,HousingTransferService transfers,cn.zzuit.campus.portal.TaskAggregationService taskAggregator,AgentPlanningQueries planning,AgentPaymentQueries paymentQueries) {
+        this.identities=identities; this.guides=guides; this.teaching=teaching; this.leaves=leaves; this.certificates=certificates; this.notices=notices; this.repairs=repairs;this.housing=housing;this.transfers=transfers;this.taskAggregator=taskAggregator;this.planning=planning;this.paymentQueries=paymentQueries;
     }
     private static final Map<String,String> TITLES=Map.ofEntries(Map.entry("my_schedule","查看本人综合日程"),Map.entry("my_reservations","查看本人借用进度"),Map.entry("find_available_venues","查找空闲场地"),Map.entry("search_guides","查找办理指南"),Map.entry("my_timetable","查看本人课表"),Map.entry("my_grades","查看本人已发布成绩"),
         Map.entry("my_exams","查看本人已发布考试"),Map.entry("my_affairs","查看本人办事进度"),Map.entry("my_notice_summary","查看本人未读消息"),Map.entry("my_review_pending","查看岗位待办"),
@@ -60,12 +61,15 @@ public class AgentTools {
         if(p.contains("repair:work")) names.add("repair_work_queue");
         if(p.stream().anyMatch(x->List.of("repair:apply","repair:dispatch","repair:work").contains(x))) names.add("repair_status");
         if(p.contains("housing:read"))names.addAll(List.of("my_housing","my_housing_transfers","housing_transfer_status"));
-        return names.stream().map(n->new Capability(n,TITLES.get(n))).toList();
+        if(p.contains("portal:read"))names.addAll(List.of("my_payments","payment_detail","my_dorm_utilities","quote_dorm_recharge"));
+        if(p.contains("payment:manage")||p.contains("payment:review"))names.add("finance_reconciliation_pending");
+        return names.stream().map(n->new Capability(n,AgentPaymentQueries.TITLES.getOrDefault(n,TITLES.get(n)))).toList();
     }
     public List<Map<String,Object>> schemas(CampusPrincipal user) {
         return capabilities(user).stream().map(cap-> {
             Map<String,Object> properties=new LinkedHashMap<>();
             switch(cap.name()) {
+                case "my_payments","payment_detail","my_dorm_utilities","quote_dorm_recharge","finance_reconciliation_pending" -> AgentPaymentQueries.schema(cap.name(),properties);
                 case "my_schedule","my_reservations","find_available_venues" -> AgentPlanningQueries.schema(cap.name(),properties);
                 case "search_guides" -> properties.put("query",Map.of("type","string","description","办理事项关键词，1—200 字"));
                 case "my_timetable" -> { properties.put("week",Map.of("type","string","description","可选 ISO 日期；查询该日期所在的周，不明确时省略")); properties.put("termId",Map.of("type","integer","minimum",1,"description","可选；只在用户明确选择学期编号时提供")); }
@@ -88,6 +92,7 @@ public class AgentTools {
     }
     public void validateContext(CampusPrincipal user,Context context) {
         if(context==null) return;
+        if(context.type().equals("PAYMENT_MINE")){paymentQueries.owned(user,context.id());return;}
         if(context.type().equals("RESERVATION_MINE"))planning.validateReservation(user,context.id());
         else if(context.type().equals("HOUSING_MINE"))housingTransfer(user,context.id());
         else if(context.type().startsWith("REPAIR_")) repairApplication(user,repairView(context.type()),context.id());
@@ -98,6 +103,7 @@ public class AgentTools {
         if(!capabilities(user).stream().anyMatch(c->c.name().equals(call.name()))) throw new ApiException(HttpStatus.FORBIDDEN,"TOOL_NOT_ALLOWED","当前身份不能使用这项查询");
         var a=call.arguments();
         Set<String> fields=switch(call.name()) {
+            case "my_payments","payment_detail","my_dorm_utilities","quote_dorm_recharge","finance_reconciliation_pending" -> AgentPaymentQueries.fields(call.name());
             case "my_schedule","my_reservations","find_available_venues" -> AgentPlanningQueries.fields(call.name());
             case "search_guides" -> Set.of("query"); case "my_timetable" -> Set.of("week","termId"); case "my_grades","my_exams" -> Set.of("termId");
             case "my_affairs" -> Set.of("kind","status"); case "application_status" -> Set.of("kind","id","view");
@@ -106,6 +112,7 @@ public class AgentTools {
         };
         if(a==null || !a.isObject() || a.properties().stream().anyMatch(e->!fields.contains(e.getKey()))) throw invalid();
         return switch(call.name()) {
+            case "my_payments","payment_detail","my_dorm_utilities","quote_dorm_recharge","finance_reconciliation_pending" -> paymentQueries.execute(user,call,context);
             case "my_schedule","my_reservations","find_available_venues" -> planning.execute(user,call,context);
             case "search_guides" -> knowledge(text(a,"query",null,200));
             case "my_timetable" -> timetable(user,text(a,"week",null,10),number(a,"termId"));
@@ -142,6 +149,7 @@ public class AgentTools {
         };
     }
     public List<Call> localPlanning(String question,Context context) { return planning.local(question,context); }
+    public List<Call> localPayments(String question,Context context) { return paymentQueries.local(question,context); }
     private ToolResult housing(CampusPrincipal user) {
         var stay=housing.currentForAssistant(user);
         return result("my_housing",stay==null?"NO_DATA":"OK",stay==null?"暂无本人当前入住记录，请联系宿管核对。":"以下为本人当前房间，床位和负责人请进入我的住宿核对。",stay==null?0:1,
@@ -339,7 +347,7 @@ public class AgentTools {
     public ToolResult failure(String name,ApiException ex) {
         return result(name,ex.status().value()==403?"DENIED":ex.status().value()==404?"NOT_FOUND":ex.code().equals("TERM_SELECTION_REQUIRED")?"NEEDS_INPUT":"ERROR",ex.getMessage(),0,List.of(),List.of(),null);
     }
-    private ToolResult result(String name,String status,String message,long total,List<Fact> facts,List<Guide> sources,String href) { return new ToolResult(name,TITLES.getOrDefault(name,"查询未执行"),status,message,total,facts,sources,href); }
+    private ToolResult result(String name,String status,String message,long total,List<Fact> facts,List<Guide> sources,String href) { return new ToolResult(name,AgentPaymentQueries.TITLES.getOrDefault(name,TITLES.getOrDefault(name,"查询未执行")),status,message,total,facts,sources,href); }
     public Call call(String name,Map<String,?> arguments) { return new Call(name,json.valueToTree(arguments)); }
     private String text(JsonNode a,String name,String fallback,int max) { var x=a.path(name); if(x.isMissingNode() || x.isNull()) return fallback; if(!x.isString() || x.asText().isBlank() || x.asText().length()>max) throw invalid(); return x.asText().trim(); }
     private String choice(JsonNode a,String name,String fallback,Set<String> options) { String x=text(a,name,fallback,40); if(x!=null && !options.contains(x)) throw invalid(); return x; }

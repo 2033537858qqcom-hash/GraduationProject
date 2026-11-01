@@ -52,6 +52,8 @@ const contextLabel = computed(() => assistantContextLabel(context.value))
 const hintSubject = computed(() => {
   const p = currentUser.value?.permissions ?? []
   if (route.path === '/campus/explore') return '校园地点与路线'
+  if (route.path === '/portal/payments') return '账单和宿舍水电'
+  if (route.path === '/finance/payments') return '财务对账待办'
   if (route.path.startsWith('/housing') && p.includes('housing:read')) return '住宿和调宿进度'
   if (route.path.includes('/repairs')) return '报修进度'
   if (route.path.includes('certificates')) return '证明进度'

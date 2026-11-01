@@ -22,6 +22,8 @@ class PaymentWorkflowTest {
     static final KeyPair KEYS = keys();
     @DynamicPropertySource static void settings(DynamicPropertyRegistry r) {
         r.add("app.payment.enabled", () -> "true");
+        r.add("app.payment.channel", () -> "ijpay");
+        r.add("app.payment.followup.enabled", () -> "false");
         r.add("app.payment.app-id", () -> "test-app");
         r.add("app.payment.seller-id", () -> "test-seller");
         r.add("app.payment.private-key", () -> Base64.getEncoder().encodeToString(KEYS.getPrivate().getEncoded()));

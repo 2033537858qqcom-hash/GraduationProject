@@ -38,7 +38,7 @@ public class AgentService {
         try {
             rate(user.id());
             String question=input.message().trim();
-            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|取消|核销|发布|停用|开证明|派单|改派|验收|接单)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿|日程|预约|借用)").matcher(question).find()) {
+            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|取消|核销|发布|停用|开证明|派单|改派|验收|接单|支付|付款|退款)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿|日程|预约|借用|账单|缴费|充值|电费|水费)").matcher(question).find()) {
                 outcome="REFUSED"; return new Answer(run,input.mode(),false,"第一期仅查询本人或当前岗位获授权的信息。不能查询无关人员资料，也不能代替提交或审批，请通过原业务页面办理。",List.of(),now(),null,null);
             }
             Plan plan=input.mode()==Mode.DEEPSEEK?model.plan(question,tools.schemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
@@ -166,6 +166,8 @@ public class AgentService {
         if(bucket.count()>30) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"QUERY_RATE_LIMIT","查询较频繁，请稍后重试");
     }
     private Plan local(CampusPrincipal user,String q,Context context) {
+        var payment=tools.localPayments(q,context);
+        if(!payment.isEmpty())return new Plan(payment,null,null);
         var planning=tools.localPlanning(q,context);
         if(planning!=null && !planning.isEmpty())return new Plan(planning,null,null);
         var names=tools.capabilities(user).stream().map(Capability::name).toList();

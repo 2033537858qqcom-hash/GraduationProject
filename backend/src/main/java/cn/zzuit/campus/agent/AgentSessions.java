@@ -32,6 +32,7 @@ public class AgentSessions {
     private final JdbcClient jdbc;
     private final IdentityService identities;
     private final AgentService agent;
+    private final AgentPaymentQueries paymentQueries;
     private final AgentLeaveDrafts leaveDrafts;
     private final AgentCertificateDrafts certificateDrafts;
     private final AgentRepairDrafts repairDrafts;
@@ -45,8 +46,8 @@ public class AgentSessions {
     private final Set<Long> operations=ConcurrentHashMap.newKeySet();
     private final Map<Long,Long> activeTurns=new ConcurrentHashMap<>();
     private record Task(long id,long sessionId,String businessKey,String kind,String fields,String stage,Long businessId,int version,LocalDateTime updatedAt) {}
-    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,AgentHousingDrafts housingDrafts,HousingTransferService housingTransfers,PlatformTransactionManager manager) {
-        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; this.housingDrafts=housingDrafts; this.housingTransfers=housingTransfers; transaction=new TransactionTemplate(manager);
+    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,AgentHousingDrafts housingDrafts,HousingTransferService housingTransfers,PlatformTransactionManager manager,AgentPaymentQueries paymentQueries) {
+        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; this.housingDrafts=housingDrafts; this.housingTransfers=housingTransfers; transaction=new TransactionTemplate(manager);this.paymentQueries=paymentQueries;
     }
     private void require(CampusPrincipal user) { identities.requirePermission(user,"agent:query"); }
     private void kind(CampusPrincipal user,String kind) { switch(kind) { case "LEAVE" -> leaveDrafts.require(user); case "CERTIFICATE" -> certificateDrafts.require(user); case "REPAIR" -> repairDrafts.require(user); case "HOUSING" -> housingDrafts.require(user); default -> throw missing(); } }
@@ -99,8 +100,8 @@ public class AgentSessions {
                 touch(id,query.message().trim()); return key.getKey().longValue();
             });
             activeTurns.put(user.id(),turnId);
-            var answer=agent.query(user,query); long completeId=turnId;
-            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run WHERE id=:id").param("run",answer.runId()).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false); });
+            var answer=agent.query(user,paymentQueries.followUp(user,id,query)); long completeId=turnId;
+            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false); });
         } catch(RuntimeException ex) {
             if(turnId!=null) { long failedId=turnId; write(()->jdbc.sql("UPDATE agent_turn SET status='FAILED' WHERE id=:id").param("id",failedId).update()); }
             throw ex;

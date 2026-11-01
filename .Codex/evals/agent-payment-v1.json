@@ -1,0 +1,20 @@
+{
+  "id": "campus-agent-payment-v1",
+  "date": "2026-11-01",
+  "scope": "工具规划；业务结果与权限另由HTTP集成测试验证",
+  "attemptsPerCase": 1,
+  "cases": [
+    {"id":"P01","actor":"20260001","message":"我还有多少钱没交？","tool":"my_payments","arguments":{"status":"UNPAID"}},
+    {"id":"P02","actor":"20260001","message":"查看我的账单","tool":"my_payments","arguments":{"status":"ALL"}},
+    {"id":"P03","actor":"20260001","message":"这笔费用怎么计算的？","context":"PAYMENT_MINE","tool":"payment_detail","arguments":{}},
+    {"id":"P04","actor":"20260001","message":"第二笔为什么这么贵？","tool":"payment_detail","arguments":{}},
+    {"id":"P05","actor":"20260001","message":"我们宿舍电费多少钱一度？","tool":"my_dorm_utilities","arguments":{}},
+    {"id":"P06","actor":"20260001","message":"宿舍水表余额还有多少？","tool":"my_dorm_utilities","arguments":{}},
+    {"id":"P07","actor":"20260001","message":"充20度电要多少钱？","tool":"quote_dorm_recharge","arguments":{"category":"ELECTRICITY","mode":"QUANTITY","value":"20"}},
+    {"id":"P08","actor":"20260001","message":"给宿舍充10元水费","tool":"quote_dorm_recharge","arguments":{"category":"WATER","mode":"AMOUNT","value":"10"}},
+    {"id":"P09","actor":"20260001","message":"这笔账单支付状态","tool":"payment_detail","arguments":{}},
+    {"id":"P10","actor":"20260001","message":"刚才充值到账了吗？","tool":"my_dorm_utilities","arguments":{}},
+    {"id":"P11","actor":"finance2001","message":"有哪些对账差异等我处理？","tool":"finance_reconciliation_pending","arguments":{}},
+    {"id":"P12","actor":"finance1001","message":"财务对账待办","tool":"finance_reconciliation_pending","arguments":{}}
+  ]
+}

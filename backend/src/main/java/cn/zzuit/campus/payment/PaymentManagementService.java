@@ -40,7 +40,7 @@ public class PaymentManagementService {
     private record Validated(long student,String category,String title,String period,LocalDate dueDate,String basis,
         Long standard,String standardName,Long unitPrice,String quantity,long cents,Long source) {}
     private Validated validate(BillInput input,Long editing) {
-        String category=input.categoryCode()==null?"OTHER":input.categoryCode();access.category(category);
+        String category=input.categoryCode()==null?"OTHER":input.categoryCode();access.activeCategory(category);
         String username=PaymentAccess.text(input.username(),1,64,"学生账号");
         var student=jdbc.sql("SELECT u.id,u.campus_id,c.major_id FROM app_user u JOIN user_role ur ON ur.user_id=u.id AND ur.role_code='STUDENT' LEFT JOIN class_group c ON c.id=u.class_group_id WHERE u.username=:name AND u.enabled=TRUE AND u.demo=TRUE")
             .param("name",username).query((r,n)->new Long[]{r.getLong(1),r.getObject(2,Long.class),r.getObject(3,Long.class)}).optional()
@@ -51,7 +51,7 @@ public class PaymentManagementService {
         Long standardId=null,unitPrice=null;String standardName=null;long cents;
         if(input.standardId()!=null) {
             var standard=configuration.standard(input.standardId());
-            if(!standard.status().equals("ACTIVE")) throw PaymentService.error(HttpStatus.CONFLICT,"STANDARD_NOT_ACTIVE","收费标准尚未复核生效或已停用");
+            if(!standard.available()) throw PaymentService.error(HttpStatus.CONFLICT,"STANDARD_NOT_ACTIVE","收费标准未生效、已过期或已停用");
             if(!standard.categoryCode().equals(category) || (standard.campusId()!=null && !standard.campusId().equals(student[1])) || (standard.majorId()!=null && !standard.majorId().equals(student[2])))
                 throw PaymentService.error(HttpStatus.BAD_REQUEST,"STANDARD_SCOPE_MISMATCH","收费标准不适用于该学生、校区或分类");
             try { cents=new BigDecimal(quantity).multiply(BigDecimal.valueOf(standard.unitPriceCents())).setScale(0,RoundingMode.HALF_UP).longValueExact(); }
@@ -273,6 +273,7 @@ public class PaymentManagementService {
             repository.lock(bill.id());int changed=jdbc.sql("UPDATE payment_request SET status='COMPLETED',last_error='',resolved_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=:id AND status='PROCESSING'").param("id",id).update();
             if(changed==1) {
                 boolean refund=value.type().equals("REFUND");
+                if(refund) DormRechargeService.reverse(jdbc,bill.id());
                 jdbc.sql("UPDATE payment_bill SET pending_request_id=NULL,workflow_status=CASE WHEN :refund=TRUE THEN workflow_status ELSE :state END,refund_status=CASE WHEN :refund=TRUE THEN 'REFUNDED' ELSE refund_status END,version=version+1 WHERE id=:id")
                     .param("refund",refund).param("state",value.type().equals("VOID")?"VOIDED":"WAIVED").param("id",bill.id()).update();
                 events.history(null,"BILL",bill.id(),value.type()+"_COMPLETED",null,null,"复核及平台确认已完成",repository.load(bill.id()));
@@ -341,6 +342,14 @@ public class PaymentManagementService {
             tasks.add(new cn.zzuit.campus.portal.TaskAggregationService.AggregatedTask("PAYMENT-REQUEST-"+request.id(),"PAYMENT","财务收费","账单 #"+request.billId()+" · "+request.type(),request.status(),request.status().equals("FAILED")?"平台处理待核实重试":"财务申请待复核",request.requesterName(),request.reason(),"/finance/payments?id="+request.billId()+"&tab=details",request.createdAt(),request.status().equals("FAILED")?"URGENT":"NORMAL"));
         if(manage) for(var basis:configuration.bases(user)) if(basis.status().equals("SUBMITTED"))
             tasks.add(new cn.zzuit.campus.portal.TaskAggregationService.AggregatedTask("PAYMENT-BASIS-"+basis.id(),"PAYMENT","财务收费",basis.studentName()+" · "+basis.categoryName(),basis.status(),"业务收费依据待核对",basis.creatorName(),basis.billingPeriod(),"/finance/payments?id="+basis.id()+"&tab=bases",basis.createdAt(),"NORMAL"));
+        var recon=jdbc.sql("SELECT id,status,assignee_id,created_at FROM payment_reconciliation_case WHERE status IN ('OPEN','IN_PROGRESS','PENDING_REVIEW') ORDER BY id").query((r,n)->new Object[]{r.getLong("id"),r.getString("status"),r.getObject("assignee_id",Long.class),PaymentRepository.time(r,"created_at")}).list();
+        for(var item:recon) {
+            long caseId=(Long)item[0];String state=(String)item[1];Long assignee=(Long)item[2];
+            if((manage && !state.equals("PENDING_REVIEW")) || (review && state.equals("PENDING_REVIEW") && !java.util.Objects.equals(assignee,user.id()))) {
+                String label=state.equals("PENDING_REVIEW")?"对账核查待复核":state.equals("OPEN")?"对账差异待核查":java.util.Objects.equals(assignee,user.id())?"对账差异核查中":"对账差异可接手";
+                tasks.add(new cn.zzuit.campus.portal.TaskAggregationService.AggregatedTask("RECON-"+caseId,"PAYMENT","财务收费","对账事项 #"+caseId,state,label,"","交易差异","/finance/payments?tab=reconciliation&case="+caseId,(java.time.LocalDateTime)item[3],"NORMAL"));
+            }
+        }
         return tasks;
     }
 }

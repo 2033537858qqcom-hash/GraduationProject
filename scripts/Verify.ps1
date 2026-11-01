@@ -8,8 +8,16 @@ if (Test-Path -LiteralPath $temurin21) {
     $env:PATH = "$temurin21\bin;$env:PATH"
 }
 
-& (Join-Path $PSScriptRoot 'tests\AgentEvalReport.Tests.ps1')
-& (Join-Path $PSScriptRoot 'tests\AgentLiveReport.Tests.ps1')
+function Invoke-ScriptTest([string]$Path) {
+    $global:LASTEXITCODE = 0
+    & $Path
+    if ($LASTEXITCODE -ne 0) { throw "脚本测试失败：$Path（退出码 $LASTEXITCODE）。" }
+}
+
+Invoke-ScriptTest (Join-Path $PSScriptRoot 'tests\AgentEvalReport.Tests.ps1')
+Invoke-ScriptTest (Join-Path $PSScriptRoot 'tests\AgentLiveReport.Tests.ps1')
+Invoke-ScriptTest (Join-Path $PSScriptRoot 'tests\BackendReadiness.Tests.ps1')
+Invoke-ScriptTest (Join-Path $PSScriptRoot 'tests\BackupRestore.Tests.ps1')
 Push-Location -LiteralPath (Join-Path $projectDirectory 'backend')
 try {
     & mvn -B package

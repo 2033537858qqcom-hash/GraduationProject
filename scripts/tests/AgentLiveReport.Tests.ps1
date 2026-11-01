@@ -1,8 +1,8 @@
 $ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot '..\lib\AgentLiveReport.ps1')
-$liveTestRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
-$liveDefinition=Get-AgentLiveDefinition -Path (Join-Path $liveTestRoot '.Codex\evals\agent-live-v1.json')
-$liveFixtureDirectory=Join-Path $liveTestRoot ('backend\target\live-report-tests\'+[guid]::NewGuid().ToString('N'))
+. (Join-Path $PSScriptRoot '../lib/AgentLiveReport.ps1')
+$liveTestRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+$liveDefinition=Get-AgentLiveDefinition -Path (Join-Path $liveTestRoot '.Codex/evals/agent-live-v1.json')
+$liveFixtureDirectory=Join-Path $liveTestRoot ('backend/target/live-report-tests/'+[guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory -Path $liveFixtureDirectory -Force
 $liveFixturePath=Join-Path $liveFixtureDirectory 'observations.json'
 $liveChecks=0

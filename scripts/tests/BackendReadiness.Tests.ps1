@@ -1,5 +1,5 @@
 $ErrorActionPreference = 'Stop'
-$waitScript = Join-Path $PSScriptRoot '..\Wait-Backend.ps1'
+$waitScript = Join-Path $PSScriptRoot '../Wait-Backend.ps1'
 $backendProbeState = @{ Calls = 0; Mode = 'UP'; ObservedUrl = '' }
 
 # Probe the launcher without starting Vite or stopping the user's running backend.

@@ -2,6 +2,7 @@ import type { PaymentBill, PaymentCategory, PaymentHistory } from './lib/payment
 export interface FeeStandard {
   id: number; name: string; categoryCode: string; categoryName: string; unit: string; unitPriceCents: number
   campusId: number | null; majorId: number | null; status: string; createdBy: number; creatorName: string; version: number; reason: string
+  effectiveFrom: string | null; effectiveTo: string | null; available: boolean
 }
 export interface FeeBasis {
   id: number; username: string; studentName: string; categoryCode: string; categoryName: string; billingPeriod: string

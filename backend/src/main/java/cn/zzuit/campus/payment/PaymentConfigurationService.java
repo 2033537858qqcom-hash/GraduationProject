@@ -4,6 +4,8 @@ import static cn.zzuit.campus.payment.FinanceModels.*;
 
 import cn.zzuit.campus.identity.CampusPrincipal;
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -37,22 +39,58 @@ public class PaymentConfigurationService {
     Standard standard(long id) { return jdbc.sql(STANDARD_SQL+" WHERE s.id=:id").param("id",id).query(this::standardRow).optional()
         .orElseThrow(()->PaymentService.error(HttpStatus.NOT_FOUND,"STANDARD_NOT_FOUND","收费标准不存在")); }
     private Standard standardRow(ResultSet r,int n) throws SQLException {
+        var start=r.getObject("effective_from",LocalDate.class);var end=r.getObject("effective_to",LocalDate.class);var status=r.getString("status");
         return new Standard(r.getLong("id"),r.getString("name"),r.getString("category_code"),r.getString("category_name"),r.getString("unit"),r.getLong("unit_price_cents"),
-            r.getObject("campus_id",Long.class),r.getObject("major_id",Long.class),r.getString("status"),r.getLong("created_by"),r.getString("creator_name"),r.getInt("version"),r.getString("reason"),PaymentRepository.time(r,"created_at"));
+            r.getObject("campus_id",Long.class),r.getObject("major_id",Long.class),status,r.getLong("created_by"),r.getString("creator_name"),r.getInt("version"),r.getString("reason"),PaymentRepository.time(r,"created_at"),start,end,available(status,start,end));
+    }
+    static boolean available(String status,LocalDate start,LocalDate end) {
+        var today=LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        return "ACTIVE".equals(status) && (start==null || !today.isBefore(start)) && (end==null || !today.isAfter(end));
+    }
+    private PaymentService.Category category(String code) {
+        return jdbc.sql("SELECT code,name,description,enabled,version FROM payment_category WHERE code=:code").param("code",code)
+            .query((r,n)->new PaymentService.Category(r.getString(1),r.getString(2),r.getString(3),r.getBoolean(4),r.getInt(5))).optional()
+            .orElseThrow(()->PaymentService.error(HttpStatus.NOT_FOUND,"CATEGORY_NOT_FOUND","收费项目不存在"));
+    }
+    @Transactional public PaymentService.Category createCategory(CampusPrincipal user,CategoryInput input) {
+        access.require(user,"payment:manage");PaymentAccess.key(input.requestKey());
+        var prior=jdbc.sql("SELECT code FROM payment_category WHERE request_key=:key").param("key",input.requestKey()).query(String.class).optional();
+        if(prior.isPresent() && events.repeated(user,input.requestKey(),"CATEGORY",0,"CREATE",input)) return category(prior.get());
+        String name=PaymentAccess.text(input.name(),1,40,"项目名称"),description=PaymentAccess.text(input.description(),1,160,"项目说明"),reason=PaymentAccess.text(input.reason(),5,500,"新增原因");
+        if(jdbc.sql("SELECT COUNT(*) FROM payment_category WHERE LOWER(name)=LOWER(:name)").param("name",name).query(Long.class).single()>0) throw PaymentService.error(HttpStatus.CONFLICT,"CATEGORY_NAME_EXISTS","收费项目名称已存在");
+        String code="FEE_"+java.util.UUID.randomUUID().toString().replace("-","").substring(0,24).toUpperCase(java.util.Locale.ROOT);
+        int sort=jdbc.sql("SELECT COALESCE(MAX(sort_order),0)+10 FROM payment_category").query(Integer.class).single();
+        jdbc.sql("INSERT INTO payment_category(code,name,description,sort_order,request_key) VALUES(:code,:name,:description,:sort,:key)")
+            .param("code",code).param("name",name).param("description",description).param("sort",sort).param("key",input.requestKey()).update();
+        var result=category(code);events.history(user.id(),"CATEGORY",0,"CREATE",input.requestKey(),input,reason,result);return result;
+    }
+    @Transactional public PaymentService.Category categoryState(CampusPrincipal user,String code,CategoryState input) {
+        access.require(user,"payment:manage");var old=category(code);PaymentAccess.version(old.version(),input.version());
+        if(input.enabled()==null) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_CATEGORY_STATE","请选择启用或停用");
+        String reason=PaymentAccess.text(input.reason(),5,500,"调整原因");
+        if(old.enabled()==input.enabled()) throw PaymentService.error(HttpStatus.CONFLICT,"CATEGORY_STATE_UNCHANGED","收费项目状态未变化");
+        if(!input.enabled()) {
+            if(code.equals("OTHER")) throw PaymentService.error(HttpStatus.CONFLICT,"CATEGORY_PROTECTED","历史兼容项目不能停用");
+            long active=jdbc.sql("SELECT (SELECT COUNT(*) FROM payment_standard WHERE category_code=:code AND status IN ('ACTIVE','PENDING_REVIEW'))+(SELECT COUNT(*) FROM payment_bill WHERE category_code=:code AND workflow_status IN ('DRAFT','RETURNED','PENDING_REVIEW'))+(SELECT COUNT(*) FROM payment_basis WHERE category_code=:code AND status='SUBMITTED')+(SELECT COUNT(*) FROM dorm_utility_meter WHERE category_code=:code AND enabled=TRUE)").param("code",code).query(Long.class).single();
+            if(active>0) throw PaymentService.error(HttpStatus.CONFLICT,"CATEGORY_IN_USE","项目仍有关联的启用标准、待处理账单、收费依据或启用表计，请先处理");
+        }
+        if(jdbc.sql("UPDATE payment_category SET enabled=:enabled,version=version+1 WHERE code=:code AND version=:version").param("enabled",input.enabled()).param("code",code).param("version",input.version()).update()!=1) throw PaymentService.error(HttpStatus.CONFLICT,"VERSION_CONFLICT","记录已变化，请刷新后重新核对");
+        var result=category(code);events.history(user.id(),"CATEGORY",0,input.enabled()?"ENABLE":"DISABLE",null,null,reason,result);return result;
     }
     @Transactional public Standard createStandard(CampusPrincipal user,StandardInput input) {
         access.require(user,"payment:manage");PaymentAccess.key(input.requestKey());
         var existing=jdbc.sql("SELECT id FROM payment_standard WHERE request_key=:key").param("key",input.requestKey()).query(Long.class).optional();
         if(existing.isPresent() && events.repeated(user,input.requestKey(),"STANDARD",existing.get(),"CREATE",input)) return standard(existing.get());
-        PaymentAccess.text(input.requestKey(),20,80,"请求标识");access.category(input.categoryCode());access.otherReviewer(user.id());
+        PaymentAccess.text(input.requestKey(),20,80,"请求标识");access.activeCategory(input.categoryCode());access.otherReviewer(user.id());
+        if(input.effectiveFrom()!=null && input.effectiveTo()!=null && input.effectiveFrom().isAfter(input.effectiveTo())) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_STANDARD_DATES","生效日期不能晚于截止日期");
         String name=PaymentAccess.text(input.name(),1,120,"标准名称"),unit=PaymentAccess.text(input.unit(),1,20,"计价单位"),reason=PaymentAccess.text(input.reason(),5,500,"收费依据");
         if(input.unitPriceCents()<1 || input.unitPriceCents()>100000000L) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_PRICE","单价须为0.01—1000000元");
         if(input.campusId()!=null && jdbc.sql("SELECT COUNT(*) FROM campus WHERE id=:id").param("id",input.campusId()).query(Long.class).single()!=1) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_SCOPE","校区不存在");
         if(input.majorId()!=null && jdbc.sql("SELECT COUNT(*) FROM major WHERE id=:id").param("id",input.majorId()).query(Long.class).single()!=1) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_SCOPE","专业不存在");
         var key=new GeneratedKeyHolder();
-        jdbc.sql("INSERT INTO payment_standard(request_key,name,category_code,unit,unit_price_cents,campus_id,major_id,created_by,reason) VALUES(:key,:name,:category,:unit,:price,:campus,:major,:actor,:reason)")
+        jdbc.sql("INSERT INTO payment_standard(request_key,name,category_code,unit,unit_price_cents,campus_id,major_id,created_by,reason,effective_from,effective_to) VALUES(:key,:name,:category,:unit,:price,:campus,:major,:actor,:reason,:start,:end)")
             .param("key",input.requestKey()).param("name",name).param("category",input.categoryCode()).param("unit",unit).param("price",input.unitPriceCents())
-            .param("campus",input.campusId()).param("major",input.majorId()).param("actor",user.id()).param("reason",reason).update(key,"id");
+            .param("campus",input.campusId()).param("major",input.majorId()).param("actor",user.id()).param("reason",reason).param("start",input.effectiveFrom()).param("end",input.effectiveTo()).update(key,"id");
         var result=standard(key.getKey().longValue());events.history(user.id(),"STANDARD",result.id(),"CREATE",input.requestKey(),input,reason,result);
         events.finance("payment:review",user.id(),"收费标准待复核","PAYMENT_BASIS",0,"请在财务工作台复核新收费标准。");return result;
     }
@@ -61,6 +99,7 @@ public class PaymentConfigurationService {
         boolean retire="RETIRE".equals(input.action());access.require(user,retire?"payment:manage":"payment:review");
         jdbc.sql("SELECT id FROM payment_standard WHERE id=:id FOR UPDATE").param("id",id).query(Long.class).optional().orElseThrow(()->PaymentService.error(HttpStatus.NOT_FOUND,"STANDARD_NOT_FOUND","收费标准不存在"));
         var standard=standard(id);
+        if("APPROVE".equals(input.action())) access.activeCategory(standard.categoryCode());
         if(events.repeated(user,input.requestKey(),"STANDARD",id,input.action(),input)) return standard;
         PaymentAccess.version(standard.version(),input.version());String reason=PaymentAccess.text(input.reason(),5,500,"处理说明");
         if(!retire && standard.createdBy()==user.id()) throw PaymentService.error(HttpStatus.FORBIDDEN,"SELF_REVIEW","不能复核本人经办的收费标准");
@@ -88,7 +127,7 @@ public class PaymentConfigurationService {
         access.require(user,"payment:source");PaymentAccess.key(input.requestKey());
         var existing=jdbc.sql("SELECT id FROM payment_basis WHERE request_key=:key").param("key",input.requestKey()).query(Long.class).optional();
         if(existing.isPresent() && events.repeated(user,input.requestKey(),"BASIS",existing.get(),"CREATE",input)) return basis(existing.get());
-        PaymentAccess.text(input.requestKey(),20,80,"请求标识");access.category(input.categoryCode());
+        PaymentAccess.text(input.requestKey(),20,80,"请求标识");access.activeCategory(input.categoryCode());
         var student=jdbc.sql("SELECT u.id,u.campus_id,u.department_id FROM app_user u JOIN user_role ur ON ur.user_id=u.id AND ur.role_code='STUDENT' WHERE u.username=:name AND u.enabled=TRUE AND u.demo=TRUE")
             .param("name",PaymentAccess.text(input.username(),1,64,"学生账号")).query((r,n)->new Long[]{r.getLong(1),r.getObject(2,Long.class),r.getObject(3,Long.class)}).optional()
             .orElseThrow(()->PaymentService.error(HttpStatus.NOT_FOUND,"STUDENT_NOT_FOUND","未找到可用的演示学生"));

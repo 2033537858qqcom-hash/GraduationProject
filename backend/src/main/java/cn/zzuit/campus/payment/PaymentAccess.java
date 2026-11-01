@@ -35,8 +35,13 @@ public class PaymentAccess {
         if(key==null || !key.matches("[A-Za-z0-9-]{20,80}")) throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_REQUEST_KEY","请求标识无效，请重新打开表单");
     }
     void category(String code) {
-        if(code==null || !code.matches("[A-Z_]{1,32}") || jdbc.sql("SELECT COUNT(*) FROM payment_category WHERE code=:code").param("code",code).query(Long.class).single()!=1)
+        if(code==null || !code.matches("[A-Z0-9_]{1,32}") || jdbc.sql("SELECT COUNT(*) FROM payment_category WHERE code=:code").param("code",code).query(Long.class).single()!=1)
             throw PaymentService.error(HttpStatus.BAD_REQUEST,"INVALID_CATEGORY","请选择有效的收费分类");
+    }
+    void activeCategory(String code) {
+        category(code);
+        if(jdbc.sql("SELECT enabled FROM payment_category WHERE code=:code").param("code",code).query(Boolean.class).single().equals(Boolean.FALSE))
+            throw PaymentService.error(HttpStatus.CONFLICT,"CATEGORY_DISABLED","收费项目已停用，不能用于新的收费");
     }
     static java.math.BigDecimal quantity(String raw) {
         if(raw==null || !raw.matches("(?:0|[1-9]\\d{0,5})(?:\\.\\d{1,3})?"))

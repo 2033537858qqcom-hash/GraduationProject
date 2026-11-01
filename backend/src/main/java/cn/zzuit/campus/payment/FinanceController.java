@@ -17,8 +17,18 @@ public class FinanceController {
     private final PaymentConfigurationService configuration;
     private final PaymentService payments;
     private final PaymentReconciliation reconciliation;
-    public FinanceController(PaymentManagementService finance,PaymentConfigurationService configuration,PaymentService payments,PaymentReconciliation reconciliation) { this.finance=finance;this.configuration=configuration;this.payments=payments;this.reconciliation=reconciliation; }
+    private final DormRechargeService dormRecharge;
+    private final ReconciliationCases reconciliationCases;
+    public FinanceController(PaymentManagementService finance,PaymentConfigurationService configuration,PaymentService payments,PaymentReconciliation reconciliation,DormRechargeService dormRecharge,ReconciliationCases reconciliationCases) { this.finance=finance;this.configuration=configuration;this.payments=payments;this.reconciliation=reconciliation;this.dormRecharge=dormRecharge;this.reconciliationCases=reconciliationCases; }
+    @GetMapping("/dorm-meters") java.util.Map<String,Object> dormMeters(@AuthenticationPrincipal CampusPrincipal user) { return dormRecharge.catalog(user); }
+    @PostMapping("/dorm-meters") DormRechargeService.Meter createDormMeter(@AuthenticationPrincipal CampusPrincipal user,@RequestBody DormRechargeService.MeterInput input) { return dormRecharge.createMeter(user,input); }
+    @PutMapping("/dorm-meters/{id}") DormRechargeService.Meter updateDormMeter(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@RequestBody DormRechargeService.MeterUpdate input) { return dormRecharge.updateMeter(user,id,input); }
     @PostMapping("/reconciliation/preview") PaymentReconciliation.Preview preview(@AuthenticationPrincipal CampusPrincipal user,@RequestBody PaymentReconciliation.Input input) { return reconciliation.compare(user,input); }
+    @PostMapping("/reconciliation/cases") ReconciliationCases.Batch createCases(@AuthenticationPrincipal CampusPrincipal user,@RequestBody ReconciliationCases.ImportInput input) { return reconciliationCases.create(user,input); }
+    @GetMapping("/reconciliation/cases") ReconciliationCases.Page cases(@AuthenticationPrincipal CampusPrincipal user,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="20") int pageSize,@RequestParam(defaultValue="") String status) { return reconciliationCases.list(user,page,pageSize,status); }
+    @GetMapping("/reconciliation/cases/{id}") ReconciliationCases.Case caseDetail(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) { return reconciliationCases.detail(user,id); }
+    @GetMapping("/reconciliation/cases/{id}/history") List<ReconciliationCases.History> caseHistory(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) { return reconciliationCases.history(user,id); }
+    @PostMapping("/reconciliation/cases/{id}/actions") ReconciliationCases.Case caseAction(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@RequestBody Action input) { return reconciliationCases.act(user,id,input); }
     @GetMapping("/reconciliation/template") ResponseEntity<byte[]> template(@AuthenticationPrincipal CampusPrincipal user) {
         configuration.catalog(user);
         return ResponseEntity.ok().contentType(new MediaType("text","csv",StandardCharsets.UTF_8)).header(HttpHeaders.CONTENT_DISPOSITION,"attachment; filename=payment-statement-template.csv")
@@ -26,6 +36,8 @@ public class FinanceController {
     }
     @GetMapping("/catalog") Catalog catalog(@AuthenticationPrincipal CampusPrincipal user) { return configuration.catalog(user); }
     @GetMapping("/categories") List<PaymentService.Category> categories(@AuthenticationPrincipal CampusPrincipal user) { return payments.categories(user); }
+    @PostMapping("/categories") PaymentService.Category createCategory(@AuthenticationPrincipal CampusPrincipal user,@RequestBody CategoryInput input) { return configuration.createCategory(user,input); }
+    @PutMapping("/categories/{code}") PaymentService.Category categoryState(@AuthenticationPrincipal CampusPrincipal user,@PathVariable String code,@RequestBody CategoryState input) { return configuration.categoryState(user,code,input); }
     @PostMapping("/standards") Standard standard(@AuthenticationPrincipal CampusPrincipal user,@RequestBody StandardInput input) { return configuration.createStandard(user,input); }
     @PostMapping("/standards/{id}/actions") Standard standardAction(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@RequestBody Action input) { return configuration.standardAction(user,id,input); }
     @GetMapping("/bases") List<Basis> bases(@AuthenticationPrincipal CampusPrincipal user) { return configuration.bases(user); }

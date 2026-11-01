@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: '21', cache: maven, cache-dependency-path: backend/pom.xml }
-      - run: mvn -B -q test
+      - run: mvn -B package
         working-directory: backend
   frontend:
     runs-on: ubuntu-latest
@@ -32,5 +32,28 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '24', cache: pnpm, cache-dependency-path: frontend/pnpm-lock.yaml }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm run build
+  scripts:
+    runs-on: ubuntu-latest
+    defaults: { run: { shell: pwsh } }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Agent evaluation report tests
+        run: |
+          pwsh -NoProfile -File scripts/tests/AgentEvalReport.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'AgentEvalReport.Tests.ps1 failed.' }
+      - name: Agent live report tests
+        run: |
+          pwsh -NoProfile -File scripts/tests/AgentLiveReport.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'AgentLiveReport.Tests.ps1 failed.' }
+      - name: Backend readiness tests
+        run: |
+          pwsh -NoProfile -File scripts/tests/BackendReadiness.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'BackendReadiness.Tests.ps1 failed.' }
+      - name: Backup and restore tests
+        run: |
+          pwsh -NoProfile -File scripts/tests/BackupRestore.Tests.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'BackupRestore.Tests.ps1 failed.' }

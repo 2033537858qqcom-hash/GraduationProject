@@ -13,7 +13,8 @@ import org.springframework.stereotype.Component;
 public class PaymentRepository {
     static final String BILL_QUERY = """
         SELECT b.*, c.name AS category_name,u.username AS student_username,u.full_name AS student_name,
-        u.campus_id AS student_campus_id,creator.full_name AS creator_name
+        u.campus_id AS student_campus_id,creator.full_name AS creator_name,
+        EXISTS(SELECT 1 FROM dorm_utility_recharge recharge WHERE recharge.bill_id=b.id) AS dorm_recharge
         FROM payment_bill b JOIN payment_category c ON c.code=b.category_code
         JOIN app_user u ON u.id=b.student_id JOIN app_user creator ON creator.id=b.created_by
         """;
@@ -36,7 +37,7 @@ public class PaymentRepository {
             r.getObject("source_basis_id",Long.class),r.getLong("created_by"),r.getString("creator_name"),r.getString("student_username"),
             r.getString("student_name"),r.getObject("student_campus_id",Long.class),time(r,"created_at"),time(r,"published_at"),time(r,"paid_at"),
             r.getString("refund_status"),r.getObject("pending_request_id",Long.class),time(r,"payment_started_at"),r.getInt("version"),
-            r.getString("last_sync_error"),time(r,"last_checked_at"));
+            r.getString("last_sync_error"),time(r,"last_checked_at"),r.getBoolean("dorm_recharge"));
     }
     static LocalDateTime time(ResultSet r,String name) throws SQLException {
         var value=r.getTimestamp(name); return value==null?null:value.toLocalDateTime();

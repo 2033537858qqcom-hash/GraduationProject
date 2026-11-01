@@ -59,6 +59,18 @@ public class AgentSessions {
     public Session session(CampusPrincipal user,long id) {
         require(user); return jdbc.sql("SELECT * FROM agent_session WHERE id=:id AND user_id=:u").param("id",id).param("u",user.id()).query(this::sessionRow).optional().orElseThrow(this::missing);
     }
+    public void delete(CampusPrincipal user,long id) {
+        if(!operations.add(user.id())) throw conflict("当前对话正在处理，请稍后再删除");
+        try {
+            write(()->{
+                session(user,id);
+                jdbc.sql("DELETE FROM agent_task WHERE session_id=:id").param("id",id).update();
+                jdbc.sql("DELETE FROM agent_turn WHERE session_id=:id").param("id",id).update();
+                jdbc.sql("DELETE FROM agent_session WHERE id=:id AND user_id=:u").param("id",id).param("u",user.id()).update();
+                return null;
+            });
+        } finally { operations.remove(user.id()); }
+    }
     public Page<Session> list(CampusPrincipal user,int page,int size) {
         require(user); pagination(page,size);
         long total=jdbc.sql("SELECT COUNT(*) FROM agent_session WHERE user_id=:u").param("u",user.id()).query(Long.class).single();

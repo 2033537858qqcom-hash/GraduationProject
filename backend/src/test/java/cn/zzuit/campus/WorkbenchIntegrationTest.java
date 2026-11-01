@@ -115,6 +115,39 @@ class WorkbenchIntegrationTest {
     }
 
     @Test
+    void contentWorkspaceAndBusinessSpaceOrdering() throws Exception {
+        // 1. 内容编辑 / 内容审核账号必须获得"官网内容"工作空间与后台入口
+        var editorOverview = ok(login("editor").get("/api/workbench/overview"));
+        var editorContent = workspace(editorOverview, "CONTENT");
+        assertThat(editorContent).as("内容编辑账号应具备官网内容工作空间").isNotNull();
+        assertThat(editorContent.path("name").asText()).isEqualTo("官网内容");
+        assertThat(editorContent.path("roleTitle").asText()).isEqualTo("内容编辑人员");
+        assertThat(editorContent.path("entryPaths").toString()).contains("/admin/content");
+        assertThat(editorContent.path("scopeNote").asText()).contains("草稿", "送审", "审核", "发布");
+
+        var reviewerOverview = ok(login("reviewer").get("/api/workbench/overview"));
+        var reviewerContent = workspace(reviewerOverview, "CONTENT");
+        assertThat(reviewerContent).as("内容审核账号应具备官网内容工作空间").isNotNull();
+        assertThat(reviewerContent.path("roleTitle").asText()).isEqualTo("内容审核人员");
+
+        // 2. 业务岗位空间排在收费依据之前：前端默认空间取第一个非 PERSONAL 空间
+        assertThat(firstNonPersonalWorkspace(ok(login("academic1001").get("/api/workbench/overview"))))
+            .as("教务岗位首屏应为教务管理，而不是收费依据").isEqualTo("ACADEMIC");
+        assertThat(firstNonPersonalWorkspace(ok(login("dorm1001").get("/api/workbench/overview"))))
+            .as("宿管岗位首屏应为宿舍管理，而不是收费依据").isEqualTo("HOUSING");
+        assertThat(firstNonPersonalWorkspace(ok(login("dispatcher1001").get("/api/workbench/overview"))))
+            .as("后勤岗位首屏应为后勤服务，而不是收费依据").isEqualTo("LOGISTICS");
+        // 3. 纯财务经办的首个非个人空间仍是财务收费
+        assertThat(firstNonPersonalWorkspace(ok(login("finance1001").get("/api/workbench/overview"))))
+            .as("财务经办首屏应为财务收费").isEqualTo("FINANCE");
+
+        // 4. overview 响应结构保持不变（工作空间只增改内容，不改变响应键）
+        assertThat(editorOverview.has("profile")).isTrue();
+        assertThat(editorOverview.has("taskCounts")).isTrue();
+        assertThat(editorOverview.path("workspaces").isArray()).isTrue();
+    }
+
+    @Test
     void categoryQueryAndPaginationReachTasksOutsideTheEightItemOverview() throws Exception {
         String name="queue_"+java.util.UUID.randomUUID().toString().substring(0,8);
         jdbc.sql("""
@@ -168,6 +201,20 @@ class WorkbenchIntegrationTest {
         assertThat(reviewer.get("/api/workbench/tasks?page=0").statusCode()).isEqualTo(400);
         assertThat(reviewer.get("/api/workbench/tasks?pageSize=101").statusCode()).isEqualTo(400);
         assertThat(reviewer.get("/api/workbench/tasks?domain=UNKNOWN").statusCode()).isEqualTo(400);
+    }
+
+    private JsonNode workspace(JsonNode overview, String code) {
+        for (var ws : overview.path("workspaces")) {
+            if (code.equals(ws.path("code").asText())) return ws;
+        }
+        return null;
+    }
+
+    private String firstNonPersonalWorkspace(JsonNode overview) {
+        for (var ws : overview.path("workspaces")) {
+            if (!"PERSONAL".equals(ws.path("code").asText())) return ws.path("code").asText();
+        }
+        return null;
     }
 
     private JsonNode ok(HttpResponse<String> response) {

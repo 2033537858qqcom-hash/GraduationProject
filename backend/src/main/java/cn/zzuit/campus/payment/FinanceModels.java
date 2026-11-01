@@ -9,7 +9,9 @@ public final class FinanceModels {
     public record BillInput(String requestKey,String username,String categoryCode,String title,String billingPeriod,
         LocalDate dueDate,Long standardId,String quantity,Long amountCents,String basis,Long basisId,Integer version,String reason) {}
     public record StandardInput(String requestKey,String name,String categoryCode,String unit,long unitPriceCents,
-        Long campusId,Long majorId,String reason) {}
+        Long campusId,Long majorId,String reason,LocalDate effectiveFrom,LocalDate effectiveTo) {}
+    public record CategoryInput(String requestKey,String name,String description,String reason) {}
+    public record CategoryState(Boolean enabled,int version,String reason) {}
     public record BatchInput(String requestKey,List<String> usernames,BillInput template) {}
     public record BatchPreviewRow(String username,String studentName,Long amountCents,String errorCode,String error) {}
     public record BatchPreview(List<BatchPreviewRow> items,int validCount,long totalAmountCents,boolean canCreate) {}
@@ -19,7 +21,7 @@ public final class FinanceModels {
     public record Action(String action,int version,String requestKey,String reason,Long assigneeId) {}
     public record RequestInput(String requestKey,String type,String reason,int version) {}
     public record Standard(long id,String name,String categoryCode,String categoryName,String unit,long unitPriceCents,
-        Long campusId,Long majorId,String status,long createdBy,String creatorName,int version,String reason,LocalDateTime createdAt) {}
+        Long campusId,Long majorId,String status,long createdBy,String creatorName,int version,String reason,LocalDateTime createdAt,LocalDate effectiveFrom,LocalDate effectiveTo,boolean available) {}
     public record Basis(long id,String username,String studentName,String categoryCode,String categoryName,
         String billingPeriod,String quantity,String basis,String sourceReference,long createdBy,String creatorName,
         String status,Long billId,String reviewComment,int version,LocalDateTime createdAt) {}

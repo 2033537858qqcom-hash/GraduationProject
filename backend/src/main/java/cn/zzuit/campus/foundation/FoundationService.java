@@ -54,7 +54,9 @@ public class FoundationService {
                 case "STUDENT" -> "本人学习与个人信息";
                 case "TEACHER" -> "本人有效授课教学班";
                 case "COUNSELOR" -> "叠加教师身份；仅所分配行政班的请假申请与材料";
-                case "STUDENT_AFFAIRS" -> "所属学院已提交的证明申请与演示结果，禁止自审";
+                case "STUDENT_AFFAIRS" -> "覆盖学院证明、调宿初审与场地借用审批（禁止自审）";
+                case "DORM_MANAGER" -> "负责楼栋的入住、退宿与床位分配";
+                case "SERVICE_STAFF" -> "通用工作台访问；内容、审批、维修等业务职责须另行授予具体岗位";
                 case "REPAIR_DISPATCHER" -> "配置的校区、类别及具体报修地点范围，不能浏览学生草稿";
                 case "REPAIR_TECHNICIAN" -> "当前分配给本人且负责范围有效的维修任务";
                 case "ACADEMIC_STAFF" -> "所属学院的教学信息";
@@ -128,6 +130,7 @@ public class FoundationService {
         var dept=jdbc.sql("SELECT * FROM department WHERE id=:d").param("d",department).query(this::departmentRow).optional().orElseThrow(()->invalid("所选组织不存在"));
         if(roles.contains("COUNSELOR") && !roles.contains("TEACHER")) bad("辅导员岗位须同时具有教师身份");
         if(roles.stream().anyMatch(r->r.equals("FINANCE_OPERATOR") || r.equals("FINANCE_REVIEWER")) && !dept.kind().equals("ADMIN")) bad("财务岗位须归属财务等行政部门");
+        if(roles.contains("FINANCE_OPERATOR") && roles.contains("FINANCE_REVIEWER")) bad("财务经办与复核职责须由不同账号承担");
         if(roles.stream().anyMatch(r->List.of("STUDENT","TEACHER","ACADEMIC_STAFF","COUNSELOR","STUDENT_AFFAIRS").contains(r)) && !dept.kind().equals("COLLEGE")) bad("学生、教师、教务、辅导员和学生事务岗位须归属学院");
         if(roles.contains("STUDENT") && group==null) bad("学生须分配行政班");
         if(!roles.contains("STUDENT") && group!=null) bad("只有学生身份可分配行政班");

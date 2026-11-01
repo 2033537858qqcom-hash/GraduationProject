@@ -8,6 +8,7 @@ import { api, errorMessage } from '../lib/api'
 import { currentUser } from '../stores/auth'
 import ServiceEntry from '../components/ServiceEntry.vue'
 import { useTaskQueue } from '../composables/useTaskQueue'
+import { defaultWorkspaceCode, workspaceEntryVisible } from '../lib/workbenchWorkspace'
 import type { TaskDomain, WorkbenchOverview, WorkspaceInfo } from '../workbench'
 import { schoolMedia } from '../content/schoolMedia'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
@@ -15,7 +16,16 @@ import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 const error = ref('')
 const loading = ref(true)
 const workspaces = ref<WorkspaceInfo[]>([])
-const activeWorkspaceCode = ref(localStorage.getItem('campus_active_workspace') || '')
+const WORKSPACE_STORAGE_KEY = 'campus_active_workspace'
+const WORKSPACE_CHOICE_KEY = 'campus_active_workspace_manual'
+// 只恢复用户主动切换过的工作空间；旧版本自动写入的默认值（可能是财务协同空间）不再沿用。
+function storedWorkspaceCode() {
+  try {
+    if (localStorage.getItem(WORKSPACE_CHOICE_KEY) !== '1') return ''
+    return localStorage.getItem(WORKSPACE_STORAGE_KEY) || ''
+  } catch { return '' }
+}
+const activeWorkspaceCode = ref(storedWorkspaceCode())
 const workspaceControlRef = ref<HTMLElement | null>(null)
 const { indicatorStyle: workspacePillStyle } = useSlidingIndicator(
   workspaceControlRef,
@@ -36,9 +46,12 @@ const activeWorkspace = computed(() => {
   return workspaces.value.find(w => w.code === activeWorkspaceCode.value) || workspaces.value[0] || null
 })
 
-function selectWorkspace(code: string) {
+function selectWorkspace(code: string, byUser = false) {
   activeWorkspaceCode.value = code
-  localStorage.setItem('campus_active_workspace', code)
+  try {
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, code)
+    if (byUser) localStorage.setItem(WORKSPACE_CHOICE_KEY, '1')
+  } catch { /* 隐私模式下不记住选择，不影响当前页面使用 */ }
 }
 
 const categoryDefinitions: { domain: TaskDomain; label: string; sources: string[] }[] = [
@@ -59,20 +72,7 @@ const taskCategories = computed(() => categoryDefinitions
       category.sources.reduce((sum, source) => sum + (taskCounts.value[source] ?? 0), 0) })))
 
 function entryVisible(pathPrefix: string) {
-  if (showAllServices.value) return true
-  if (!activeWorkspace.value) return true
-  const code = activeWorkspace.value.code
-  if (code === 'TEACHING') return pathPrefix.startsWith('/teaching')
-  if (code === 'COUNSELOR') return pathPrefix.startsWith('/student-affairs/leave') || pathPrefix.startsWith('/admin/counselors')
-  if (code === 'AFFAIRS') return pathPrefix.startsWith('/student-affairs')
-  if (code === 'HOUSING') return pathPrefix.startsWith('/housing/assignments') || pathPrefix.startsWith('/admin/housing')
-  if (code === 'LOGISTICS') return pathPrefix.startsWith('/logistics')
-  if (code === 'ACADEMIC') return pathPrefix.startsWith('/academic')
-  if (code === 'FINANCE') return pathPrefix.startsWith('/finance/payments')
-  if (code === 'PAYMENT_SOURCE') return pathPrefix.startsWith('/payment-bases')
-  if (code === 'ADMIN') return pathPrefix.startsWith('/admin')
-  if (code === 'PERSONAL') return pathPrefix.startsWith('/profile') || pathPrefix.startsWith('/repairs/mine') || pathPrefix.startsWith('/portal/reservations')
-  return true
+  return workspaceEntryVisible(activeWorkspace.value?.code, pathPrefix, showAllServices.value)
 }
 
 function formatTime(isoStr: string) {
@@ -109,11 +109,11 @@ async function loadOverview() {
     workspaces.value = res.workspaces || []
     initializeTasks(res)
 
-    // 若本地无存储或存储的工作空间不在当前权限列表，则默认选择首个专业工作空间（非 PERSONAL）
+    // 本地记忆失效时按业务岗位优先落点（财务协同次之、个人空间最后），不依赖后端返回顺序。
     const exists = workspaces.value.some(w => w.code === activeWorkspaceCode.value)
     if (!exists) {
-      const preferred = workspaces.value.find(w => w.code !== 'PERSONAL') || workspaces.value[0]
-      if (preferred) selectWorkspace(preferred.code)
+      const preferred = defaultWorkspaceCode(workspaces.value)
+      if (preferred) selectWorkspace(preferred)
     }
   } catch (cause) {
     if (request === overviewRequest) error.value = errorMessage(cause)
@@ -141,7 +141,7 @@ onBeforeUnmount(() => { overviewRequest++; invalidate() })
             class="service-segment-btn"
             :class="{ active: activeWorkspaceCode === ws.code }"
             :aria-pressed="activeWorkspaceCode === ws.code"
-            @click="selectWorkspace(ws.code)"
+            @click="selectWorkspace(ws.code, true)"
           >
             {{ ws.name }}
           </button>

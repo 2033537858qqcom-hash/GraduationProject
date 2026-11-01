@@ -13,6 +13,7 @@ public class AgentSessionController {
     @GetMapping Page<Session> list(@AuthenticationPrincipal CampusPrincipal user,@RequestParam(defaultValue="1") int page,@RequestParam(defaultValue="10") int pageSize) { return sessions.list(user,page,pageSize); }
     @PostMapping Session create(@AuthenticationPrincipal CampusPrincipal user,@Valid @RequestBody CreateSession input) { return sessions.create(user,input); }
     @GetMapping("/{id}") SessionDetail detail(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@RequestParam(required=false) Long before) { return sessions.detail(user,id,before); }
+    @DeleteMapping("/{id}") @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT) void delete(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) { sessions.delete(user,id); }
     @PostMapping("/{id}/query") QueryResult query(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@Valid @RequestBody SessionQuery input) { return sessions.query(user,id,input); }
     @PostMapping("/{id}/tasks") TaskView createTask(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@Valid @RequestBody CreateTask input) { return sessions.createTask(user,id,input); }
     @GetMapping("/{id}/tasks/{task}") TaskView task(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task) { return sessions.task(user,id,task); }

@@ -190,11 +190,9 @@ public class TaskAggregationService {
 
     public List<WorkspaceInfo> resolveWorkspaces(IdentityService.Profile profile, Collection<String> permissions) {
         List<WorkspaceInfo> list = new ArrayList<>();
-        if(permissions.contains("payment:manage") || permissions.contains("payment:review"))
-            list.add(new WorkspaceInfo("FINANCE","财务收费",permissions.contains("payment:manage")?"财务经办人员":"财务复核人员",
-                "校级统一财务队列 · 经办与复核分离，禁止本人复核本人经办事项",List.of("/finance/payments")));
-        if(permissions.contains("payment:source"))
-            list.add(new WorkspaceInfo("PAYMENT_SOURCE","收费依据","业务收费依据提供人员","按当前学院、楼栋或后勤校区负责范围提交依据",List.of("/payment-bases")));
+
+        // 业务岗位空间统一排在财务/收费依据空间之前：前端以第一个非 PERSONAL 空间作为
+        // 默认空间，教务、宿管、后勤等岗位不能被"收费依据"抢占首屏。
 
         // 1. 教学工作空间
         if (permissions.contains("teaching:manage")) {
@@ -271,7 +269,21 @@ public class TaskAggregationService {
             ));
         }
 
-        // 7. 系统管理工作空间
+        // 7. 官网内容工作空间 (内容编辑 / 内容审核)
+        if (permissions.contains("content:edit") || permissions.contains("content:review")) {
+            boolean canEdit = permissions.contains("content:edit");
+            boolean canReview = permissions.contains("content:review");
+            String roleTitle = canEdit && canReview ? "内容编辑与审核人员" : canEdit ? "内容编辑人员" : "内容审核人员";
+            list.add(new WorkspaceInfo(
+                "CONTENT",
+                "官网内容",
+                roleTitle,
+                "官网草稿撰写与送审、他人内容的独立审核与发布（禁止审核本人内容）",
+                List.of("/admin/content")
+            ));
+        }
+
+        // 8. 系统管理工作空间
         if (permissions.contains("foundation:manage")) {
             list.add(new WorkspaceInfo(
                 "ADMIN",
@@ -282,7 +294,29 @@ public class TaskAggregationService {
             ));
         }
 
-        // 8. 个人服务 (所有已登录人员均具备)
+        // 9. 财务收费工作空间（排在业务岗位空间之后，纯财务岗位仍为首个非个人空间）
+        if (permissions.contains("payment:manage") || permissions.contains("payment:review")) {
+            list.add(new WorkspaceInfo(
+                "FINANCE",
+                "财务收费",
+                permissions.contains("payment:manage") ? "财务经办人员" : "财务复核人员",
+                "校级统一财务队列 · 经办与复核分离，禁止本人复核本人经办事项",
+                List.of("/finance/payments")
+            ));
+        }
+
+        // 10. 收费依据工作空间
+        if (permissions.contains("payment:source")) {
+            list.add(new WorkspaceInfo(
+                "PAYMENT_SOURCE",
+                "收费依据",
+                "业务收费依据提供人员",
+                "按当前学院、楼栋或后勤校区负责范围提交依据",
+                List.of("/payment-bases")
+            ));
+        }
+
+        // 11. 个人服务 (所有已登录人员均具备，固定排在最后)
         list.add(new WorkspaceInfo(
             "PERSONAL",
             "个人服务",

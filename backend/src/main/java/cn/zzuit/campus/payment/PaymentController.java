@@ -16,7 +16,11 @@ public class PaymentController {
     private final PaymentService payments;
     private final PaymentManagementService finance;
     private final PaymentReceiptPdf receipts;
-    public PaymentController(PaymentService payments,PaymentManagementService finance,PaymentReceiptPdf receipts) { this.payments=payments;this.finance=finance;this.receipts=receipts; }
+    private final DormRechargeService dormRecharge;
+    public PaymentController(PaymentService payments,PaymentManagementService finance,PaymentReceiptPdf receipts,DormRechargeService dormRecharge) { this.payments=payments;this.finance=finance;this.receipts=receipts;this.dormRecharge=dormRecharge; }
+    @GetMapping("/api/payments/mine/dorm-recharge") Map<String,Object> dormRecharge(@AuthenticationPrincipal CampusPrincipal user) { return dormRecharge.mine(user); }
+    @PostMapping("/api/payments/mine/dorm-recharge") PaymentService.Bill createDormRecharge(@AuthenticationPrincipal CampusPrincipal user,@RequestBody DormRechargeService.RechargeInput input) { return dormRecharge.create(user,input); }
+    @PostMapping("/api/payments/mine/dorm-recharge/quote") DormRechargeQuote quoteDormRecharge(@AuthenticationPrincipal CampusPrincipal user,@RequestBody DormRechargeService.RechargeInput input) { return dormRecharge.quote(user,input); }
     @GetMapping("/api/payments/categories")
     List<PaymentService.Category> categories(@AuthenticationPrincipal CampusPrincipal user) { return payments.categories(user); }
     @GetMapping("/api/payments/mine") List<PaymentService.Bill> mine(@AuthenticationPrincipal CampusPrincipal user) { return payments.mine(user); }

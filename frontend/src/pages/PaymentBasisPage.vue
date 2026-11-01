@@ -17,7 +17,7 @@ const permittedCategories = computed(() => {
   if (permissions.includes('academic:manage')) ['TUITION', 'TEXTBOOK'].forEach(code => codes.add(code))
   if (permissions.includes('housing:assign')) ['ACCOMMODATION', 'WATER', 'ELECTRICITY', 'UTILITIES'].forEach(code => codes.add(code))
   if (permissions.includes('repair:dispatch')) ['WATER', 'ELECTRICITY', 'UTILITIES'].forEach(code => codes.add(code))
-  return categories.value.filter(category => codes.has(category.code))
+  return categories.value.filter(category => category.enabled !== false && codes.has(category.code))
 })
 const metered = computed(() => ['WATER', 'ELECTRICITY'].includes(form.value.categoryCode))
 let sequence = 0

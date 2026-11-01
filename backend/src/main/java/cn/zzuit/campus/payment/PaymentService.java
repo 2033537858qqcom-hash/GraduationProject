@@ -35,11 +35,11 @@ public class PaymentService {
     public PaymentService(PaymentRepository repository,IdentityService identities,Environment env,PaymentEvents events,TransactionTemplate tx) {
         this.repository=repository;this.identities=identities;this.env=env;this.events=events;this.tx=tx;
     }
-    public record Category(String code,String name,String description) {}
+    public record Category(String code,String name,String description,boolean enabled,int version) {}
     public record Bill(long id,String orderNo,long studentId,String title,String categoryCode,String categoryName,long amountCents,String status,String tradeNo,
         String workflowStatus,String billingPeriod,LocalDate dueDate,String basis,Long standardId,String standardName,Long unitPriceCents,String quantity,
         Long sourceBasisId,long createdBy,String creatorName,String studentUsername,String studentName,Long campusId,LocalDateTime createdAt,LocalDateTime publishedAt,LocalDateTime paidAt,
-        String refundStatus,Long pendingRequestId,LocalDateTime paymentStartedAt,int version,String lastSyncError,LocalDateTime lastCheckedAt) {}
+        String refundStatus,Long pendingRequestId,LocalDateTime paymentStartedAt,int version,String lastSyncError,LocalDateTime lastCheckedAt,boolean dormRecharge) {}
     private record StartResult(Map<String,String> value,ApiException error) {}
     static ApiException error(HttpStatus status,String code,String message) { return new ApiException(status,code,message); }
     void requireDemo() {
@@ -51,8 +51,8 @@ public class PaymentService {
         identities.requirePermission(user,permission);requireDemo();return catalog();
     }
     List<Category> catalog() {
-        return repository.jdbc.sql("SELECT code,name,description FROM payment_category ORDER BY sort_order,code")
-            .query((r,n)->new Category(r.getString(1),r.getString(2),r.getString(3))).list();
+        return repository.jdbc.sql("SELECT code,name,description,enabled,version FROM payment_category ORDER BY sort_order,code")
+            .query((r,n)->new Category(r.getString(1),r.getString(2),r.getString(3),r.getBoolean(4),r.getInt(5))).list();
     }
     public List<Bill> mine(CampusPrincipal user) {
         identities.requirePermission(user,"portal:read");requireDemo();
@@ -78,6 +78,7 @@ public class PaymentService {
             repository.jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update();
             identities.requirePermission(user,"portal:read");
             var bill=repository.lock(id);
+            DormRechargeService.requirePayable(repository.jdbc,user,id);
             if(!"PUBLISHED".equals(bill.workflowStatus()) || bill.pendingRequestId()!=null || !bill.status().equals("UNPAID"))
                 throw error(HttpStatus.CONFLICT,"BILL_NOT_PAYABLE","账单当前不可支付，请刷新账单状态");
             available();
@@ -91,6 +92,7 @@ public class PaymentService {
                     return new StartResult(null,error(HttpStatus.CONFLICT,"PAYMENT_CLOSED","支付订单已关闭，请联系财务人员处理"));
                 return new StartResult(Map.of("qrCode",order.qrCode()),null);
             } catch(Exception failure) {
+                if(failure instanceof org.springframework.dao.DataAccessException databaseFailure) throw databaseFailure;
                 log.warn("Payment start unconfirmed: billId={}, failureType={}",id,failure.getClass().getSimpleName());
                 return new StartResult(null,error(HttpStatus.SERVICE_UNAVAILABLE,"PAYMENT_UNAVAILABLE","暂时无法确认下单结果，请重试原账单或联系财务查单"));
             }
@@ -109,6 +111,7 @@ public class PaymentService {
                 if("PAID".equals(order.status())) markPaid(bill,order.tradeNo());
                 repository.jdbc.sql("UPDATE payment_bill SET last_sync_error='',last_checked_at=CURRENT_TIMESTAMP WHERE id=:id").param("id",id).update();
             } catch(Exception failure) {
+                if(failure instanceof org.springframework.dao.DataAccessException databaseFailure) throw databaseFailure;
                 log.warn("Payment status unconfirmed: billId={}, failureType={}",id,failure.getClass().getSimpleName());
                 repository.jdbc.sql("UPDATE payment_bill SET last_sync_error='暂时无法核验支付平台状态，请稍后重试或联系财务查单',last_checked_at=CURRENT_TIMESTAMP WHERE id=:id").param("id",id).update();
             }
@@ -127,6 +130,7 @@ public class PaymentService {
         int changed=repository.jdbc.sql("UPDATE payment_bill SET status='PAID',trade_no=:trade,paid_at=CURRENT_TIMESTAMP,last_sync_error='',version=version+1 WHERE id=:id AND status='UNPAID'")
             .param("trade",tradeNo).param("id",bill.id()).update();
         if(changed==1) {
+            DormRechargeService.credit(repository.jdbc,bill.id());
             events.history(null,"BILL",bill.id(),"SETTLE",null,null,"支付平台已确认金额和交易号",repository.load(bill.id()));
             events.student(bill.studentId(),"缴费结果已确认",bill.id(),bill.title()+"已支付，可查看缴费凭证。");
             if(!bill.workflowStatus().equals("PUBLISHED")) events.finance("payment:manage",0,"异常收款待核对","PAYMENT",bill.id(),"非正常收费状态下确认收款，请核对并按退款流程处理。");

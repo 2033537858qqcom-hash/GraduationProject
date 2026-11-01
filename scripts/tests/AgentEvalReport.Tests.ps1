@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
-. (Join-Path $PSScriptRoot '..\lib\AgentEvalReport.ps1')
-$evalTestRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..\backend\target\agent-grader-tests'))
+. (Join-Path $PSScriptRoot '../lib/AgentEvalReport.ps1')
+$evalTestRoot=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../backend/target/agent-grader-tests'))
 $evalFixtureDirectory=Join-Path $evalTestRoot ([guid]::NewGuid().ToString('N'))
 $null=New-Item -ItemType Directory -Path $evalFixtureDirectory -Force
 $evalDefinition=[pscustomobject]@{schemaVersion=1;id='agent-grader-unit-v1';evaluationType='deterministic-regression';requiredCount=2;cases=@(

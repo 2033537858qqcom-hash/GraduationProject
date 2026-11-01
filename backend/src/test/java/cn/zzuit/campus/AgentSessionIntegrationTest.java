@@ -118,6 +118,25 @@ class AgentSessionIntegrationTest {
         doAnswer(invocation->{ invocation.callRealMethod(); throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE,"DEMO_ROLLBACK","事务回滚演示"); }).when(certificates).save(any(),isNull(),any());
         assertThat(student.send("POST",taskPath(id,task.path("id").asLong())+"/save",confirmation(task)).statusCode()).isEqualTo(503); assertThat(count("certificate_request")).isEqualTo(before); assertThat(ok(student.get(taskPath(id,task.path("id").asLong()))).path("stage").asText()).isEqualTo("PREVIEW");
     }
+    @Test void sessionDeletionRemovesOnlyOwnedAgentHistoryAndKeepsBusinessDraft() throws Exception {
+        var student=login("20260001"); long id=session(student); var task=proof(student,id,createTask(student,id,"CERTIFICATE"),"删除会话演示");
+        var saved=ok(student.send("POST",taskPath(id,task.path("id").asLong())+"/save",confirmation(task))); long business=saved.path("business").path("id").asLong();
+        assertThat(login("20260002").send("DELETE",path(id),Map.of()).statusCode()).isEqualTo(404);
+        assertThat(login("admin").send("DELETE",path(id),Map.of()).statusCode()).isEqualTo(404);
+        assertThat(student.send("DELETE",path(id),Map.of()).statusCode()).isEqualTo(204);
+        assertThat(student.get(path(id)).statusCode()).isEqualTo(404);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM agent_session WHERE id=:id").param("id",id).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM agent_turn WHERE session_id=:id").param("id",id).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM agent_task WHERE session_id=:id").param("id",id).query(Long.class).single()).isZero();
+        assertThat(jdbc.sql("SELECT status FROM certificate_request WHERE id=:id").param("id",business).query(String.class).single()).isEqualTo("DRAFT");
+        assertThat(student.send("DELETE",path(id),Map.of()).statusCode()).isEqualTo(404);
+    }
+    @Test void sessionDeletionRequiresCsrfToken() throws Exception {
+        var student=login("20260001"); long id=session(student);
+        var noCsrf=student.http.send(student.builder(path(id)).DELETE().build(),HttpResponse.BodyHandlers.ofString());
+        assertThat(noCsrf.statusCode()).isEqualTo(403);
+        assertThat(student.send("DELETE",path(id),Map.of()).statusCode()).isEqualTo(204);
+    }
     private long count(String table) { return jdbc.sql("SELECT COUNT(*) FROM "+table).query(Long.class).single(); }
     private void online() { doReturn(true).when(model).ready(); doReturn(new Plan(List.of(new Call("my_notice_summary",json.valueToTree(Map.of()))),30,5)).when(model).plan(anyString(),anyList(),any()); }
     private long session(Browser browser) throws Exception { return ok(browser.send("POST","/api/assistant/sessions",Map.of("requestKey",UUID.randomUUID().toString()))).path("id").asLong(); }

@@ -212,6 +212,39 @@ class FoundationIntegrationTest {
             .param("u",teacher).query(Long.class).single()).isZero();
     }
 
+    @Test
+    void financeOperatorAndReviewerRolesMustBeSeparated() throws Exception {
+        var admin=login("admin","Demo@2026");
+        long financeDepartment=jdbc.sql("SELECT id FROM department WHERE kind='ADMIN' ORDER BY id").query(Long.class).list().get(0);
+        // 创建：同一账号同时选择财务经办与复核 → 400 且不落库
+        var input=account("FINANCE_OPERATOR"); input.put("departmentId",financeDepartment);
+        input.put("roles",List.of("FINANCE_OPERATOR","FINANCE_REVIEWER"));
+        var rejected=admin.send("POST",ROOT+"/users",input);
+        assertThat(rejected.statusCode()).as(rejected.body()).isEqualTo(400);
+        assertThat(jdbc.sql("SELECT COUNT(*) FROM app_user WHERE username=:u").param("u",input.get("username")).query(Long.class).single()).isZero();
+        // 更新：已存在的财务经办不能同时被授予复核角色 → 400 且角色不落库
+        var creator=account("FINANCE_OPERATOR"); creator.put("departmentId",financeDepartment);
+        long id=id(admin.send("POST",ROOT+"/users",creator));
+        var change=update(creator,0); change.put("roles",List.of("FINANCE_OPERATOR","FINANCE_REVIEWER"));
+        var updateRejected=admin.send("PUT",ROOT+"/users/"+id,change);
+        assertThat(updateRejected.statusCode()).as(updateRejected.body()).isEqualTo(400);
+        assertThat(jdbc.sql("SELECT role_code FROM user_role WHERE user_id=:u").param("u",id).query(String.class).list()).containsExactly("FINANCE_OPERATOR");
+    }
+
+    @Test
+    void catalogRoleScopesDescribeDormManagerServiceStaffAndStudentAffairs() throws Exception {
+        var admin=login("admin","Demo@2026");
+        var roles=admin.tree(ROOT+"/catalog").path("roles");
+        assertThat(scopeOf(roles,"DORM_MANAGER")).contains("入住","退宿","床位分配");
+        assertThat(scopeOf(roles,"SERVICE_STAFF")).contains("通用工作台访问","另行授予");
+        assertThat(scopeOf(roles,"STUDENT_AFFAIRS")).contains("学院证明","调宿初审","场地借用","禁止自审");
+    }
+
+    private String scopeOf(JsonNode roles,String code) {
+        for(var role:roles) if(code.equals(role.path("code").asText())) return role.path("scope").asText();
+        throw new AssertionError("角色说明缺失: "+code);
+    }
+
     private long id(HttpResponse<String> response) throws Exception { assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return json.readTree(response.body()).path("id").asLong(); }
     private Map<String,Object> account(String role) {
         var input=new HashMap<String,Object>(); input.put("username","test-"+UUID.randomUUID()); input.put("fullName","基础管理演示人员");

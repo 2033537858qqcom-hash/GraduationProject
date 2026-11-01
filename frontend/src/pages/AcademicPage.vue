@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { BookOpen, FileText, CalendarDays, Settings2, Download, Upload } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import { saveBlob } from '../lib/download'
@@ -83,10 +84,27 @@ const validatedRows = ref<{ studentId: number; score: number; version: number }[
 const classTerm = computed(() => catalog.value?.terms.find(t => t.id === detail.value?.info.termId))
 let sequence = 0
 watch(gradeText, () => { validatedRows.value = null })
+
+const forms = { term: termForm, course: courseForm, class: classForm, lesson: lessonForm, exam: examForm }
+type FormName = keyof typeof forms
+const formBaseline = reactive(Object.fromEntries(Object.entries(forms).map(([key, form]) => [key, JSON.stringify(form)])) as Record<FormName, string>)
+function markSaved(name: FormName) { formBaseline[name] = JSON.stringify(forms[name]) }
+const unsaved = computed(() => gradeText.value.trim().length > 0 || (Object.keys(forms) as FormName[]).some(name => JSON.stringify(forms[name]) !== formBaseline[name]))
+function confirmLeave() {
+  if (busy.value) return false
+  return !unsaved.value || window.confirm('还有未保存的教务输入（学期、课程、教学班、课程安排、成绩或考试安排），确定离开并放弃？')
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (busy.value || unsaved.value) { event.preventDefault(); event.returnValue = '' }
+}
 async function loadCatalog() {
   catalog.value = await api<AcademicCatalog>('/academic/catalog')
+  const classBaseline = JSON.parse(formBaseline.class) as typeof classForm
+  if (!classForm.termId) classBaseline.termId = catalog.value.terms[0]?.id ?? 0
+  if (!classForm.courseId) classBaseline.courseId = catalog.value.courses[0]?.id ?? 0
   classForm.termId ||= catalog.value.terms[0]?.id ?? 0
   classForm.courseId ||= catalog.value.courses[0]?.id ?? 0
+  formBaseline.class = JSON.stringify(classBaseline)
   if (!catalog.value.classes.some(c => c.id === selected.value)) selected.value = catalog.value.classes[0]?.id ?? 0
 }
 async function loadDetail() {
@@ -100,8 +118,16 @@ async function loadDetail() {
     const exam = result.exams[0]
     Object.assign(examForm, { campusId: exam?.campusId ?? 1, roomId: exam?.roomId ?? 0, startsAt: exam?.startsAt.slice(0, 16) ?? '', endsAt: exam?.endsAt.slice(0, 16) ?? '', version: exam?.version ?? 0 })
     lessonForm.teacherId = result.instructors[0]?.id ?? 0
+    markSaved('exam')
+    const lessonBaseline = JSON.parse(formBaseline.lesson) as typeof lessonForm
+    lessonBaseline.teacherId = lessonForm.teacherId
+    formBaseline.lesson = JSON.stringify(lessonBaseline)
   } catch (cause) { if (request === sequence) error.value = errorMessage(cause) }
-  finally { if (request === sequence) loading.value = false }
+  finally {
+    if (request === sequence) {
+      loading.value = false
+    }
+  }
 }
 async function load() {
   loading.value = true; error.value = ''
@@ -109,25 +135,25 @@ async function load() {
   catch (cause) { error.value = errorMessage(cause) }
   finally { loading.value = false }
 }
-async function mutate(action: () => Promise<unknown>, message: string) {
+async function mutate(action: () => Promise<unknown>, message: string, savedForm?: FormName) {
   if (busy.value) return
   busy.value = true; error.value = ''; success.value = ''
-  try { await action(); await loadCatalog(); await loadDetail(); success.value = message }
+  try { await action(); if (savedForm) markSaved(savedForm); await loadCatalog(); await loadDetail(); success.value = message }
   catch (cause) { error.value = errorMessage(cause) }
   finally { busy.value = false }
 }
-function createTerm() { void mutate(() => api('/academic/terms', { method: 'POST', body: JSON.stringify(termForm) }), '学期已建立。') }
-function createCourse() { void mutate(() => api('/academic/courses', { method: 'POST', body: JSON.stringify(courseForm) }), '课程已建立。') }
+function createTerm() { void mutate(() => api('/academic/terms', { method: 'POST', body: JSON.stringify(termForm) }), '学期已建立。', 'term') }
+function createCourse() { void mutate(() => api('/academic/courses', { method: 'POST', body: JSON.stringify(courseForm) }), '课程已建立。', 'course') }
 function createClass() {
   void mutate(async () => {
     const result = await api<TeachingDetail>('/academic/classes', { method: 'POST', body: JSON.stringify(classForm) })
     selected.value = result.info.id; classForm.name = ''; classForm.teacherIds = []; classForm.studentIds = []
-  }, '教学班与授课、成员关系已建立。')
+  }, '教学班与授课、成员关系已建立。', 'class')
 }
 function relation(userId: number, kind: 'members' | 'instructors', active: boolean) {
   void mutate(() => api(`/academic/classes/${selected.value}/${kind}`, { method: 'POST', body: JSON.stringify({ userId, active }) }), active ? '教学关系已生效。' : '教学关系已停用，后续访问不再授权。')
 }
-function addLesson() { void mutate(() => api(`/academic/classes/${selected.value}/lessons`, { method: 'POST', body: JSON.stringify({ teacherId: lessonForm.teacherId, roomId: lessonForm.roomId, startsAt: lessonForm.startsAt, endsAt: lessonForm.endsAt }) }), '课程安排已添加，学生课表与通知已同步。') }
+function addLesson() { void mutate(() => api(`/academic/classes/${selected.value}/lessons`, { method: 'POST', body: JSON.stringify({ teacherId: lessonForm.teacherId, roomId: lessonForm.roomId, startsAt: lessonForm.startsAt, endsAt: lessonForm.endsAt }) }), '课程安排已添加，学生课表与通知已同步。', 'lesson') }
 function parseGrades() {
   if (!detail.value) throw new Error('请先选择教学班。')
   const lines = gradeText.value.trim().split(/\r?\n/).filter(line => line.trim())
@@ -153,7 +179,7 @@ async function previewGrades() {
 function importGrades() {
   if (!validatedRows.value) return
   const rows = [...validatedRows.value]
-  void mutate(() => api(`/academic/classes/${selected.value}/grades/import`, { method: 'POST', body: JSON.stringify({ rows, preview: false }) }), '成绩草稿已保存。逐条发布后学生才可查看。')
+  void mutate(async () => { await api(`/academic/classes/${selected.value}/grades/import`, { method: 'POST', body: JSON.stringify({ rows, preview: false }) }); gradeText.value = '' }, '成绩草稿已保存。逐条发布后学生才可查看。')
 }
 async function csvFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0]
@@ -170,7 +196,9 @@ function template() {
 function gradeState(grade: AcademicGrade) { void mutate(() => api(`/academic/grades/${grade.id}/state`, { method: 'POST', body: JSON.stringify({ status: grade.status === 'DRAFT' ? 'PUBLISHED' : 'DRAFT', version: grade.version }) }), grade.status === 'DRAFT' ? '成绩已发布并通知对应学生。' : '成绩已撤下，学生查询已更新。') }
 function saveExam() { void mutate(() => api(`/academic/classes/${selected.value}/exam`, { method: 'PUT', body: JSON.stringify({ roomId: examForm.roomId, startsAt: examForm.startsAt, endsAt: examForm.endsAt, version: examForm.version }) }), '考试草稿已保存，核对后可发布。') }
 function examState(exam: AcademicExam) { void mutate(() => api(`/academic/exams/${exam.id}/state`, { method: 'POST', body: JSON.stringify({ status: exam.status === 'DRAFT' ? 'PUBLISHED' : 'DRAFT', version: exam.version }) }), exam.status === 'DRAFT' ? '考试已发布，学生查询与通知已同步。' : '考试已撤下，学生查询与通知已同步。') }
-onMounted(load)
+onMounted(() => { window.addEventListener('beforeunload', beforeUnload); void load() })
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeRouteLeave(confirmLeave)
 </script>
 
 <template>

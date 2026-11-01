@@ -1,5 +1,6 @@
-export interface PaymentCategory { code: string; name: string; description: string }
+export interface PaymentCategory { code: string; name: string; description: string; enabled?: boolean; version?: number }
 export interface PaymentBill {
+  dormRecharge?: boolean
   id: number; orderNo: string; studentId: number; studentUsername: string; studentName: string
   title: string; categoryCode: string; categoryName: string; amountCents: number; status: string; tradeNo: string | null
   workflowStatus: string; billingPeriod: string; dueDate: string | null; basis: string; standardId: number | null
@@ -11,13 +12,15 @@ export interface PaymentHistory { id: number; action: string; actorName: string;
 export function paymentWorkflowText(state: string): string {
   return ({ DRAFT: '草稿', PENDING_REVIEW: '待财务复核', RETURNED: '已退回', PUBLISHED: '已发布', VOIDED: '已作废', WAIVED: '已减免' } as Record<string, string>)[state] ?? '待核实'
 }
-export function paymentSettlementText(bill: { status: string; refundStatus?: string }): string {
+export function paymentSettlementText(bill: { status: string; refundStatus?: string; workflowStatus?: string }): string {
   if (bill.refundStatus === 'REFUNDED') return '已退款'
   if (bill.refundStatus === 'REQUESTED') return '退款待复核'
   if (bill.refundStatus === 'PROCESSING') return '退款待确认'
+  if (bill.status === 'UNPAID' && (bill.workflowStatus === 'VOIDED' || bill.workflowStatus === 'WAIVED')) return '无需支付'
   return bill.status === 'PAID' ? '已支付' : bill.status === 'UNPAID' ? '待支付' : '待核实'
 }
 export const paymentActionLabels: Record<string, string> = {
+  RECHARGE_CREATE: '创建宿舍充值订单',
   CREATE: '创建草稿', UPDATE: '修改草稿', SUBMIT: '提交复核', APPROVE: '复核通过', RETURN: '退回补充', VOID_DRAFT: '作废草稿',
   REMIND: '发送缴费提醒', RECONCILE: '核验支付结果', REQUEST_VOID: '申请作废', REQUEST_WAIVER: '申请减免', REQUEST_REFUND: '申请退款',
   SETTLE: '支付确认', VOID_REQUESTED: '申请作废', WAIVER_REQUESTED: '申请减免', REFUND_REQUESTED: '申请退款',
@@ -59,3 +62,26 @@ export function safeAlipayQrCode(value: string): boolean {
 }
 
 export const PAYMENT_POLL_MS = 3000
+
+export interface PortalPaymentServiceEntry {
+  to: string; title: string; description: string; categoryKey: string; category: string
+  badge: string; badgeType: 'primary' | 'warning' | 'success' | 'neutral' | 'danger'; theme: string
+}
+
+/** 学生首页服务目录的缴费入口目标：与路由 /portal/payments 保持一致。 */
+export const PORTAL_PAYMENT_ROUTE = '/portal/payments'
+
+/** 缴费大厅服务卡：只面向持 portal:read 的学生账号，无权限账号不生成入口。 */
+export function portalPaymentServiceEntry(permissions: readonly string[]): PortalPaymentServiceEntry | null {
+  if (!permissions.includes('portal:read')) return null
+  return {
+    to: PORTAL_PAYMENT_ROUTE,
+    title: '缴费大厅',
+    description: '查看本人应缴费用，核对收费依据并在沙箱完成支付，跟进退款与缴费凭证',
+    categoryKey: 'AFFAIR',
+    category: '办事消息',
+    badge: '在线缴费',
+    badgeType: 'primary',
+    theme: 'emerald',
+  }
+}

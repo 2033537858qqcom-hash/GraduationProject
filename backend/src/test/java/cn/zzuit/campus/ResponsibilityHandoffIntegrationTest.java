@@ -104,11 +104,53 @@ class ResponsibilityHandoffIntegrationTest {
   long u=staff("TEACHER");assertThat(login("admin").send("POST",root(u)+"/state",Map.of("enabled",false,"emergency",true,"version",0,"reason","")).statusCode()).isEqualTo(400);
   ok(state(u,false,true));assertThat(state(u,true,true).statusCode()).isEqualTo(400);ok(state(u,true,false));
  }
+ @Test void lastContentReviewerMustHandoffBeforeNormalDisable()throws Exception{
+  long admin=userId("admin");long target=staff("CONTENT_REVIEWER");long content=inReviewContent(admin);
+  var suspended=disableOtherContentReviewers(admin,target);
+  try{
+   assertThat(state(target,false,false).statusCode()).as("仍有待审内容的最后一名审核人不能被普通停用").isEqualTo(409);
+   staff("CONTENT_REVIEWER");
+   ok(state(target,false,false));
+  }finally{reenableContentReviewers(suspended);deleteContent(content);}
+ }
+ @Test void losingLastContentReviewerRoleRequiresHandoff()throws Exception{
+  long admin=userId("admin");long target=staff("CONTENT_REVIEWER");long content=inReviewContent(admin);
+  var suspended=disableOtherContentReviewers(admin,target);
+  try{
+   var result=login("admin").send("PUT",root(target),Map.of("fullName","内容审核交接人","identityNumber","content-handoff-"+target,"campusId",1,"departmentId",1,"roles",java.util.List.of("TEACHER"),"version",0,"reason","移除内容审核岗位"));
+   assertThat(result.statusCode()).as(result.body()).isEqualTo(409);
+   assertThat(ok(login("admin").get(root(target)+"/responsibilities")).path("blockingCount").asLong()).isEqualTo(1);
+  }finally{reenableContentReviewers(suspended);deleteContent(content);}
+ }
+ @Test void contentExceptionCountsPendingReviewsWithoutAnyReviewer()throws Exception{
+  long admin=userId("admin");long before=exception("CONTENT");long content=inReviewContent(admin);
+  var suspended=disableOtherContentReviewers(admin,-1);
+  try{
+   long expected=jdbc.sql("SELECT COUNT(*) FROM website_content WHERE workflow_status='IN_REVIEW' AND created_by=:a").param("a",admin).query(Long.class).single();
+   assertThat(expected).isGreaterThanOrEqualTo(1);
+   assertThat(exception("CONTENT")).as("缺少审核人员的官网待审内容应计入责任异常").isEqualTo(expected);
+   assertThat(ok(login("admin").get("/api/admin/foundation/responsibility-exceptions")).toString()).contains("官网待审内容缺少审核人员","条内容","/admin/content");
+  }finally{reenableContentReviewers(suspended);deleteContent(content);}
+  assertThat(exception("CONTENT")).isEqualTo(before);
+ }
  @Test void legacyStatePayloadWithoutEmergencyKeepsNormalSemantics()throws Exception{
   long u=staff("TEACHER");ok(login("admin").send("POST",root(u)+"/state",Map.of("enabled",false,"version",0,"reason","普通停用")));
  }
  private String root(long u){return "/api/admin/foundation/users/"+u;}
  private HttpResponse<String> state(long u,boolean enabled,boolean emergency)throws Exception{return login("admin").send("POST",root(u)+"/state",Map.of("enabled",enabled,"emergency",emergency,"version",jdbc.sql("SELECT version FROM app_user WHERE id=:u").param("u",u).query(Integer.class).single(),"reason","岗位交接测试"));}
+ private long userId(String name)throws Exception{return jdbc.sql("SELECT id FROM app_user WHERE username=:n").param("n",name).query(Long.class).single();}
+ private long inReviewContent(long creator){
+  String slug="handoff-content-"+UUID.randomUUID();
+  jdbc.sql("INSERT INTO website_content(slug,category,title,summary,body,source_type,status,created_by,workflow_status) VALUES(:s,'NOTICE','责任交接待审内容','责任交接测试摘要','责任交接测试正文','DEMO','IN_REVIEW',:c,'IN_REVIEW')").param("s",slug).param("c",creator).update();
+  return jdbc.sql("SELECT id FROM website_content WHERE slug=:s").param("s",slug).query(Long.class).single();
+ }
+ private java.util.List<Long> disableOtherContentReviewers(long creator,long keep)throws Exception{
+  var ids=jdbc.sql("SELECT DISTINCT u.id FROM app_user u JOIN user_role ur ON ur.user_id=u.id JOIN role_permission rp ON rp.role_code=ur.role_code WHERE u.enabled=TRUE AND rp.permission_code='content:review' AND u.id<>:creator AND u.id<>:keep ORDER BY u.id").param("creator",creator).param("keep",keep).query(Long.class).list();
+  for(long id:ids) ok(state(id,false,true));
+  return ids;
+ }
+ private void reenableContentReviewers(java.util.List<Long> ids)throws Exception{for(long id:ids) ok(state(id,true,false));}
+ private void deleteContent(long id){jdbc.sql("DELETE FROM website_content WHERE id=:c").param("c",id).update();}
  private long exception(String code)throws Exception{var items=ok(login("admin").get("/api/admin/foundation/responsibility-exceptions"));for(var item:items)if(item.path("code").asText().equals(code))return item.path("count").asLong();throw new AssertionError(code);}
  private long staff(String role){String n="handoff_"+UUID.randomUUID().toString().substring(0,8);jdbc.sql("INSERT INTO app_user(username,password_hash,full_name,identity_number,campus_id,department_id) SELECT :n,password_hash,'交接人员',:n,1,1 FROM app_user WHERE username='teacher1001'").param("n",n).update();long u=jdbc.sql("SELECT id FROM app_user WHERE username=:n").param("n",n).query(Long.class).single();jdbc.sql("INSERT INTO user_role(user_id,role_code) VALUES(:u,:r)").param("u",u).param("r",role).update();return u;}
  private long venue(long u)throws Exception{var input=new java.util.HashMap<String,Object>();input.put("campusId",1);input.put("code","HAND-"+UUID.randomUUID());input.put("name","交接资源");input.put("category","VENUE");input.put("buildingName","测试楼");input.put("locationDetail","测试房间");input.put("capacity",20);input.put("enabled",true);input.put("managerUserIds",java.util.List.of(u));return ok(login("affairs1001").send("POST","/api/reservations/venues",input)).path("id").asLong();}

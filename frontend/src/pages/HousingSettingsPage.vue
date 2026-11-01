@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { Building2, Plus, RefreshCw } from '@lucide/vue'
 import { api, errorMessage } from '../lib/api'
 import BaseSelect from '../components/BaseSelect.vue'
@@ -78,13 +79,24 @@ async function refresh() {
   finally { loading.value = false }
 }
 function openState(target: NonNullable<typeof stateTarget.value>) { stateTarget.value = target; stateReason.value = ''; error.value = ''; stateDialog.value?.showModal() }
+function closeState() { stateDialog.value?.close(); stateTarget.value = null; stateReason.value = '' }
+const unsaved = computed(() => Object.entries(buildingForm.value).some(([key, value]) => key === 'provenance' ? value !== 'DEMO' : Boolean(value)) || Object.values(roomForm.value).some(Boolean)
+  || Object.values(bedForm.value).some(Boolean) || Object.values(scopeForm.value).some(Boolean)
+  || Boolean(stateTarget.value && stateReason.value.trim()))
+function confirmLeave() {
+  if (busy.value) return false
+  return !unsaved.value || window.confirm('还有未保存的宿舍资源输入（楼栋、房间、床位、负责人或调整原因），确定离开并放弃？')
+}
+function beforeUnload(event: BeforeUnloadEvent) {
+  if (busy.value || unsaved.value) { event.preventDefault(); event.returnValue = '' }
+}
 async function saveState() {
   if (!stateTarget.value) return
   busy.value = true
   error.value = ''
   try {
     await api('/admin/housing/' + stateTarget.value.kind + '/' + stateTarget.value.id + '/state', { method: 'POST', body: JSON.stringify({ enabled: !stateTarget.value.enabled, version: stateTarget.value.version, reason: stateReason.value.trim() }) })
-    stateDialog.value?.close()
+    closeState()
     success.value = '状态已更新。'
     await refresh()
   } catch (cause) { error.value = errorMessage(cause) }
@@ -151,7 +163,9 @@ async function maintain(bed: DormBed) {
   finally { busy.value = false }
 }
 async function changeBuilding() { await loadRooms(); await loadBeds(); await loadStays() }
-onMounted(refresh)
+onMounted(() => { window.addEventListener('beforeunload', beforeUnload); void refresh() })
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeRouteLeave(confirmLeave)
 </script>
 <template>
   <div class="repair-settings housing-page">
@@ -165,6 +179,6 @@ onMounted(refresh)
     <section v-else-if="tab === 'BED'"><div class="repair-editor-form"><label>所属楼栋<BaseSelect v-model="buildingId" :options="buildingSimpleOptions" :disabled="busy" @change="changeBuilding" /></label><label>所属房间<BaseSelect v-model="roomId" :options="roomOptions" :disabled="busy" @change="loadBeds" /></label></div><form class="portal-panel repair-editor" @submit.prevent="createBed"><h2>新建床位</h2><div class="repair-editor-form"><label>床位编号<input v-model="bedForm.code" required maxlength="32" pattern="[A-Za-z0-9_\-]+" :disabled="busy || !roomId" /></label><label>床位名称<input v-model="bedForm.label" required maxlength="40" :disabled="busy || !roomId" placeholder="例如 1 号床" /></label><label class="repair-form-wide">配置原因<textarea v-model="bedForm.reason" required maxlength="200" rows="2" :disabled="busy" /></label><div class="form-actions repair-form-wide"><button class="button primary compact" :disabled="busy || !roomId">保存床位</button></div></div></form><div class="repair-card-grid"><article v-for="item in beds" :key="item.id" class="portal-panel repair-config-card"><div class="section-heading"><h2>{{ item.label }}</h2><span class="repair-status" :class="{ inactive: item.status !== 'VACANT' || !item.enabled }">{{ housingBedStatus[item.status] ?? item.status }}{{ item.enabled ? '' : ' · 停用' }}</span></div><p class="muted">{{ item.code }}<template v-if="item.occupantName"> · {{ item.occupantName }} · {{ item.occupantUsername }}</template></p><div class="repair-card-actions"><button class="text-button" type="button" :disabled="busy" @click="openState({ kind: 'beds', id: item.id, enabled: item.enabled, version: item.version, name: item.label })">{{ item.enabled ? '停用床位' : '启用床位' }}</button><button v-if="item.status === 'VACANT' || item.status === 'MAINTENANCE'" class="text-button" type="button" :disabled="busy" @click="maintain(item)">{{ item.status === 'MAINTENANCE' ? '恢复为空闲' : '设为维护' }}</button></div></article></div></section>
     <section v-else-if="tab === 'SCOPE'"><form class="portal-panel repair-editor" @submit.prevent="createScope"><h2>指定楼栋负责人</h2><div class="repair-editor-form"><label>宿管<BaseSelect v-model="scopeForm.userId" :options="scopeManagerOptions" :disabled="busy" /></label><label>宿舍楼<BaseSelect v-model="scopeForm.buildingId" :options="scopeBuildingOptions" :disabled="busy" /></label><label class="repair-form-wide">配置原因<textarea v-model="scopeForm.reason" required maxlength="200" rows="2" :disabled="busy" /></label><div class="form-actions repair-form-wide"><button class="button primary compact" :disabled="busy">保存负责人</button></div></div></form><div class="repair-card-grid"><article v-for="item in scopes" :key="item.id" class="portal-panel repair-config-card"><div class="section-heading"><h2>{{ item.userName }}</h2><span class="repair-status" :class="{ inactive: !item.effective }">{{ item.effectivenessMessage }}</span></div><p>{{ item.campusName }} · {{ item.buildingName }}</p><button class="text-button" type="button" :disabled="busy" @click="openState({ kind: 'scopes', id: item.id, enabled: item.enabled, version: item.version, name: item.userName })">{{ item.enabled ? '停用负责范围' : '启用负责范围' }}</button></article></div></section>
     <section v-else><label>宿舍楼<BaseSelect v-model="buildingId" :options="buildingSimpleOptions" @change="loadStays" /></label><p v-if="!stays.length" class="empty-state">这座楼还没有住宿记录。</p><ul v-else class="repair-history-list"><li v-for="item in stays" :key="item.id"><strong>{{ item.studentName }} · {{ item.studentUsername }}</strong><p>{{ item.buildingName }} · {{ item.roomName }} · {{ item.bedLabel }} · {{ item.status === 'CURRENT' ? '在住' : '已退宿' }}</p><small>{{ item.endReason }}</small></li></ul></section>
-    <dialog ref="stateDialog" class="foundation-dialog" @cancel.prevent="stateDialog?.close()"><h2>{{ stateTarget?.enabled ? '停用' : '启用' }}{{ stateTarget?.name }}</h2><form class="editor-form" @submit.prevent="saveState"><label>调整原因<textarea v-model="stateReason" required maxlength="200" rows="3" :disabled="busy" /></label><div class="form-actions"><button class="button primary compact" :disabled="busy">确认</button><button class="button compact" type="button" @click="stateDialog?.close()">取消</button></div></form></dialog>
+    <dialog ref="stateDialog" class="foundation-dialog" @cancel.prevent="closeState()"><h2>{{ stateTarget?.enabled ? '停用' : '启用' }}{{ stateTarget?.name }}</h2><form class="editor-form" @submit.prevent="saveState"><label>调整原因<textarea v-model="stateReason" required maxlength="200" rows="3" :disabled="busy" /></label><div class="form-actions"><button class="button primary compact" :disabled="busy">确认</button><button class="button compact" type="button" @click="closeState()">取消</button></div></form></dialog>
   </div>
 </template>

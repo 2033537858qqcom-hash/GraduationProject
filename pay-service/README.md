@@ -7,7 +7,11 @@ Spring Boot 3.5 / JDK 17 / 官方 `alipay-sdk-java`，嵌入式 H2 文件库，J
 |---|---|---|
 | POST | `/internal/payments` | `{orderNo, amount, subject}`，调用 `alipay.trade.precreate` 返回 `qrCode`；同一 `orderNo` 幂等，金额不同返回 409 |
 | GET | `/internal/payments/{orderNo}` | 返回状态 `PENDING/PAID/CLOSED`；PENDING 时主动 `alipay.trade.query`，超时自动 `alipay.trade.close` |
+| POST | `/internal/payments/{orderNo}/close` | 主动关单，请求体 `{amount, subject}`；PENDING 才执行平台关单，订单不存在时先写关闭占位再关单，金额不一致返回 409 |
+| POST | `/internal/payments/{orderNo}/refunds` | 整单退款，请求体 `{requestNo, amount, reason}`；`requestNo` 幂等，仅 `PAID` 订单可退，累计退款不得超过实付金额，未确认时返回 502 供原请求重试 |
 | POST | `/api/alipay/notify` | 支付宝异步通知：RSA2 验签、校验 app_id / out_trade_no / total_amount / trade_status，事务提交后才返回 `success` |
+
+> 主后端 `RemotePayClient` 已调用 `create` / `status` / `close` / `refund` 四个内部接口（remote 渠道）。close 用于未支付账单的作废/关闭，refund 用于财务复核通过后的退款执行；两条链路均使用同一套 HMAC-SHA256 内部签名。`/internal/**` 之外的接口只有 `/api/alipay/notify`，不对外暴露订单查询。
 
 ### /internal/** 鉴权（HMAC-SHA256）
 请求头：`X-Pay-Timestamp`（Unix 秒）、`X-Pay-Nonce`（8-64 位 `[A-Za-z0-9-]`）、`X-Pay-Signature`：

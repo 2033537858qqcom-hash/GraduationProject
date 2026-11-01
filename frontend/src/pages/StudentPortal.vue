@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
 import {
   ArrowUpRight,
   BedDouble,
@@ -15,6 +14,7 @@ import {
   GraduationCap,
   MapPin,
   Search,
+  Wallet,
   Wrench,
   X,
 } from '@lucide/vue'
@@ -23,6 +23,7 @@ import ServiceEntry from '../components/ServiceEntry.vue'
 import { api, errorMessage } from '../lib/api'
 import type { Overview, Notice } from '../types'
 import { safeAffairDestination } from '../lib/navigation'
+import { portalPaymentServiceEntry } from '../lib/payment'
 import { useToast } from '../composables/useToast'
 import { useSlidingIndicator } from '../composables/useSlidingIndicator'
 import { schoolMedia } from '../content/schoolMedia'
@@ -40,7 +41,6 @@ interface PortalServiceItem {
   theme: string
 }
 
-const route = useRoute()
 const toast = useToast()
 const overview = ref<Overview | null>(null)
 const loading = ref(true)
@@ -55,7 +55,6 @@ const { indicatorStyle: categoryIndicatorStyle } = useSlidingIndicator(
   { activeSelector: '.service-segment-btn.active' }
 )
 
-const view = computed(() => route.path.endsWith('timetable') ? 'timetable' : route.path.endsWith('notices') ? 'notices' : 'home')
 const date = new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', month: 'long', day: 'numeric', weekday: 'long' }).format(new Date())
 
 const commonServices = computed(() => [
@@ -73,7 +72,8 @@ const categories = [
   { id: 'CAMPUS', label: '校园导览' },
 ]
 
-const services = computed<PortalServiceItem[]>(() => [
+const services = computed<PortalServiceItem[]>(() => {
+  const items: PortalServiceItem[] = [
   { to: '/portal/schedule', title: '我的校园日程', description: '汇总课程、考试、请假与预约，核对一周安排和时间重叠', icon: CalendarDays, categoryKey: 'ACADEMIC', category: '学业教学', badge: '统一日程', badgeType: 'primary', theme: 'blue' },
   {
     to: '/portal/reservations',
@@ -207,7 +207,11 @@ const services = computed<PortalServiceItem[]>(() => [
     badgeType: 'success' as const,
     theme: 'emerald',
   },
-])
+  ]
+  const payment = portalPaymentServiceEntry(overview.value?.profile.permissions ?? [])
+  if (payment) items.push({ ...payment, icon: Wallet })
+  return items
+})
 
 const filteredServices = computed(() => {
   const q = serviceSearch.value.trim().toLowerCase()
@@ -268,7 +272,7 @@ onMounted(load)
     </div>
     <div v-if="error" class="alert" role="alert">{{ error }} <button class="text-button" @click="load">重新加载</button></div>
     <template v-if="overview && !loading">
-      <section v-if="view === 'home'" class="student-welcome portal-welcome-feature">
+      <section class="student-welcome portal-welcome-feature">
         <div class="portal-welcome-copy">
           <span class="portal-context">CAMPUS, EVERY DAY <span>{{ date }}</span></span>
           <h1>{{ overview.profile.fullName }}，<br>欢迎回到校园。</h1>
@@ -282,27 +286,27 @@ onMounted(load)
           <span><small>一方校园，万千日常</small>去校园里，发现更多 <ArrowUpRight :size="16" /></span>
         </RouterLink>
       </section>
-      <section v-if="view === 'home'" class="student-daily-focus" aria-label="我的校园快捷入口">
+      <section class="student-daily-focus" aria-label="我的校园快捷入口">
         <RouterLink to="/portal/schedule"><CalendarDays :size="20" /><div><strong>这一周，心中有数</strong><span>课程、考试与预约，一起查看</span></div><ArrowUpRight :size="16" /></RouterLink>
         <RouterLink to="/portal/notices"><Bell :size="20" /><div><strong>个人消息 <small v-if="overview.unreadCount">{{ overview.unreadCount }} 条未读</small></strong><span>{{ overview.unreadCount ? '查看与你有关的新消息' : '当前没有未读消息' }}</span></div><ArrowUpRight :size="16" /></RouterLink>
         <RouterLink to="/portal/affairs"><ClipboardList :size="20" /><div><strong>每一件事，有迹可循</strong><span>申请、补充与办理进度</span></div><ArrowUpRight :size="16" /></RouterLink>
       </section>
-      <section v-if="view === 'home' && commonServices.length" class="student-common-services" aria-labelledby="common-services-title"><div class="student-section-label"><h2 id="common-services-title">常用服务</h2><a href="#student-services-heading">全部服务 <ArrowUpRight :size="13" /></a></div><div class="student-common-grid"><RouterLink v-for="service in commonServices" :key="service.to" :to="service.to"><component :is="service.icon" :size="21" /><span><strong>{{ service.title }}</strong><small>{{ service.detail }}</small></span><ArrowUpRight :size="14" /></RouterLink></div></section>
-      <div class="portal-content-grid" :class="{ single: view !== 'home' }">
-        <section v-if="view !== 'notices'" class="portal-panel">
-          <div class="section-heading"><div><span class="eyebrow">课程安排</span><h2>{{ view === 'home' ? '近期课程' : '每周课程表' }}</h2></div><RouterLink v-if="view === 'home'" to="/portal/learning/timetable">查看完整课表 <ArrowUpRight :size="14" /></RouterLink></div>
+      <section v-if="commonServices.length" class="student-common-services" aria-labelledby="common-services-title"><div class="student-section-label"><h2 id="common-services-title">常用服务</h2><a href="#student-services-heading">全部服务 <ArrowUpRight :size="13" /></a></div><div class="student-common-grid"><RouterLink v-for="service in commonServices" :key="service.to" :to="service.to"><component :is="service.icon" :size="21" /><span><strong>{{ service.title }}</strong><small>{{ service.detail }}</small></span><ArrowUpRight :size="14" /></RouterLink></div></section>
+      <div class="portal-content-grid">
+        <section class="portal-panel">
+          <div class="section-heading"><div><span class="eyebrow">课程安排</span><h2>近期课程</h2></div><RouterLink to="/portal/learning/timetable">查看完整课表 <ArrowUpRight :size="14" /></RouterLink></div>
           <p v-if="!overview.timetable.length" class="empty-state">当前没有已导入的课程安排。</p>
-          <article v-for="lesson in view === 'home' ? overview.timetable.slice(0,3) : overview.timetable" :key="lesson.id" class="lesson-row">
+          <article v-for="lesson in overview.timetable.slice(0,3)" :key="lesson.id" class="lesson-row">
             <div class="lesson-time"><strong>{{ lessonDate(lesson.startsAt) }}</strong><span>{{ lesson.startsAt.slice(11,16) }}—{{ lesson.endsAt.slice(11,16) }}</span></div>
             <div><h3>{{ lesson.courseName }}</h3><p>{{ lesson.teacherName }} · {{ lesson.classroom }}</p></div>
             <span class="lesson-campus">{{ lesson.campusName }}</span>
           </article>
           <p class="data-note">课表为当前账号的演示安排，不代表学校实际教学计划。</p>
         </section>
-        <section v-if="view !== 'timetable'" class="portal-panel">
-          <div class="section-heading"><div><span class="eyebrow">与你有关 · 未读 {{ overview.unreadCount }} 条</span><h2>{{ view === 'home' ? '个人消息' : '个人消息通知' }}</h2></div><RouterLink v-if="view === 'home'" to="/portal/notices">全部消息 <ArrowUpRight :size="14" /></RouterLink></div>
+        <section class="portal-panel">
+          <div class="section-heading"><div><span class="eyebrow">与你有关 · 未读 {{ overview.unreadCount }} 条</span><h2>个人消息</h2></div><RouterLink to="/portal/notices">全部消息 <ArrowUpRight :size="14" /></RouterLink></div>
           <p v-if="!overview.notices.length" class="empty-state">暂时没有个人消息。</p>
-          <article v-for="notice in view === 'home' ? overview.notices.slice(0, 2) : overview.notices" :key="notice.id" class="notice-row">
+          <article v-for="notice in overview.notices.slice(0, 2)" :key="notice.id" class="notice-row">
             <div class="notice-heading"><h3>{{ notice.title }}</h3><span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span></div>
             <p>{{ notice.body }}</p>
             <time :datetime="notice.createdAt" class="student-notice-date">{{ formatPublicDate(notice.createdAt) }}</time>
@@ -311,7 +315,7 @@ onMounted(load)
           </article>
         </section>
       </div>
-      <section v-if="view === 'home'" class="portal-services" aria-labelledby="student-services-heading">
+      <section class="portal-services" aria-labelledby="student-services-heading">
         <div class="service-hub-header">
           <div class="service-section-heading">
             <div class="service-title-wrap">

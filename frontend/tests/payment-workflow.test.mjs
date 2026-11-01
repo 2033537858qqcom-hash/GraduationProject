@@ -28,4 +28,7 @@ test('billing workflow and actual settlement remain distinct, including refunded
   assert.equal(paymentSettlementText({ status: 'PAID', refundStatus: 'NONE' }), '已支付')
   assert.equal(paymentSettlementText({ status: 'UNPAID', refundStatus: 'NONE' }), '待支付')
   assert.equal(paymentSettlementText({ status: 'UNKNOWN', refundStatus: 'NONE' }), '待核实')
+  assert.equal(paymentSettlementText({ status: 'UNPAID', workflowStatus: 'VOIDED', refundStatus: 'NONE' }), '无需支付')
+  assert.equal(paymentSettlementText({ status: 'UNPAID', workflowStatus: 'WAIVED', refundStatus: 'NONE' }), '无需支付')
+  assert.equal(paymentSettlementText({ status: 'PAID', workflowStatus: 'VOIDED', refundStatus: 'NONE' }), '已支付')
 })

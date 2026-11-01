@@ -41,7 +41,9 @@ public class PaymentReconciliation {
                 if(local.isEmpty()) { result="NOT_FOUND";explanation="本系统未找到该商户订单号"; }
                 else {
                     var bill=repository.load(local.get());billId=bill.id();localAmount=bill.amountCents();
-                    localStatus=bill.refundStatus().equals("REFUNDED")?"REFUNDED":bill.status();var differences=new ArrayList<String>();
+                    localStatus=bill.refundStatus().equals("REFUNDED")?"REFUNDED":
+                        bill.status().equals("UNPAID") && bill.paymentStartedAt()!=null && List.of("VOIDED","WAIVED").contains(bill.workflowStatus())?"CLOSED":bill.status();
+                    var differences=new ArrayList<String>();
                     if(new BigDecimal(value).compareTo(BigDecimal.valueOf(bill.amountCents(),2))!=0) differences.add("金额不一致");
                     if(!normalized.equals(localStatus)) differences.add("支付状态不一致");
                     if((normalized.equals("PAID") || normalized.equals("REFUNDED")) && (tradeNo.isBlank() || !tradeNo.equals(bill.tradeNo()))) differences.add("交易号不一致或缺失");

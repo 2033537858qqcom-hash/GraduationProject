@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { api, ApiError, resetCsrf } from '../lib/api'
 import type { Profile } from '../types'
 import { clearTeachingDrafts } from '../lib/teachingDrafts'
+import { landingPage as resolveLandingPage } from '../lib/landing'
 
 export const currentUser = ref<Profile | null>(null)
 let initialized = false
@@ -49,9 +50,5 @@ export async function logout() {
 }
 
 export function landingPage(profile = currentUser.value) {
-  if (profile?.passwordChangeRequired) return '/account/password'
-  if (profile?.permissions.includes('foundation:manage')) return '/workbench'
-  if (profile?.permissions.includes('portal:read')) return '/portal'
-  if (profile?.permissions.some(permission => permission.startsWith('content:'))) return '/admin/content'
-  return '/workbench'
+  return resolveLandingPage(profile)
 }

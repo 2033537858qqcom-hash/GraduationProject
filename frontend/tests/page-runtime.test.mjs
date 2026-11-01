@@ -50,7 +50,8 @@ test('workbench initializes its task queue before starting filter watchers', asy
 })
 
 for (const path of ['/campus/explore', '/portal', '/portal/learning', '/portal/leave', '/portal/certificates', '/housing/mine',
-  '/repairs/mine', '/academic', '/admin/content', '/admin/foundation', '/admin/resources']) {
+  '/repairs/mine', '/academic', '/admin/content', '/admin/foundation', '/admin/resources',
+  '/finance/payments', '/payment-bases', '/portal/payments']) {
   test(`page setup smoke: ${path}`, async () => {
     const errors = await checkPageSetup(path)
     assert.ifError(errors[0])
@@ -60,6 +61,230 @@ for (const path of ['/campus/explore', '/portal', '/portal/learning', '/portal/l
 test('personal schedule catches unavailable sources during initial load without setup errors', async () => {
  const errors = await checkPageSetup('/portal/schedule')
  assert.ifError(errors[0])
+})
+
+test('dorm recharge requires a server quote and retains the request identity after a network retry', async () => {
+ const oldFetch = globalThis.fetch
+ const commands = [], meter = { id: 7, roomId: 4, building: '1号楼', room: '101', meterCode: 'E101', category: 'ELECTRICITY', standardName: '电价', unitPriceCents: 61, unit: '度', balance: 0, enabled: true, standardStatus: 'ACTIVE', standardAvailable: true, version: 0, standardId: 3 }
+ let attempts = 0
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  if (path === '/api/payments/mine/dorm-recharge' && !options.method) return Response.json({ meters: [meter], history: [] })
+  const payload = JSON.parse(options.body)
+  commands.push({ path, payload })
+  if (path.endsWith('/quote')) return Response.json({ amountCents: 1000, quantity: 16.393442622 })
+  if (path === '/api/payments/mine/dorm-recharge' && ++attempts === 1) throw new Error('network')
+  return Response.json({ id: 12 })
+ }
+ try {
+  const errors = await checkPageSetup('/dorm-recharge-test', undefined, async state => {
+   await state.refresh()
+   state.value.value = '10.00'
+   await state.create()
+   assert.equal(commands.length, 0)
+   await state.preview()
+   assert.equal(state.quote.value.amountCents, 1000)
+   await state.create()
+   assert.equal(state.value.value, '10.00')
+   await state.create()
+   const orders = commands.filter(command => !command.path.endsWith('/quote'))
+   assert.equal(orders.length, 2)
+   assert.equal(orders[0].payload.requestKey, orders[1].payload.requestKey)
+   assert.equal(orders[0].payload.expectedUnitPriceCents, 61)
+   assert.equal(state.value.value, '')
+  })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})
+
+test('fee category creation preserves input and request identity across a retry', async () => {
+ const oldFetch = globalThis.fetch, commands = []
+ let attempts = 0
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  commands.push(JSON.parse(options.body))
+  if (++attempts === 1) throw new Error('network')
+  return Response.json({ code: 'FEE_001', name: '校服费', enabled: true, version: 0 })
+ }
+ try {
+  const errors = await checkPageSetup('/fee-category-test', undefined, async state => {
+   state.form.value = { name: '校服费', description: '校服费用', reason: '建立学校核定的演示收费项目' }
+   await Promise.resolve()
+   await state.create()
+   assert.equal(state.form.value.name, '校服费')
+   await state.create()
+   assert.equal(commands.length, 2)
+   assert.equal(commands[0].requestKey, commands[1].requestKey)
+   assert.equal(state.form.value.name, '')
+  })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})
+
+test('saving reconciliation differences reuses the request identity after a network failure', async () => {
+ const oldFetch = globalThis.fetch, requests = []
+ let attempts = 0
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  if (String(path).includes('/cases?page=')) return Response.json({ items: [], total: 0, page: 1, pageSize: 20 })
+  if (path === '/api/finance/payments/reconciliation/cases' && options.method === 'POST') {
+   requests.push(JSON.parse(options.body))
+   if (++attempts === 1) throw new Error('network')
+   return Response.json({ batchId: 1, items: [{ id: 1 }] })
+  }
+  throw Error(`unexpected ${path}`)
+ }
+ try {
+  const preview={ items: [], matchedCount: 0, differenceCount: 1, notFoundCount: 0, invalidCount: 0, duplicateCount: 0 }
+  const errors = await checkPageSetup('/reconciliation-cases-test', undefined, async state => {
+   await state.save()
+   assert.equal(requests.length, 1)
+   assert.ok(state.error.value)
+   await state.save()
+   assert.equal(requests.length, 2)
+   assert.equal(requests[0].requestKey, requests[1].requestKey)
+   assert.match(state.message.value, /1 项/)
+  }, { csv: '订单号,金额（元）,交易号,支付状态\nTEST-ORDER,1.00,,UNPAID', preview, canManage: true, canReview: false })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})
+
+test('batch billing requires a valid preview and invalidates it after editing', async () => {
+ const oldFetch = globalThis.fetch, commands = []
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  if (options.method === 'POST') {
+   commands.push(path)
+   if (path.endsWith('/batch/preview')) return Response.json({ items: [], validCount: 2, totalAmountCents: 2500, canCreate: true })
+  }
+  throw Error('network disabled')
+ }
+ try {
+  const errors = await checkPageSetup('/finance/payments', undefined, async state => {
+   state.form.value = { ...state.form.value, usernames: '20260001,20260002', categoryCode: 'TUITION', title: '学费', billingPeriod: '测试', dueDate: '2099-01-01', amount: '12.50', basis: '按已核定标准进行收费测试' }
+   await Promise.resolve()
+   await state.saveBill()
+   assert.deepEqual(commands, ['/api/finance/payments/batch/preview'])
+   assert.equal(state.batchPreview.value.canCreate, true)
+   state.form.value.title = '修改后的学费'
+   await Promise.resolve()
+   assert.equal(state.batchPreview.value, null)
+   await state.saveBill()
+   assert.equal(commands.length, 2)
+   assert.equal(commands[1], '/api/finance/payments/batch/preview')
+   await state.saveBill()
+   assert.equal(commands[2], '/api/finance/payments/batch')
+  })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = oldFetch }
+})
+
+test('disabled fee projects stay available for historical bill filters but not new bill creation', async () => {
+ const categories = [{ code: 'TUITION', name: '学费', description: '', enabled: true, version: 0 }, { code: 'FEE_OLD', name: '旧项目', description: '', enabled: false, version: 1 }]
+ const first = await checkPageSetup('/portal/payments', undefined, async state => {
+  state.categories.value = categories
+  state.bills.value = []
+  assert.deepEqual(state.visibleCategories.value.map(item => item.code), ['TUITION'])
+  state.bills.value = [{ categoryCode: 'FEE_OLD', workflowStatus: 'PUBLISHED', status: 'PAID', amountCents: 100 }]
+  assert.deepEqual(state.visibleCategories.value.map(item => item.code), ['TUITION', 'FEE_OLD'])
+ })
+ assert.ifError(first[0])
+ const second = await checkPageSetup('/finance/payments', undefined, async state => {
+  state.catalog.value = { categories, standards: [{ id: 1, categoryCode: 'TUITION', status: 'ACTIVE', available: false }, { id: 2, categoryCode: 'TUITION', status: 'ACTIVE', available: true }] }
+  state.form.value.categoryCode = 'TUITION'
+  assert.deepEqual(state.activeCategories.value.map(item => item.code), ['TUITION'])
+  assert.deepEqual(state.standardsForForm.value.map(item => item.id), [2])
+ })
+ assert.ifError(second[0])
+})
+
+test('switching bills preserves an unsubmitted refund until the user confirms', async () => {
+ const oldConfirm = globalThis.window.confirm
+ let confirmations = 0
+ globalThis.window.confirm = () => { confirmations++; return false }
+ try {
+  const errors = await checkPageSetup('/portal/payments?id=4&tab=details', undefined, async state => {
+   state.selected.value = { id: 4 }
+   state.showRefund.value = true
+   state.refundReason.value = '未提交的退款说明'
+   await state.openBill({ id: 4 })
+   assert.equal(confirmations, 0)
+   assert.equal(state.refundReason.value, '未提交的退款说明')
+   await state.openBill({ id: 5 })
+   assert.equal(confirmations, 1)
+   assert.equal(state.route.query.id, '4')
+   assert.equal(state.showRefund.value, true)
+   assert.equal(state.refundReason.value, '未提交的退款说明')
+   globalThis.window.confirm = () => true
+   await state.openBill({ id: 5 })
+   assert.equal(state.route.query.id, '5')
+   assert.equal(state.showRefund.value, false)
+   assert.equal(state.refundReason.value, '')
+  })
+  assert.ifError(errors[0])
+ } finally { globalThis.window.confirm = oldConfirm }
+})
+
+test('housing settings does not treat the default provenance as unsaved input', async () => {
+ const errors = await checkPageSetup('/admin/housing', undefined, async state => {
+  assert.equal(state.unsaved.value, false)
+  state.buildingForm.value.name = '新楼栋'
+  assert.equal(state.unsaved.value, true)
+ })
+ assert.ifError(errors[0])
+})
+
+test('switching class preserves the unsaved state of other academic forms', async () => {
+ const old = globalThis.fetch
+ globalThis.fetch = async path => {
+  if (String(path) === '/api/academic/catalog') return Response.json({ terms: [{ id: 1 }], courses: [{ id: 1 }], classes: [{ id: 1 }, { id: 2 }], teachers: [], students: [], campuses: [], rooms: [] })
+  if (String(path).startsWith('/api/academic/classes/')) return Response.json({ exams: [], instructors: [{ id: String(path).endsWith('/1') ? 5 : 6 }], info: { termId: 1, memberCount: 0 } })
+  throw Error(`unexpected ${path}`)
+ }
+ try {
+  const errors = await checkPageSetup('/academic', undefined, async state => {
+   for (let i = 0; i < 30; i++) await Promise.resolve()
+   state.courseForm.name = '未保存课程'
+   state.selected.value = 2
+   await state.loadDetail()
+   assert.equal(state.unsaved.value, true)
+   await state.mutate(async () => {}, '已保存其他表单', 'term')
+   assert.equal(state.unsaved.value, true)
+  })
+  assert.ifError(errors[0])
+ } finally { globalThis.fetch = old }
+})
+
+test('deleting the current assistant session refreshes the history list', async () => {
+ const oldFetch = globalThis.fetch, oldDocument = Object.getOwnPropertyDescriptor(globalThis, 'document')
+ const oldConfirm = globalThis.window.confirm
+ globalThis.window.confirm = () => true
+ Object.defineProperty(globalThis, 'document', { configurable: true, value: { hidden: true, documentElement: { scrollTop: 0 }, addEventListener() {}, removeEventListener() {} } })
+ const item = id => ({ id, title: `session ${id}`, updatedAt: '2026-10-31T10:00:00' })
+ const detail = id => ({ session: item(id), turns: [], tasks: [], hasOlder: false })
+ globalThis.fetch = async (path, options = {}) => {
+  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
+  if (path === '/api/assistant/sessions/1' && options.method === 'DELETE') return new Response(null, { status: 204 })
+  if (String(path).startsWith('/api/assistant/sessions?page=')) return Response.json({ items: [item(2)], total: 1, page: 1, pageSize: 10 })
+  if (path === '/api/assistant/sessions/2') return Response.json(detail(2))
+  throw Error(`unexpected ${path}`)
+ }
+ try {
+  const errors = await checkPageSetup('/assistant-test', undefined, async state => {
+   state.session.value = detail(1)
+   state.sessionList.value = { items: [item(1), item(2)], total: 2, page: 1, pageSize: 10 }
+   state.task.value = 'HISTORY'
+   await state.deleteSession(item(1))
+   assert.deepEqual(state.sessionList.value.items.map(value => value.id), [2])
+   assert.equal(state.session.value.session.id, 2)
+  })
+  assert.ifError(errors[0])
+ } finally {
+  globalThis.fetch = oldFetch
+  globalThis.window.confirm = oldConfirm
+  if (oldDocument) Object.defineProperty(globalThis, 'document', oldDocument)
+  else delete globalThis.document
+ }
 })
 
 async function reservationNavigationRequests(destination) {
@@ -123,34 +348,4 @@ test('west campus return keeps the independent sandbox and selected west library
  })
  assert.ifError(errors[0])
  assert.equal(inspected, true)
-})
-
-test('batch billing requires a valid preview and invalidates it after editing', async () => {
- const oldFetch = globalThis.fetch, commands = []
- globalThis.fetch = async (path, options = {}) => {
-  if (path === '/api/auth/csrf') return Response.json({ headerName: 'X-CSRF-TOKEN', token: 'test' })
-  if (options.method === 'POST') {
-   commands.push(path)
-   if (path.endsWith('/batch/preview')) return Response.json({ items: [], validCount: 2, totalAmountCents: 2500, canCreate: true })
-  }
-  throw Error('network disabled')
- }
- try {
-  const errors = await checkPageSetup('/finance/payments', undefined, async state => {
-   state.form.value = { ...state.form.value, usernames: '20260001,20260002', categoryCode: 'TUITION', title: '学费', billingPeriod: '测试', dueDate: '2099-01-01', amount: '12.50', basis: '按已核定标准进行收费测试' }
-   await Promise.resolve()
-   await state.saveBill()
-   assert.deepEqual(commands, ['/api/finance/payments/batch/preview'])
-   assert.equal(state.batchPreview.value.canCreate, true)
-   state.form.value.title = '修改后的学费'
-   await Promise.resolve()
-   assert.equal(state.batchPreview.value, null)
-   await state.saveBill()
-   assert.equal(commands.length, 2)
-   assert.equal(commands[1], '/api/finance/payments/batch/preview')
-   await state.saveBill()
-   assert.equal(commands[2], '/api/finance/payments/batch')
-  })
-  assert.ifError(errors[0])
- } finally { globalThis.fetch = oldFetch }
 })

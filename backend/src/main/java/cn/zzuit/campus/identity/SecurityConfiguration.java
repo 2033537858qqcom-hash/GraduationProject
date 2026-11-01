@@ -38,7 +38,7 @@ public class SecurityConfiguration {
             .securityContext(context -> context.securityContextRepository(contexts))
             .csrf(config -> config.csrfTokenRepository(csrf).ignoringRequestMatchers(request ->
                 "POST".equals(request.getMethod()) && "/api/payments/alipay/notify".equals(request.getRequestURI())))
-            .addFilterBefore(new cn.zzuit.campus.common.OperationLoggingFilter(), AuthorizationFilter.class)
+            .addFilterBefore(new cn.zzuit.campus.common.OperationLoggingFilter(), org.springframework.security.web.access.ExceptionTranslationFilter.class)
             .addFilterBefore(new LiveIdentityFilter(identities,contexts),AuthorizationFilter.class)
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/payments/alipay/notify").permitAll()
@@ -67,6 +67,8 @@ public class SecurityConfiguration {
                 .requestMatchers("/api/repairs/mine", "/api/repairs/mine/**").hasAuthority("repair:apply")
                 .requestMatchers("/api/repairs/dispatch", "/api/repairs/dispatch/**").hasAuthority("repair:dispatch")
                 .requestMatchers("/api/repairs/work", "/api/repairs/work/**").hasAuthority("repair:work")
+                .requestMatchers("/api/reservations", "/api/reservations/**")
+                    .hasAnyAuthority("reservation:apply", "reservation:review", "reservation:manage")
                 .requestMatchers("/api/assistant/**").hasAuthority("agent:query")
                 .requestMatchers("/api/admin/content", "/api/admin/content/**").hasAnyAuthority("content:edit", "content:review")
                 .requestMatchers("/api/admin/**").denyAll()

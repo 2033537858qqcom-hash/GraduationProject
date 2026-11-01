@@ -138,10 +138,30 @@ async function newSession() {
   } catch (cause) { if (current === sessionGeneration) error.value = errorMessage(cause) }
   finally { if (current === sessionGeneration) sessionLoading.value = false }
 }
+async function deleteSession(item: AssistantSession) {
+  if (busy.value || preparingDraft.value || savingDraft.value || sessionLoading.value || !await allowSessionChange()) return
+  if (!window.confirm(`删除对话“${item.title}”？历史提问和准备任务将删除，已保存的业务申请不会取消。`)) return
+  sessionLoading.value = true; error.value = ''
+  try {
+    await api<void>(`/assistant/sessions/${item.id}`, { method: 'DELETE' })
+    if (session.value?.session.id === item.id) { session.value = null; turns.value = []; messages.value = []; selectedTask.value = null }
+    sessionLoading.value = false
+    if (!session.value) await restoreLatest()
+    await listSessions(sessionList.value.page)
+  } catch (cause) { error.value = errorMessage(cause) }
+  finally { sessionLoading.value = false }
+}
 async function listSessions(page = 1) {
   if (busy.value || preparingDraft.value || savingDraft.value || sessionLoading.value) return
   const current = ++sessionGeneration; task.value = 'HISTORY'; sessionLoading.value = true; error.value = ''
-  try { const result = await api<typeof sessionList.value>(`/assistant/sessions?page=${page}&pageSize=10`); if (current === sessionGeneration) sessionList.value = result }
+  try {
+    let result = await api<typeof sessionList.value>(`/assistant/sessions?page=${page}&pageSize=10`)
+    if (!result.items.length && page > 1) {
+      const lastPage = Math.max(1, Math.ceil(result.total / result.pageSize))
+      result = await api<typeof sessionList.value>(`/assistant/sessions?page=${lastPage}&pageSize=10`)
+    }
+    if (current === sessionGeneration) sessionList.value = result
+  }
   catch (cause) { if (current === sessionGeneration) error.value = errorMessage(cause) }
   finally { if (current === sessionGeneration) sessionLoading.value = false }
 }
@@ -314,7 +334,7 @@ onBeforeUnmount(() => {
       <AssistantRepairDraft v-if="canPrepareRepair" v-show="task === 'REPAIR'" ref="repairDraft" :active="open && task === 'REPAIR' && !sessionLoading" :mode="mode" :model-ready="!!capabilities?.deepseekReady" :session-id="session?.session.id ?? null" :resume-task-id="resumeTaskId('REPAIR')" @updated="taskUpdated" @saving="savingDraft = $event" @working="preparingDraft = $event" />
       <div v-if="task === 'HISTORY'" class="assistant-history assistant-session-list">
         <h2>本人历史对话</h2><p>选择一条继续。恢复时重新核对权限和任务状态。</p>
-        <button v-for="item in sessionList.items" :key="item.id" :disabled="sessionLoading" @click="selectSession(item.id)"><strong>{{ item.title }}</strong><span>{{ item.updatedAt.replace('T', ' ').slice(0,16) }}{{ item.id === session?.session.id ? ' · 当前对话' : '' }}</span></button>
+        <div v-for="item in sessionList.items" :key="item.id" class="assistant-session-item"><button :disabled="sessionLoading" @click="selectSession(item.id)"><strong>{{ item.title }}</strong><span>{{ item.updatedAt.replace('T', ' ').slice(0,16) }}{{ item.id === session?.session.id ? ' · 当前对话' : '' }}</span></button><button class="assistant-session-delete" :disabled="sessionLoading" :aria-label="`删除对话 ${item.title}`" @click="deleteSession(item)">删除</button></div>
         <p v-if="!sessionList.items.length && !sessionLoading">暂无历史对话。</p>
         <div class="assistant-session-pages"><button :disabled="sessionLoading || sessionList.page <= 1" @click="listSessions(sessionList.page - 1)">上一页</button><span>第 {{ sessionList.page }} 页</span><button :disabled="sessionLoading || sessionList.page * sessionList.pageSize >= sessionList.total" @click="listSessions(sessionList.page + 1)">下一页</button></div>
         <h2 v-if="session?.tasks.length" class="assistant-task-list-heading">当前对话的准备任务</h2>
@@ -385,7 +405,7 @@ onBeforeUnmount(() => {
   </aside>
 </template>
 <style scoped>
-.assistant-session-bar{display:flex;align-items:center;gap:8px;padding:5px 16px 9px;font-size:10px;color:#7a899a;flex-shrink:0}.assistant-session-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.assistant-session-bar button,.assistant-older,.assistant-restored button{border:0;background:transparent;color:#355a80;font:inherit;font-size:10px;padding:3px;cursor:pointer;white-space:nowrap}.assistant-session-list h2{font-size:14px;color:#355a80;margin:0 0 8px}.assistant-session-list>p{font-size:11px;line-height:1.7;color:#7a899a}.assistant-session-list>button{display:block;width:100%;border:1px solid #e2e9f0;border-radius:7px;background:#fafbfd;padding:10px;text-align:left;margin:8px 0;color:#405b76;cursor:pointer}.assistant-session-list strong,.assistant-session-list span{display:block;overflow-wrap:anywhere}.assistant-session-list strong{font-size:12px;margin-bottom:4px}.assistant-session-list span{font-size:10px;color:#8795a7}.assistant-session-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px}.assistant-session-pages button{border:1px solid #dce4ed;background:white;color:#355a80;font-size:10px;padding:4px 7px;border-radius:4px}.assistant-session-bar button:disabled,.assistant-session-list button:disabled,.assistant-restored button:disabled{opacity:.5;cursor:default}.assistant-restored{border-bottom:1px solid #edf0f4;padding:10px 0}.assistant-restored p{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;color:#405b76;margin:0 0 5px}.assistant-restored small{display:block;font-size:10px;color:#8795a7;line-height:1.6}.assistant-session-error{padding:5px 12px 9px;flex-shrink:0}.assistant-session-error button{border:0;background:none;color:#355a80;font-size:11px;cursor:pointer}
+.assistant-session-bar{display:flex;align-items:center;gap:8px;padding:5px 16px 9px;font-size:10px;color:#7a899a;flex-shrink:0}.assistant-session-bar span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.assistant-session-bar button,.assistant-older,.assistant-restored button{border:0;background:transparent;color:#355a80;font:inherit;font-size:10px;padding:3px;cursor:pointer;white-space:nowrap}.assistant-session-list h2{font-size:14px;color:#355a80;margin:0 0 8px}.assistant-session-list>p{font-size:11px;line-height:1.7;color:#7a899a}.assistant-session-list>button{display:block;width:100%;border:1px solid #e2e9f0;border-radius:7px;background:#fafbfd;padding:10px;text-align:left;margin:8px 0;color:#405b76;cursor:pointer}.assistant-session-item{display:flex;align-items:stretch;gap:6px;margin:8px 0}.assistant-session-item>button:first-child{flex:1;min-width:0;border:1px solid #e2e9f0;border-radius:7px;background:#fafbfd;padding:10px;text-align:left;color:#405b76;cursor:pointer;font:inherit}.assistant-session-delete{border:1px solid #e8d5d5;border-radius:7px;background:#fdf8f8;color:#a15353;font:inherit;font-size:10px;padding:0 9px;cursor:pointer}.assistant-session-delete:disabled{opacity:.5;cursor:default}.assistant-session-list strong,.assistant-session-list span{display:block;overflow-wrap:anywhere}.assistant-session-list strong{font-size:12px;margin-bottom:4px}.assistant-session-list span{font-size:10px;color:#8795a7}.assistant-session-pages{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px}.assistant-session-pages button{border:1px solid #dce4ed;background:white;color:#355a80;font-size:10px;padding:4px 7px;border-radius:4px}.assistant-session-bar button:disabled,.assistant-session-list button:disabled,.assistant-restored button:disabled{opacity:.5;cursor:default}.assistant-restored{border-bottom:1px solid #edf0f4;padding:10px 0}.assistant-restored p{font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;color:#405b76;margin:0 0 5px}.assistant-restored small{display:block;font-size:10px;color:#8795a7;line-height:1.6}.assistant-session-error{padding:5px 12px 9px;flex-shrink:0}.assistant-session-error button{border:0;background:none;color:#355a80;font-size:11px;cursor:pointer}
 .assistant-tasks{display:flex;flex-wrap:wrap;gap:5px;padding:0 16px 8px;flex-shrink:0}.assistant-tasks button{border:1px solid transparent;border-radius:5px;background:#f4f6f9;color:#74869b;font:inherit;font-size:11px;min-height:28px;padding:4px 9px;cursor:pointer}.assistant-tasks button[aria-pressed=true]{border-color:#cfdae7;background:#edf3f9;color:#31577f}.assistant-tasks button:disabled{opacity:.5;cursor:default}
 .assistant-session-list .assistant-task-list-heading{margin-top:24px;padding-top:16px;border-top:1px solid #e8edf3;font-size:12px}
 .assistant-dock{position:fixed;right:24px;bottom:24px;z-index:70;color:#1e293b;font-size:13px}

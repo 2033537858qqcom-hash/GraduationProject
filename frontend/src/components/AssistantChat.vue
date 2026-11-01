@@ -37,7 +37,7 @@ const canPrepareLeave = computed(() => currentUser.value?.permissions.includes('
 const canPrepareCertificate = computed(() => currentUser.value?.permissions.includes('certificate:apply'))
 const canPrepareHousing = computed(() => currentUser.value?.permissions.includes('housing:read'))
 const canPrepareRepair = computed(() => currentUser.value?.permissions.includes('repair:apply'))
-const canRunMission = computed(() => ['portal:read', 'reservation:apply'].every(permission => currentUser.value?.permissions.includes(permission)))
+const canRunMission = computed(() => !!currentUser.value?.permissions.includes('repair:apply') || ['portal:read', 'reservation:apply'].every(permission => currentUser.value?.permissions.includes(permission)))
 const missionDraft = ref<{ allowLeave: () => Promise<boolean> } | null>(null)
 const messages = ref<{ question: string; answer: AssistantAnswer }[]>([])
 type AutoAction = 'none' | 'peek' | 'bounce' | 'sparkle' | 'stretch'

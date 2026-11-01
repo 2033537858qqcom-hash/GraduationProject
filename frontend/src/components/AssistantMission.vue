@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api, ApiError, errorMessage } from '../lib/api'
 import { safeAssistantDestination } from '../lib/assistant'
-import { canConfirmMission, missionActionLabels, missionBusinessStatusLabel, missionConfirmationPayload, missionFieldsPayload, missionNeedsPolling, missionStageLabel, missionStepStatusLabel } from '../lib/assistantMissions'
+import { canConfirmMission, missionActionLabels, missionBusinessStatusLabel, missionConfirmationPayload, missionFieldsPayload, repairMissionFieldsPayload, missionNeedsPolling, missionStageLabel, missionStepStatusLabel } from '../lib/assistantMissions'
 import type { MissionFields, MissionSummary, MissionView } from '../lib/assistantMissions'
 import BaseSelect from './BaseSelect.vue'
 
@@ -14,21 +14,28 @@ const loading = ref(false), busy = ref(false), cancelling = ref(false), error = 
 const createKey = ref(crypto.randomUUID())
 const empty = () => ({ campus: '', startsAt: '', endsAt: '', participants: '' as string | number | null, keyword: '', activityTheme: '', activityType: 'ACADEMIC', contactPhone: '' })
 const form = ref(empty())
-const dirty = computed(() => mission.value ? JSON.stringify(missionFieldsPayload(form.value)) !== JSON.stringify(missionFieldsPayload(mission.value.fields)) : !!goal.value.trim() || JSON.stringify(form.value) !== JSON.stringify(empty()))
+const emptyRepair=()=>({category:'',title:'',description:'',locationId:'' as string|number|null,locationDetail:'',contact:'',contactWindow:''})
+const kind=ref('AUTO'),repairForm=ref(emptyRepair())
+const isRepair=computed(()=>mission.value?mission.value.kind==='REPAIR':kind.value==='REPAIR'||kind.value==='AUTO'&&/报修|故障|维修/.test(goal.value))
+const activeFields=computed(()=>isRepair.value?repairForm.value:form.value)
+const dirty = computed(() => mission.value ? isRepair.value?JSON.stringify(repairMissionFieldsPayload(repairForm.value))!==JSON.stringify(repairMissionFieldsPayload(mission.value.repairFields??{})):JSON.stringify(missionFieldsPayload(form.value)) !== JSON.stringify(missionFieldsPayload(mission.value.fields)) : !!goal.value.trim() || JSON.stringify(form.value) !== JSON.stringify(empty()) || Object.values(repairForm.value).some(Boolean))
 const working = computed(() => loading.value || busy.value || cancelling.value)
 watch(working, value => emit('working', value))
 const running = computed(() => missionNeedsPolling(mission.value))
 const locked = computed(() => working.value || running.value || !!pending.value || ['DONE', 'CANCELLED'].includes(mission.value?.stage ?? '') || !!mission.value?.business)
-const readyToConfirm = computed(() => !working.value && !pending.value && canConfirmMission(mission.value, form.value, confirmed.value))
+const readyToConfirm = computed(() => !working.value && !pending.value && canConfirmMission(mission.value, activeFields.value, confirmed.value))
+const kindOptions=[{value:'AUTO',label:'按目标识别任务'},{value:'RESERVATION',label:'预约草稿'},{value:'REPAIR',label:'报修草稿'}]
+const repairCategories=[{value:'',label:'请选择故障类别'},...Object.entries({WATER:'给排水',ELECTRICITY:'电气',NETWORK:'网络',FURNITURE:'家具',DOOR_WINDOW:'门窗',EQUIPMENT:'设备',OTHER:'其他'}).map(([value,label])=>({value,label}))]
 const modeOptions = computed(() => [{ value: 'LOCAL', label: '本地任务流程' }, { value: 'DEEPSEEK', label: 'DeepSeek动态规划', disabled: !props.modelReady }])
 const campusOptions = [{ value: '', label: '请选择校区' }, { value: 'EAST', label: '东校区' }, { value: 'WEST', label: '西校区' }, { value: 'ALL', label: '两个校区均可' }]
 const activityOptions = [{ value: 'ACADEMIC', label: '学术与学习' }, { value: 'SPORTS', label: '体育活动' }, { value: 'CULTURE', label: '文化活动' }, { value: 'OTHER', label: '其他活动' }]
 const missingLabels: Record<string, string> = { campus: '校区', participants: '人数', startsAt: '开始时间', endsAt: '结束时间', timeRange: '有效的未来时段（30分钟至14小时）', activityTheme: '活动主题', activityType: '活动类型', keyword: '场地关键词', calendarAccess: '日程访问范围' }
+Object.assign(missingLabels,{category:'故障类别',title:'故障标题',description:'故障现象',locationId:'报修地点',contact:'联系方式'})
 let generation = 0, timer: ReturnType<typeof setTimeout> | null = null, controller: AbortController | null = null
 const pending = ref<{ path: string; body: Record<string, unknown>; session: number } | null>(null)
 function base(session = props.sessionId) { return `/assistant/sessions/${session}/missions` }
 function fill(fields: MissionFields) { form.value = { campus: fields.campus ?? '', startsAt: fields.startsAt ?? '', endsAt: fields.endsAt ?? '', participants: fields.participants ?? '', keyword: fields.keyword ?? '', activityTheme: fields.activityTheme ?? '', activityType: fields.activityType ?? 'ACADEMIC', contactPhone: fields.contactPhone ?? '' } }
-function apply(view: MissionView, replaceFields = true) { mission.value = view; selectedKey.value = view.selectedKey ?? ''; confirmed.value = false; if (replaceFields) fill(view.fields) }
+function apply(view: MissionView, replaceFields = true) { mission.value = view; selectedKey.value = view.selectedKey ?? ''; confirmed.value = false; if (replaceFields) {fill(view.fields);const r=view.repairFields;repairForm.value={category:r?.category??'',title:r?.title??'',description:r?.description??'',locationId:r?.locationId??'',locationDetail:r?.locationDetail??'',contact:r?.contact??'',contactWindow:r?.contactWindow??''}} }
 function stopPolling() { if (timer) clearTimeout(timer); timer = null }
 function beforeUnload(event: BeforeUnloadEvent) { if (dirty.value) { event.preventDefault(); event.returnValue = '' } }
 function schedulePolling() {
@@ -73,18 +80,18 @@ async function mutate(path: string, body: Record<string, unknown>) {
 }
 async function create() {
  if (working.value || !goal.value.trim() || mode.value === 'DEEPSEEK' && (!consent.value || !props.modelReady)) return
- await mutate(base(), { requestKey: createKey.value, goal: goal.value.trim(), mode: mode.value, externalConsent: consent.value, fields: missionFieldsPayload(form.value) })
+ await mutate(base(), { requestKey: createKey.value, goal: goal.value.trim(), kind:kind.value,mode: mode.value, externalConsent: consent.value, fields: isRepair.value?null:missionFieldsPayload(form.value),repairFields:isRepair.value?repairMissionFieldsPayload(repairForm.value):null })
 }
 async function action(action: string) {
  if (!mission.value || working.value || pending.value) return
  const body: Record<string, unknown> = { requestKey: crypto.randomUUID(), version: mission.value.version, action }
- if (action === 'REVISE') body.fields = missionFieldsPayload(form.value)
+ if (action === 'REVISE') {if(isRepair.value)body.repairFields=repairMissionFieldsPayload(repairForm.value);else body.fields = missionFieldsPayload(form.value)}
  if (action === 'SELECT') body.optionKey = selectedKey.value
  await mutate(`${base()}/${mission.value.id}/actions`, body)
 }
 async function confirm() {
  if (!mission.value || !readyToConfirm.value) return
- const body = missionConfirmationPayload(mission.value, form.value, confirmed.value, crypto.randomUUID())
+ const body = missionConfirmationPayload(mission.value, activeFields.value, confirmed.value, crypto.randomUUID())
  await mutate(`${base()}/${mission.value.id}/actions`, body)
 }
 async function retry() { const request = pending.value; if (request && request.session === props.sessionId) await mutate(request.path, request.body) }
@@ -99,11 +106,11 @@ async function cancel() {
  finally { if (epoch === generation) { cancelling.value = false; schedulePolling() } }
 }
 async function allowLeave() { return !dirty.value || window.confirm('任务条件尚未保存，是否放弃这些编辑？') }
-async function newTask() { if (!await allowLeave() || working.value || running.value || pending.value) return; mission.value = null; goal.value = ''; form.value = empty(); consent.value = false; confirmed.value = false; pending.value = null; createKey.value = crypto.randomUUID(); error.value = '' }
+async function newTask() { if (!await allowLeave() || working.value || running.value || pending.value) return; mission.value = null; goal.value = ''; form.value = empty();repairForm.value=emptyRepair();kind.value='AUTO'; consent.value = false; confirmed.value = false; pending.value = null; createKey.value = crypto.randomUUID(); error.value = '' }
 async function selectTask(id: number) { if (!working.value && await allowLeave()) await load(id) }
-watch([goal, form, mode], () => { confirmed.value = false; if (!mission.value && !pending.value) createKey.value = crypto.randomUUID() }, { deep: true })
+watch([goal, form,repairForm,kind, mode], () => { confirmed.value = false; if (!mission.value && !pending.value) createKey.value = crypto.randomUUID() }, { deep: true })
 watch(() => [props.active, props.sessionId] as const, ([active, session], previous) => {
- if (session !== previous?.[1]) { generation++; controller?.abort(); busy.value = false; cancelling.value = false; mission.value = null; summaries.value = []; form.value = empty(); goal.value = ''; pending.value = null; consent.value = false; createKey.value = crypto.randomUUID() }
+ if (session !== previous?.[1]) { generation++; controller?.abort(); busy.value = false; cancelling.value = false; mission.value = null; summaries.value = []; form.value = empty();repairForm.value=emptyRepair();kind.value='AUTO'; goal.value = ''; pending.value = null; consent.value = false; createKey.value = crypto.randomUUID() }
  if (active && session) void load(); else stopPolling()
 }, { immediate: true })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
@@ -112,15 +119,16 @@ defineExpose({ allowLeave })
 </script>
 
 <template>
- <section class="assistant-history mission" aria-label="预约任务Agent">
-  <div class="mission-heading"><div><h2>预约任务 Agent</h2><p>提出目标，查看执行过程，选择场地后核对草稿。</p></div><button type="button" :disabled="working || running || !!pending" @click="newTask">新任务</button></div>
+ <section class="assistant-history mission" aria-label="业务任务Agent">
+  <div class="mission-heading"><div><h2>{{ isRepair ? '报修任务 Agent' : '业务任务 Agent' }}</h2><p>描述预约或报修目标，查看执行过程，确认后保存本人草稿。</p></div><button type="button" :disabled="working || running || !!pending" @click="newTask">新任务</button></div>
   <label v-if="summaries.length" class="mission-label">恢复本次对话的任务<select :value="mission?.id ?? ''" :disabled="working" @change="selectTask(Number(($event.target as HTMLSelectElement).value))"><option value="" disabled>选择任务</option><option v-for="item in summaries" :key="item.id" :value="item.id">#{{ item.id }} · {{ missionStageLabel(item.stage) }} · {{ item.goal.slice(0, 24) }}</option></select></label>
   <p v-if="loading" role="status">正在恢复任务…</p>
   <template v-if="!mission">
-   <label class="mission-label">预约目标<textarea v-model="goal" rows="3" maxlength="1000" :disabled="working || !!pending" placeholder="例如：下周二东校区30人09:00–11:00，帮我准备教室预约草稿" /></label>
+   <label class="mission-label">任务目标<textarea v-model="goal" rows="3" maxlength="1000" :disabled="working || !!pending" placeholder="例如：帮我准备灯具故障报修草稿，或下周二30人教室预约草稿" /></label>
+   <label class="mission-label">任务类型<BaseSelect v-model="kind" :options="kindOptions" compact :disabled="working || !!pending" aria-label="Agent任务类型" /></label>
    <label class="mission-label">执行方式<BaseSelect v-model="mode" :options="modeOptions" compact :disabled="working || !!pending" aria-label="Agent执行方式" /></label>
    <label v-if="mode === 'DEEPSEEK'" class="mission-check"><input v-model="consent" type="checkbox" :disabled="working || !!pending" />同意将本次目标及后续脱敏执行观察（工具状态、数量、缺失条件）发送至 DeepSeek 完成本任务。业务正文、联系方式和历史对话保留本地。</label>
-   <p class="mission-note">目标中的条件会被核对；未明确的校区、日期或时段会要求补充。联系方式请在下面的本地表单填写。</p>
+   <p class="mission-note">未明确的条件会要求补充。报修地点从当前目录选择，联系方式和故障详情请在本地表单填写。</p>
   </template>
   <template v-else>
    <div class="mission-state" role="status"><strong>{{ missionStageLabel(mission.stage) }}</strong><span>{{ mission.mode === 'DEEPSEEK' ? 'DeepSeek逐步规划' : '本地任务流程' }}</span></div>
@@ -130,7 +138,7 @@ defineExpose({ allowLeave })
    <details v-if="mission.steps.length" class="mission-trace"><summary>执行过程 · {{ mission.steps.length }} 步</summary><ol><li v-for="step in mission.steps" :key="step.number"><strong>{{ missionActionLabels[step.action] ?? step.action }}</strong><span>{{ missionStepStatusLabel(step.status) }}</span><p>{{ step.message }}</p></li></ol></details>
    <div v-if="mission.conflicts.length" class="mission-conflicts"><h3>本人日程重叠</h3><p v-for="item in mission.conflicts" :key="item.key">{{ item.title }} · {{ item.description }}</p></div>
   </template>
-  <details v-if="!mission || !mission.business" :open="!mission || mission.stage === 'WAITING_INPUT'" class="mission-fields">
+  <details v-if="(!mission || !mission.business) && !isRepair" :open="!mission || mission.stage === 'WAITING_INPUT'" class="mission-fields">
 <summary>本地任务条件</summary>
    <fieldset :disabled="locked">
 <div class="mission-grid">
@@ -142,6 +150,20 @@ defineExpose({ allowLeave })
    </div>
 </fieldset>
   </details>
+  <details v-if="isRepair && !mission?.business" :open="!mission || mission.stage === 'WAITING_INPUT'" class="mission-fields">
+<summary>本地报修资料</summary><fieldset :disabled="locked">
+<div class="mission-grid">
+   <label class="mission-wide">故障类别<BaseSelect v-model="repairForm.category" :options="repairCategories" compact aria-label="任务故障类别" /></label>
+   <label class="mission-wide">故障标题<input v-model="repairForm.title" maxlength="100" placeholder="例如走廊灯具无法开启" /></label>
+   <label class="mission-wide">故障现象<textarea v-model="repairForm.description" rows="3" maxlength="2000" placeholder="填写实际观察到的现象，保留在本地" /></label>
+   <label class="mission-wide">当前报修地点<select v-model="repairForm.locationId"><option value="">{{ mission ? '请选择当前开放地点' : '开始任务后读取本人可用地点目录' }}</option><option v-for="location in mission?.repairLocations ?? []" :key="location.id" :value="location.id">{{ location.campusName }} · {{ location.name }}</option></select></label>
+   <label class="mission-wide">具体位置补充<input v-model="repairForm.locationDetail" maxlength="300" /></label>
+   <label class="mission-wide">联系方式<input v-model="repairForm.contact" maxlength="80" placeholder="手机号码或邮箱，仅本地保存" /></label>
+   <label class="mission-wide">方便联系时间<input v-model="repairForm.contactWindow" maxlength="100" /></label>
+  </div>
+</fieldset>
+</details>
+  <p v-for="issue in mission?.repairPreview?.issues ?? []" :key="issue" class="mission-error">{{ issue }}</p>
   <button v-if="!mission" class="mission-primary" type="button" :disabled="working || !!pending || !goal.trim() || mode === 'DEEPSEEK' && (!consent || !modelReady)" @click="create">{{ busy ? 'Agent正在执行…' : '开始任务' }}</button>
   <button v-if="mission && !mission.business && !['DONE', 'CANCELLED', 'RUNNING'].includes(mission.stage)" type="button" :disabled="locked || !dirty && mission.stage !== 'WAITING_INPUT'" @click="action('REVISE')">更新条件并重新规划</button>
   <template v-if="mission?.stage === 'WAITING_SELECTION'">
@@ -149,14 +171,15 @@ defineExpose({ allowLeave })
    <button type="button" class="mission-primary" :disabled="working || !!pending || dirty || !selectedKey" @click="action('SELECT')">核对所选场地与草稿</button>
   </template>
   <template v-if="mission?.stage === 'WAITING_CONFIRMATION'">
-   <div class="mission-proposal"><h3>预约草稿预览</h3><p>{{ mission.options.find(item => item.key === mission?.selectedKey)?.name }}</p><p>{{ mission.fields.startsAt?.replace('T', ' ') }}—{{ mission.fields.endsAt?.replace('T', ' ') }}</p><p>{{ mission.fields.participants }} 人 · {{ mission.fields.activityTheme }}</p><p>{{ activityOptions.find(item => item.value === mission?.fields.activityType)?.label }} · 联系方式：{{ mission.fields.contactPhone || '尚未填写' }}</p></div>
+   <div v-if="isRepair" class="mission-proposal"><h3>报修草稿预览</h3><p>{{ mission.repairPreview?.locationName }}</p><p>{{ repairCategories.find(item=>item.value===mission?.repairFields?.category)?.label }} · {{ mission.repairFields?.title }}</p><p>{{ mission.repairFields?.description }}</p><p>位置补充：{{ mission.repairFields?.locationDetail || '无' }}</p><p>联系方式：{{ mission.repairFields?.contact }} · {{ mission.repairFields?.contactWindow }}</p></div>
+   <div v-else class="mission-proposal"><h3>预约草稿预览</h3><p>{{ mission.options.find(item => item.key === mission?.selectedKey)?.name }}</p><p>{{ mission.fields.startsAt?.replace('T', ' ') }}—{{ mission.fields.endsAt?.replace('T', ' ') }}</p><p>{{ mission.fields.participants }} 人 · {{ mission.fields.activityTheme }}</p><p>{{ activityOptions.find(item => item.value === mission?.fields.activityType)?.label }} · 联系方式：{{ mission.fields.contactPhone || '尚未填写' }}</p></div>
    <p v-if="dirty" class="mission-note">条件有修改，请先更新并重新核对预览。</p>
-   <label class="mission-check"><input v-model="confirmed" type="checkbox" :disabled="working || !!pending || dirty" />我已核对场地、时间、人数及活动信息，确认保存本人预约草稿。</label>
+   <label class="mission-check"><input v-model="confirmed" type="checkbox" :disabled="working || !!pending || dirty" />{{ isRepair ? '我已核对地点、故障现象及联系方式，确认保存本人报修草稿。' : '我已核对场地、时间、人数及活动信息，确认保存本人预约草稿。' }}</label>
    <button type="button" class="mission-primary" :disabled="!readyToConfirm" @click="confirm">确认保存并核验</button>
   </template>
   <button v-if="mission?.canContinue" type="button" :disabled="working || !!pending || dirty" @click="action('CONTINUE')">继续执行</button>
-  <RouterLink v-if="mission?.business && safeAssistantDestination(mission.business.targetPath)" :to="mission.business.targetPath" class="mission-business">打开原预约申请 · {{ missionBusinessStatusLabel(mission.business.status) }}</RouterLink>
-  <p v-if="mission?.business" class="mission-note">草稿需要在原页面补充检查并手动提交，正式预约仍须负责人审核。</p>
+  <RouterLink v-if="mission?.business && safeAssistantDestination(mission.business.targetPath)" :to="mission.business.targetPath" class="mission-business">{{ isRepair ? '打开原报修工单' : '打开原预约申请' }} · {{ missionBusinessStatusLabel(mission.business.status) }}</RouterLink>
+  <p v-if="mission?.business" class="mission-note">{{ isRepair ? '可在原页面补充图片，核对后手动提交，由后勤分诊处理。' : '草稿需要在原页面补充检查并手动提交，正式预约仍须负责人审核。' }}</p>
   <p v-if="error" class="mission-error" role="alert">{{ error }}</p><button v-if="pending && !busy" type="button" :disabled="working" @click="retry">重试原操作</button>
   <button v-if="mission && !busy && !pending" type="button" :disabled="working" @click="selectTask(mission.id)">刷新任务状态</button>
  </section>

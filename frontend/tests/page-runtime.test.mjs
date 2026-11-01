@@ -94,6 +94,37 @@ test('reopening the agent panel preserves unsaved fields instead of restoring ov
  } finally { globalThis.fetch = oldFetch }
 })
 
+test('repair mission local field edits require a new server preview before confirmation', async () => {
+ const oldFetch=globalThis.fetch,commands=[]
+ const repairFields={category:'ELECTRICITY',title:'灯具故障',description:'灯具无法开启',locationId:1,locationDetail:'走廊',contact:'owner@example.test',contactWindow:'白天'}
+ const fields={campus:null,startsAt:null,endsAt:null,participants:null,keyword:null,activityTheme:null,activityType:null,contactPhone:null}
+ const view={id:1,sessionId:1,kind:'REPAIR',stage:'WAITING_CONFIRMATION',version:3,fields,repairFields,options:[],conflicts:[],missing:[],proposalHash:'a'.repeat(64),repairLocations:[],business:null}
+ globalThis.fetch=async(path,options={})=>{
+  if(path==='/api/auth/csrf')return Response.json({headerName:'X-CSRF-TOKEN',token:'test'})
+  if(options.method==='POST'){commands.push(JSON.parse(options.body));return Response.json(view)}
+  return Response.json([])
+ }
+ try {
+  const errors=await checkPageSetup('/assistant-mission-test',undefined,async state=>{
+   state.goal.value='帮我准备报修草稿'
+   state.repairForm.value=repairFields
+   await state.create()
+   assert.equal(commands[0].fields,null)
+   assert.equal(commands[0].repairFields.contact,'owner@example.test')
+   assert.equal(state.isRepair.value,true)
+   assert.equal(state.dirty.value,false)
+   state.confirmed.value=true
+   state.repairForm.value.description='修改后的故障现象'
+   await state.confirm()
+   assert.equal(commands.length,1)
+   await state.action('REVISE')
+   assert.equal(commands[1].repairFields.description,'修改后的故障现象')
+   assert.equal(commands[1].action,'REVISE')
+  },{sessionId:1,active:false,modelReady:false})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
 test('workbench initializes its task queue before starting filter watchers', async () => {
   const errors = await checkPageSetup('/workbench')
   assert.ifError(errors[0])

@@ -61,6 +61,24 @@ class AgentRepairMissionHttpTest {
   var admin=login("admin");long own=session(admin);assertThat(admin.post(path(own),Map.of("requestKey",UUID.randomUUID().toString(),"goal","准备报修草稿","mode","LOCAL","externalConsent",false,"repairFields",repair())).statusCode()).isEqualTo(403);
   var user=login("teacher1001");long s=session(user);var task=create(user,s,"准备报修草稿","LOCAL",repair());assertThat(login("20260002").get(path(s)+"/"+task.path("id").asLong()).statusCode()).isEqualTo(404);
  }
+ @Test void explicitKindDisambiguatesGoalAndCannotBeChangedDuringRevision()throws Exception {
+  var user=login("teacher1001");long s=session(user);var body=new HashMap<String,Object>(Map.of("requestKey",UUID.randomUUID().toString(),"goal","教室需要报修，也要预约","kind","REPAIR","mode","LOCAL","externalConsent",false,"repairFields",repair()));
+  var task=ok(user.post(path(s),body));assertThat(task.path("kind").asText()).isEqualTo("REPAIR");
+  var revise=command(task,"REVISE");revise.put("fields",Map.of("campus","EAST"));assertThat(user.post(path(s)+"/"+task.path("id").asLong()+"/actions",revise).statusCode()).isEqualTo(400);
+  assertThat(ok(user.get(path(s))).get(0).path("kind").asText()).isEqualTo("REPAIR");
+ }
+ @Test void invalidContactsAndWithdrawnGuidesBlockConfirmation()throws Exception {
+  var user=login("teacher1001");long s=session(user);var fields=new HashMap<String,Object>(repair());fields.put("contact","invalid-contact");var task=create(user,s,"准备报修草稿","LOCAL",fields);
+  assertThat(task.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(task.path("repairPreview").path("issues").size()).isGreaterThan(0);
+  jdbc.sql("UPDATE agent_guide SET status='WITHDRAWN' WHERE slug='repair'").update();
+  try {var revise=command(task,"REVISE");revise.put("repairFields",repair());task=act(user,s,task,revise);assertThat(task.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(task.path("repairPreview").path("issues").toString()).contains("指南");}
+  finally {jdbc.sql("UPDATE agent_guide SET status='PUBLISHED' WHERE slug='repair'").update();}
+ }
+ @Test void unrecognizedOrWrongDomainModelActionsCannotSaveRepair()throws Exception {
+  doReturn(true).when(model).ready();doReturn(new Plan(List.of(new Call("save_reservation",JSON.valueToTree(Map.of()))),10,2)).when(model).nextMissionStep(anyString(),anyList(),anyList());
+  var user=login("teacher1001");long before=jdbc.sql("SELECT COUNT(*) FROM repair_request").query(Long.class).single();var task=create(user,session(user),"准备报修草稿","DEEPSEEK",repair());
+  assertThat(task.path("stage").asText()).isEqualTo("FAILED");assertThat(task.path("steps").toString()).contains("MODEL_ACTION_REJECTED");assertThat(jdbc.sql("SELECT COUNT(*) FROM repair_request").query(Long.class).single()).isEqualTo(before);
+ }
     private JsonNode ok(HttpResponse<String> response) {
         assertThat(response.statusCode()).as(response.body()).isEqualTo(200); return JSON.readTree(response.body());
     }

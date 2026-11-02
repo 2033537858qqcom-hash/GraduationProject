@@ -6,8 +6,8 @@ import { canConfirmMission, missionActionLabels, missionBusinessStatusLabel, mis
 import type { MissionFields, MissionSummary, MissionView } from '../lib/assistantMissions'
 import BaseSelect from './BaseSelect.vue'
 
-const props = defineProps<{ sessionId: number | null; active: boolean; modelReady: boolean }>()
-const emit = defineEmits<{ working: [value: boolean] }>()
+const props = defineProps<{ sessionId: number | null; active: boolean; modelReady: boolean; missionId?: number | null; embedded?: boolean }>()
+const emit = defineEmits<{ working: [value: boolean]; updated: [view: MissionView] }>()
 const mission = ref<MissionView | null>(null), summaries = ref<MissionSummary[]>([])
 const goal = ref(''), mode = ref<'LOCAL' | 'DEEPSEEK'>('LOCAL'), consent = ref(false), confirmed = ref(false), selectedKey = ref('')
 const loading = ref(false), busy = ref(false), cancelling = ref(false), error = ref('')
@@ -67,7 +67,7 @@ async function load(id?: number) {
  if (!props.sessionId || id === undefined && dirty.value) return
  const session = props.sessionId, epoch = ++generation; loading.value = true; error.value = ''; stopPolling()
  try {
-  const list = await api<MissionSummary[]>(base(session)); const chosen = id ?? mission.value?.id ?? list[0]?.id
+  const list = props.embedded ? [] : await api<MissionSummary[]>(base(session)); const chosen = props.missionId ?? id ?? mission.value?.id ?? list[0]?.id
   const view = chosen ? await api<MissionView>(`${base(session)}/${chosen}`) : null
   if (epoch !== generation || session !== props.sessionId) return
   summaries.value = list; if (view) apply(view)
@@ -80,7 +80,7 @@ async function mutate(path: string, body: Record<string, unknown>) {
  try {
   const result = await api<MissionView>(path, { method: 'POST', body: JSON.stringify(body), signal: controller.signal })
   if (epoch !== generation || session !== props.sessionId) return
-  apply(result); pending.value = null; summaries.value = await api<MissionSummary[]>(base(session))
+  apply(result); pending.value = null; summaries.value = props.embedded ? [] : await api<MissionSummary[]>(base(session)); emit('updated', result)
  } catch (cause) {
   if (epoch !== generation) return
   error.value = errorMessage(cause)
@@ -118,8 +118,8 @@ async function allowLeave() { return !dirty.value || window.confirm('任务条�
 async function newTask() { if (!await allowLeave() || working.value || running.value || pending.value) return; mission.value = null; goal.value = ''; form.value = empty();repairForm.value=emptyRepair();leaveForm.value=emptyLeave();certificateForm.value=emptyCertificate();kind.value='AUTO'; consent.value = false; confirmed.value = false; pending.value = null; createKey.value = crypto.randomUUID(); error.value = '' }
 async function selectTask(id: number) { if (!working.value && await allowLeave()) await load(id) }
 watch([goal, form,repairForm,leaveForm,certificateForm,kind, mode], () => { confirmed.value = false; if (!mission.value && !pending.value) createKey.value = crypto.randomUUID() }, { deep: true })
-watch(() => [props.active, props.sessionId] as const, ([active, session], previous) => {
- if (session !== previous?.[1]) { generation++; controller?.abort(); busy.value = false; cancelling.value = false; mission.value = null; summaries.value = []; form.value = empty();repairForm.value=emptyRepair();leaveForm.value=emptyLeave();certificateForm.value=emptyCertificate();kind.value='AUTO'; goal.value = ''; pending.value = null; consent.value = false; createKey.value = crypto.randomUUID() }
+watch(() => [props.active, props.sessionId, props.missionId] as const, ([active, session, missionId], previous) => {
+ if (session !== previous?.[1] || missionId !== previous?.[2]) { generation++; controller?.abort(); busy.value = false; cancelling.value = false; mission.value = null; summaries.value = []; form.value = empty();repairForm.value=emptyRepair();leaveForm.value=emptyLeave();certificateForm.value=emptyCertificate();kind.value='AUTO'; goal.value = ''; pending.value = null; consent.value = false; createKey.value = crypto.randomUUID() }
  if (active && session) void load(); else stopPolling()
 }, { immediate: true })
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
@@ -129,25 +129,25 @@ defineExpose({ allowLeave })
 
 <template>
  <section class="assistant-history mission" aria-label="业务任务Agent">
-  <div class="mission-heading"><div><h2>{{ isCertificate ? '在校证明任务 Agent' : isLeave ? '请假任务 Agent' : isRepair ? '报修任务 Agent' : '业务任务 Agent' }}</h2><p>描述预约、报修、请假或在校证明目标，核对后保存本人草稿。</p></div><button type="button" :disabled="working || running || !!pending" @click="newTask">新任务</button></div>
+  <div class="mission-heading"><div><h2>{{ isCertificate ? '在校证明任务 Agent' : isLeave ? '请假任务 Agent' : isRepair ? '报修任务 Agent' : '业务任务 Agent' }}</h2><p>{{ embedded ? '核对本次目标中这一事项的实际资料与原申请。' : '描述预约、报修、请假或在校证明目标，核对后保存本人草稿。' }}</p></div><button v-if="!embedded" type="button" :disabled="working || running || !!pending" @click="newTask">新任务</button></div>
   <label v-if="summaries.length" class="mission-label">恢复本次对话的任务<select :value="mission?.id ?? ''" :disabled="working" @change="selectTask(Number(($event.target as HTMLSelectElement).value))"><option value="" disabled>选择任务</option><option v-for="item in summaries" :key="item.id" :value="item.id">#{{ item.id }} · {{ missionStageLabel(item.stage) }} · {{ item.goal.slice(0, 24) }}</option></select></label>
   <p v-if="loading" role="status">正在恢复任务…</p>
-  <template v-if="!mission">
+  <template v-if="!mission && !embedded">
    <label class="mission-label">任务目标<textarea v-model="goal" rows="3" maxlength="1000" :disabled="working || !!pending" placeholder="例如：帮我准备灯具故障报修草稿，或下周二30人教室预约草稿" /></label>
    <label class="mission-label">任务类型<BaseSelect v-model="kind" :options="kindOptions" compact :disabled="working || !!pending" aria-label="Agent任务类型" /></label>
    <label class="mission-label">执行方式<BaseSelect v-model="mode" :options="modeOptions" compact :disabled="working || !!pending" aria-label="Agent执行方式" /></label>
    <label v-if="mode === 'DEEPSEEK'" class="mission-check"><input v-model="consent" type="checkbox" :disabled="working || !!pending" />同意将本次目标及后续脱敏执行观察（工具状态、数量、缺失条件）发送至 DeepSeek 完成本任务。业务正文、联系方式和历史对话保留本地。</label>
    <p class="mission-note">未明确的条件会要求补充。报修地点从当前目录选择，联系方式和故障详情请在本地表单填写。</p>
   </template>
-  <template v-else>
+  <template v-else-if="mission">
    <div class="mission-state" role="status"><strong>{{ missionStageLabel(mission.stage) }}</strong><span>{{ mission.mode === 'DEEPSEEK' ? 'DeepSeek逐步规划' : '本地任务流程' }}</span></div>
    <p class="mission-goal">{{ mission.goal }}</p><p>{{ mission.message }}</p>
    <p v-if="mission.missing.length" class="mission-note">待核对：{{ mission.missing.map(key => missingLabels[key] ?? key).join('、') }}</p>
-   <button v-if="!['DONE', 'CANCELLED'].includes(mission.stage)" type="button" :disabled="cancelling" @click="cancel">{{ cancelling ? '正在取消…' : '取消后续执行' }}</button>
+   <button v-if="!embedded && !['DONE', 'CANCELLED'].includes(mission.stage)" type="button" :disabled="cancelling" @click="cancel">{{ cancelling ? '正在取消…' : '取消后续执行' }}</button>
    <details v-if="mission.steps.length" class="mission-trace"><summary>执行过程 · {{ mission.steps.length }} 步</summary><ol><li v-for="step in mission.steps" :key="step.number"><strong>{{ missionActionLabels[step.action] ?? step.action }}</strong><span>{{ missionStepStatusLabel(step.status) }}</span><p>{{ step.message }}</p></li></ol></details>
    <div v-if="mission.conflicts.length" class="mission-conflicts"><h3>本人日程重叠</h3><p v-for="item in mission.conflicts" :key="item.key">{{ item.title }} · {{ item.description }}</p></div>
   </template>
-  <details v-if="(!mission || !mission.business) && !isRepair && !isLeave && !isCertificate" :open="!mission || mission.stage === 'WAITING_INPUT'" class="mission-fields">
+  <details v-if="(!embedded || mission) && (!mission || !mission.business) && !isRepair && !isLeave && !isCertificate" :open="!mission || mission.stage === 'WAITING_INPUT'" class="mission-fields">
 <summary>本地任务条件</summary>
    <fieldset :disabled="locked">
 <div class="mission-grid">
@@ -193,7 +193,7 @@ defineExpose({ allowLeave })
   </details>
   <p v-for="issue in mission?.certificatePreview?.issues ?? []" :key="issue" class="mission-error">{{ issue }}</p>
   <p v-if="isCertificate" class="mission-note">用途和本人登记资料留在本地。确认保存草稿后，仍需在原页面提交，由学院审核。</p>
-  <button v-if="!mission" class="mission-primary" type="button" :disabled="working || !!pending || !goal.trim() || mode === 'DEEPSEEK' && (!consent || !modelReady)" @click="create">{{ busy ? 'Agent正在执行…' : '开始任务' }}</button>
+  <button v-if="!mission && !embedded" class="mission-primary" type="button" :disabled="working || !!pending || !goal.trim() || mode === 'DEEPSEEK' && (!consent || !modelReady)" @click="create">{{ busy ? 'Agent正在执行…' : '开始任务' }}</button>
   <button v-if="mission && !mission.business && !['DONE', 'CANCELLED', 'RUNNING'].includes(mission.stage)" type="button" :disabled="locked || !dirty && mission.stage !== 'WAITING_INPUT'" @click="action('REVISE')">更新条件并重新规划</button>
   <template v-if="mission?.stage === 'WAITING_SELECTION'">
    <fieldset class="mission-options" :disabled="working || !!pending || dirty"><legend>选择一个候选场地</legend><label v-for="option in mission.options" :key="option.key"><input v-model="selectedKey" :name="`mission-option-${mission.id}`" type="radio" :value="option.key" /><span><strong>{{ option.name }}</strong><small>{{ option.location }} · 容量 {{ option.capacity }} 人</small></span></label></fieldset>

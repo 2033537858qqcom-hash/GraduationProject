@@ -1,0 +1,45 @@
+CREATE TABLE agent_goal (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT,
+ session_id BIGINT NOT NULL,
+ user_id BIGINT NOT NULL,
+ request_key VARCHAR(80) NOT NULL,
+ create_hash VARCHAR(64) NOT NULL,
+ goal VARCHAR(1000) NOT NULL,
+ external_consent BOOLEAN NOT NULL,
+ security_version BIGINT NOT NULL,
+ stage VARCHAR(32) NOT NULL,
+ state_json MEDIUMTEXT NOT NULL,
+ step_count INT NOT NULL DEFAULT 0,
+ version INT NOT NULL DEFAULT 0,
+ runner_token VARCHAR(40),
+ lease_until TIMESTAMP,
+ last_request_key VARCHAR(80),
+ last_request_hash VARCHAR(64),
+ monitor_after TIMESTAMP,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(session_id) REFERENCES agent_session(id) ON DELETE CASCADE,
+ FOREIGN KEY(user_id) REFERENCES app_user(id),
+ UNIQUE(session_id,request_key),
+ CHECK(stage IN ('RUNNING','WAITING_INPUT','WAITING_CONFIRMATION','PAUSED','MONITORING','DONE','CANCELLED','FAILED')),
+ CHECK(step_count>=0 AND step_count<=80),
+ CHECK(version>=0)
+);
+CREATE INDEX ix_agent_goal_owner ON agent_goal(user_id,session_id,id);
+CREATE INDEX ix_agent_goal_monitor ON agent_goal(stage,monitor_after);
+CREATE TABLE agent_goal_event (
+ id BIGINT PRIMARY KEY AUTO_INCREMENT,
+ goal_id BIGINT NOT NULL,
+ step_number INT NOT NULL,
+ tool VARCHAR(40) NOT NULL,
+ task_key VARCHAR(40),
+ status VARCHAR(24) NOT NULL,
+ message VARCHAR(500) NOT NULL,
+ arguments_json TEXT,
+ observation_json TEXT NOT NULL,
+ prompt_tokens INT,
+ completion_tokens INT,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ FOREIGN KEY(goal_id) REFERENCES agent_goal(id) ON DELETE CASCADE,
+ UNIQUE(goal_id,step_number)
+);

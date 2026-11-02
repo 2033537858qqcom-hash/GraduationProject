@@ -168,6 +168,18 @@ test('certificate mission sends only purpose and rejects confirmation after edit
  }finally{globalThis.fetch=oldFetch}
 })
 
+test('certificate permission exposes the shared agent mission entry',async()=>{
+ const {currentUser}=await server.ssrLoadModule('/src/stores/auth.ts')
+ const prior=currentUser.value
+ try{
+  currentUser.value={id:1,permissions:['agent:query','certificate:apply']}
+  const errors=await checkPageSetup('/assistant-test',undefined,async state=>{
+   assert.equal(state.canRunMission.value,true)
+  })
+  assert.ifError(errors[0])
+ }finally{currentUser.value=prior}
+})
+
 test('workbench initializes its task queue before starting filter watchers', async () => {
   const errors = await checkPageSetup('/workbench')
   assert.ifError(errors[0])

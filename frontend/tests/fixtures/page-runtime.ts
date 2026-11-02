@@ -23,6 +23,7 @@ import DormRechargePanel from '../../src/components/DormRechargePanel.vue'
 import FeeCategorySettings from '../../src/components/FeeCategorySettings.vue'
 import ReconciliationCasePanel from '../../src/components/ReconciliationCasePanel.vue'
 import AssistantMission from '../../src/components/AssistantMission.vue'
+import AssistantGoal from '../../src/components/AssistantGoal.vue'
 
 const pages = {
   '/campus/explore': CampusExplore,
@@ -48,6 +49,7 @@ const pages = {
   '/fee-category-test': FeeCategorySettings,
   '/reconciliation-cases-test': ReconciliationCasePanel,
   '/assistant-mission-test': AssistantMission,
+  '/assistant-goal-test': AssistantGoal,
 }
 
 // Use client setup semantics: SSR deliberately skips non-immediate watchers.

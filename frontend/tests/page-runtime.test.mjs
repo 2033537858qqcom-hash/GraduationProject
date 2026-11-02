@@ -94,6 +94,40 @@ test('reopening the agent panel preserves unsaved fields instead of restoring ov
  } finally { globalThis.fetch = oldFetch }
 })
 
+test('a goal-owned task restores the exact bound mission instead of the latest unrelated task',async()=>{
+ const oldFetch=globalThis.fetch,requests=[]
+ const fields={campus:null,startsAt:null,endsAt:null,participants:null,keyword:null,activityTheme:null,activityType:null,contactPhone:null}
+ globalThis.fetch=async path=>{requests.push(path);return Response.json(path.endsWith('/missions')?[{id:99}]:{id:42,kind:'CERTIFICATE',fields,certificateFields:{purpose:'目标中的用途'},options:[],missing:[],conflicts:[],stage:'WAITING_INPUT'})}
+ try{
+  const errors=await checkPageSetup('/assistant-mission-test',undefined,async state=>{
+   await state.load();assert.ok(requests.some(path=>path.endsWith('/missions/42')));assert.ok(!requests.some(path=>path.endsWith('/missions/99')))
+   assert.equal(state.mission.value.id,42)
+  },{sessionId:1,missionId:42,embedded:true,active:false,modelReady:false})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
+test('autonomous goals require consent and retry the identical request after a lost response',async()=>{
+ const oldFetch=globalThis.fetch,commands=[]
+ let attempts=0
+ const view={id:8,sessionId:1,goal:'准备证明和请假',stage:'WAITING_INPUT',version:2,instructions:[],tasks:[],message:'请补充实际用途',focusTaskKey:null,events:[],canContinue:true}
+ globalThis.fetch=async(path,options={})=>{
+  if(path==='/api/auth/csrf')return Response.json({headerName:'X-CSRF-TOKEN',token:'test'})
+  if(options.method==='POST'){commands.push(JSON.parse(options.body));if(++attempts===1)throw Error('response lost');return Response.json(view)}
+  return Response.json([])
+ }
+ try{
+  const errors=await checkPageSetup('/assistant-goal-test',undefined,async state=>{
+   state.goalText.value='准备证明和请假';await state.create();assert.equal(commands.length,0)
+   state.consent.value=true;await state.create();assert.equal(state.pending.value.body.requestKey,commands[0].requestKey)
+   await state.retry();assert.deepEqual(commands[1],commands[0]);assert.equal(state.current.value.id,8)
+   state.revision.value='证明用于实习核验';await state.revise();assert.equal(commands.length,2)
+   state.revisionConsent.value=true;await state.revise();assert.equal(commands[2].message,'证明用于实习核验');assert.equal(commands[2].externalConsent,true)
+  },{sessionId:1,active:false,modelReady:true})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
 test('repair mission local field edits require a new server preview before confirmation', async () => {
  const oldFetch=globalThis.fetch,commands=[]
  const repairFields={category:'ELECTRICITY',title:'灯具故障',description:'灯具无法开启',locationId:1,locationDetail:'走廊',contact:'owner@example.test',contactWindow:'白天'}

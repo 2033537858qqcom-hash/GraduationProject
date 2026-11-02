@@ -85,9 +85,10 @@ public class AgentGoalService {
   return claim.run?run(user,session,id,claim.row.token):view(user,claim.row);
  }
  private void remember(Row row,Action input,String hash){jdbc.sql("UPDATE agent_goal SET last_request_key=:key,last_request_hash=:hash WHERE id=:id").param("key",input.requestKey()).param("hash",hash).param("id",row.id).update();}
- private String taskKey(Call call){String key=call==null?null:call.arguments().path("taskKey").asString(null);return key!=null&&key.matches("[a-z][a-z0-9_-]{0,39}")?key:null;}
+ private String taskKey(Call call){String key=call==null||call.arguments()==null?null:call.arguments().path("taskKey").asString(null);return key!=null&&key.matches("[a-z][a-z0-9_-]{0,39}")?key:null;}
+ private String toolName(Call call){return call==null?"planning":call.name()!=null&&call.name().matches("[a-z_]{1,40}")?call.name():"invalid_tool";}
  private void finishEvent(long id,int number,Call call,String status,String message,Map<String,Object> observation,Plan plan){jdbc.sql("UPDATE agent_goal_event SET tool=:tool,task_key=:task,status=:status,message=:message,arguments_json=:args,observation_json=:observation,prompt_tokens=:prompt,completion_tokens=:completion WHERE goal_id=:id AND step_number=:step")
-     .param("tool",call==null?"planning":call.name().substring(0,Math.min(40,call.name().length()))).param("task",taskKey(call)).param("status",status).param("message",message.substring(0,Math.min(500,message.length()))).param("args",call==null?null:json.writeValueAsString(call.arguments())).param("observation",json.writeValueAsString(observation)).param("prompt",plan==null?null:plan.promptTokens()).param("completion",plan==null?null:plan.completionTokens()).param("id",id).param("step",number).update();}
+     .param("tool",toolName(call)).param("task",taskKey(call)).param("status",status).param("message",message.substring(0,Math.min(500,message.length()))).param("args",call==null?null:json.writeValueAsString(call.arguments())).param("observation",json.writeValueAsString(observation)).param("prompt",plan==null?null:plan.promptTokens()).param("completion",plan==null?null:plan.completionTokens()).param("id",id).param("step",number).update();}
  private void observe(State state,Map<String,Object> observation){state.observations.add(observation);while(state.observations.size()>12)state.observations.removeFirst();}
  private View run(CampusPrincipal user,long session,long id,String token){
   long deadline=System.nanoTime()+BUDGET.toNanos();
@@ -114,7 +115,7 @@ public class AgentGoalService {
     var after=write(()->{
      var row=raw(id);if(!row.stage.equals("RUNNING")||!Objects.equals(row.token,token))return row;
      var state=row.state;state.failures++;state.message=failure.getMessage();
-     var observation=Map.<String,Object>of("tool",failedCall==null?"planning":Objects.toString(failedCall.name(),"unknown"),"taskKey",Objects.toString(taskKey(failedCall),""),"status","ERROR","code",failure.code());observe(state,observation);
+     var observation=Map.<String,Object>of("tool",toolName(failedCall),"taskKey",Objects.toString(taskKey(failedCall),""),"status","ERROR","code",failure.code());observe(state,observation);
      finishEvent(id,number,failedCall,"FAILED",failure.code()+"："+failure.getMessage(),observation,failedPlan);
      boolean authentication=failure.status()==HttpStatus.UNAUTHORIZED;boolean provider=failure.code().startsWith("MODEL_");
      String stage=authentication||state.failures>=3?"FAILED":provider?"PAUSED":"RUNNING";

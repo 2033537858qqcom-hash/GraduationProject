@@ -3,7 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api, ApiError, errorMessage } from '../lib/api'
 import { goalKindLabels, goalStageLabels, goalTargetLabels, goalToolLabels } from '../lib/assistantGoals'
 import type { GoalSummary, GoalView } from '../lib/assistantGoals'
-import type { MissionView } from '../lib/assistantMissions'
 import AssistantMission from './AssistantMission.vue'
 
 const props = defineProps<{ sessionId: number | null; active: boolean; modelReady: boolean }>()
@@ -82,7 +81,7 @@ async function cancel() {
  generation++; controller?.abort(); controller = null; busy.value = false; stopPolling(); pending.value = null
  await mutate(`${base(session)}/${id}/actions`, { requestKey: crypto.randomUUID(), version, action: 'CANCEL' })
 }
-async function childUpdated(_view: MissionView) { chosenTask.value = ''; if (current.value?.canContinue && !busy.value && !pending.value) { childBusy.value = false; await action('CONTINUE') } }
+async function childUpdated() { chosenTask.value = ''; if (current.value?.canContinue && !busy.value && !pending.value) { childBusy.value = false; await action('CONTINUE') } }
 async function allowLeave() {
  if (child.value && !await child.value.allowLeave()) return false
  return !(!current.value && goalText.value.trim() || revision.value.trim()) || window.confirm('目标或补充文字尚未发送，是否放弃这些编辑？')

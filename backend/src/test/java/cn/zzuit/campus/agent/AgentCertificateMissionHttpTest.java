@@ -84,11 +84,23 @@ class AgentCertificateMissionHttpTest {
             assertThat(task.path("stage").asText()).isEqualTo("WAITING_CONFIRMATION");
         }finally{jdbc.sql("UPDATE app_user SET full_name=:name WHERE username='20260001'").param("name",name).update();}
     }
-    @Test void changedOrWithdrawnGuideCannotReuseConfirmation()throws Exception{
+    @Test void changedGuideCannotReuseConfirmation()throws Exception{
         var user=login("20260001");long s=session(user),before=count();var task=ok(user.post(path(s),input(fields())));
         jdbc.sql("UPDATE agent_guide SET version=version+1 WHERE slug='certificate'").update();
         try{task=act(user,s,task,confirmation(task));assertThat(task.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(count()).isEqualTo(before);}
         finally{jdbc.sql("UPDATE agent_guide SET version=version-1 WHERE slug='certificate'").update();}
+    }
+    @Test void withdrawnGuideBlocksInitialPreviewAndPreviouslyConfirmedSnapshot()throws Exception{
+        var user=login("20260001");long s=session(user),before=count();var task=ok(user.post(path(s),input(fields())));
+        jdbc.sql("UPDATE agent_guide SET status='WITHDRAWN' WHERE slug='certificate'").update();
+        try{
+            task=act(user,s,task,confirmation(task));assertThat(task.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(count()).isEqualTo(before);
+            var fresh=ok(user.post(path(s),input(fields())));assertThat(fresh.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(fresh.path("certificatePreview").path("issues").toString()).contains("指南已撤下");
+        }finally{jdbc.sql("UPDATE agent_guide SET status='PUBLISHED' WHERE slug='certificate'").update();}
+    }
+    @Test void invalidPurposeLengthAndMissingRevisionFieldsAreRejected()throws Exception{
+        var user=login("20260001");long s=session(user);assertThat(user.post(path(s),input(Map.of("purpose","用".repeat(301)))).statusCode()).isEqualTo(400);
+        var task=ok(user.post(path(s),input(fields())));assertThat(user.post(path(s)+"/"+task.path("id").asLong()+"/actions",command(task,"REVISE")).statusCode()).isEqualTo(400);
     }
     @Test void incompleteRegistrationBlocksPreview()throws Exception{
         var user=login("20260002");long s=session(user);long group=jdbc.sql("SELECT class_group_id FROM app_user WHERE username='20260002'").query(Long.class).single();

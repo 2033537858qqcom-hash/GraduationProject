@@ -149,7 +149,7 @@ test('goal submission requires checking the exact current business snapshot',asy
 })
 
 test('stopping one goal task requires a local decision and preserves the other planned task',async()=>{
- const oldFetch=globalThis.fetch,oldConfirm=window.confirm,commands=[]
+ const oldFetch=globalThis.fetch,oldConfirm=globalThis.window.confirm,commands=[]
  const view={id:8,sessionId:1,goal:'准备证明和请假',stage:'WAITING_INPUT',version:5,instructions:[],tasks:[{key:'proof',kind:'CERTIFICATE',label:'准备证明',target:'DRAFT',dependsOn:[],cancelled:false,mission:null},{key:'leave',kind:'LEAVE',label:'准备请假',target:'DRAFT',dependsOn:[],cancelled:false,mission:null}],message:'请补充',focusTaskKey:'proof',events:[],canContinue:true}
  globalThis.fetch=async(path,options={})=>{
   if(path==='/api/auth/csrf')return Response.json({headerName:'X-CSRF-TOKEN',token:'test'})
@@ -158,12 +158,12 @@ test('stopping one goal task requires a local decision and preserves the other p
  }
  try{
   const errors=await checkPageSetup('/assistant-goal-test',undefined,async state=>{
-   state.current.value=view;window.confirm=()=>false;await state.cancelTask('proof');assert.equal(commands.length,0)
-   window.confirm=()=>true;await state.cancelTask('proof');assert.equal(commands.length,1)
+   state.current.value=view;globalThis.window.confirm=()=>false;await state.cancelTask('proof');assert.equal(commands.length,0)
+   globalThis.window.confirm=()=>true;await state.cancelTask('proof');assert.equal(commands.length,1)
    assert.equal(commands[0].action,'CANCEL_TASK');assert.equal(commands[0].taskKey,'proof');assert.equal(commands[0].confirmed,true);assert.equal(state.activeTask.value.key,'leave')
   },{sessionId:1,active:false,modelReady:true})
   assert.ifError(errors[0])
- }finally{globalThis.fetch=oldFetch;window.confirm=oldConfirm}
+ }finally{globalThis.fetch=oldFetch;globalThis.window.confirm=oldConfirm}
 })
 
 test('repair mission local field edits require a new server preview before confirmation', async () => {

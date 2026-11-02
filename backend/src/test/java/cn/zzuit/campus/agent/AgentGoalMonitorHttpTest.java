@@ -50,6 +50,7 @@ class AgentGoalMonitorHttpTest {
   due(goal);monitor.check();assertThat(notices(id)).isEqualTo(before);
   decide(id,"RETURN");due(goal);assertThat(monitor.check()).as("本次真实审核变化").isEqualTo(1);goal=ok(user.get(path(s)+"/"+goal.path("id").asLong()));
   assertThat(goal.path("stage").asText()).isEqualTo("MONITORING");assertThat(goal.path("tasks").get(0).path("lastBusinessStatus").asText()).isEqualTo("RETURNED");assertThat(notices(id)).isEqualTo(before+1);
+  assertThat(jdbc.sql("SELECT body FROM user_notice WHERE source_id=:id AND source_type='CERTIFICATE' AND title='Agent 跟踪状态更新' ORDER BY id DESC LIMIT 1").param("id",id).query(String.class).single()).contains("待审核","待补充").doesNotContain("SUBMITTED","RETURNED");
   due(goal);monitor.check();assertThat(notices(id)).isEqualTo(before+1);
   var original=ok(user.get("/api/certificates/mine/"+id));ok(user.post("/api/certificates/mine/"+id+"/submit",Map.of("version",original.path("version").asInt(),"comment","本人核对后重新提交")));
   decide(id,"REJECT");due(goal);monitor.check();goal=ok(user.get(path(s)+"/"+goal.path("id").asLong()));
@@ -72,6 +73,12 @@ class AgentGoalMonitorHttpTest {
   var user=login("20260001");long s=session(user);var goal=watchingGoal(user,s);long id=businessId(goal),before=notices(id);
   assertThat(user.delete("/api/assistant/sessions/"+s).statusCode()).isEqualTo(204);decide(id,"RETURN");monitor.check();assertThat(notices(id)).isEqualTo(before);
   assertThat(jdbc.sql("SELECT COUNT(*) FROM certificate_request WHERE id=:id").param("id",id).query(Long.class).single()).isEqualTo(1);
+ }
+ @Test void sharedPermissionRevocationStopsWatchWithoutRetryingForbiddenBusinessReads()throws Exception{
+  var user=login("20260001");long s=session(user);var goal=watchingGoal(user,s);long id=businessId(goal),before=notices(id);
+  jdbc.sql("DELETE FROM role_permission WHERE role_code='STUDENT' AND permission_code='certificate:apply'").update();
+  try{due(goal);monitor.check();assertThat(jdbc.sql("SELECT stage FROM agent_goal WHERE id=:id").param("id",goal.path("id").asLong()).query(String.class).single()).isEqualTo("PAUSED");assertThat(notices(id)).isEqualTo(before);}
+  finally{jdbc.sql("INSERT INTO role_permission(role_code,permission_code) VALUES('STUDENT','certificate:apply')").update();}
  }
  JsonNode watchingGoal(Browser user,long s)throws Exception{
   desiredTarget="TRACK";var goal=savedGoal(user,s);decisions.add(call("submit_task",Map.of("taskKey","certificate")));decisions.add(call("verify_submission",Map.of("taskKey","certificate")));decisions.add(call("watch_task",Map.of("taskKey","certificate")));

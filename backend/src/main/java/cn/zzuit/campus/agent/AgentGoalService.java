@@ -74,6 +74,7 @@ public class AgentGoalService {
    switch(input.action()){
     case "CONTINUE"->{}
     case "REVISE"->{consent(Boolean.TRUE.equals(input.externalConsent()));if(input.message()==null||input.message().isBlank())throw error(HttpStatus.BAD_REQUEST,"GOAL_MESSAGE_REQUIRED","请明确说明目标如何调整");if(row.state.instructions.size()>=8)throw changed("本目标已有8次补充，请新建目标以保持要求清晰");row.state.instructions.add(input.message().trim());for(var task:row.state.tasks)task.submissionHash=null;row.state.failures=0;}
+    case "AUTHORIZE_SUBMIT"->{tools.authorize(user,session,row.state,input.taskKey(),input.proposalHash(),input.confirmed());}
     default->throw error(HttpStatus.BAD_REQUEST,"GOAL_ACTION_INVALID","当前目标不支持该操作");
    }
    if(row.count>=TOTAL_STEPS){row.state.message="目标已达到80步执行上限，请核对历史后新建目标。";return new Claim(persist(row,row.state,"FAILED",null),false);}
@@ -100,14 +101,20 @@ public class AgentGoalService {
     jdbc.sql("UPDATE agent_goal SET step_count=:step,lease_until=:lease WHERE id=:id").param("step",next).param("lease",now().plus(LEASE)).param("id",id).update();return next;});
    Plan plan=null;Call call=null;
    try{
-    var schemas=AgentGoalToolCatalog.tools(tools.kinds(user),false);
+    var schemas=AgentGoalToolCatalog.tools(tools.kinds(user),tools.authorized(before.state));
     plan=model.nextGoalStep(before.goal,schemas,tools.context(user,session,before.state));
     if(plan==null||plan.calls()==null||plan.calls().size()!=1||plan.calls().getFirst()==null)throw error(HttpStatus.BAD_GATEWAY,"GOAL_MODEL_ACTION_INVALID","模型必须选择一个明确的工具动作");
     call=plan.calls().getFirst();String chosen=call.name();if(chosen==null||schemas.stream().noneMatch(s->((Map<?,?>)s.get("function")).get("name").equals(chosen))||call.arguments()==null||!call.arguments().isObject())throw error(HttpStatus.BAD_GATEWAY,"GOAL_TOOL_REJECTED","模型动作不在当前工具范围内");
     lease(user,session,id,token);
     // Child task preparation is idempotent and local; never hold the goal lock across its executor.
-    var result=tools.execute(user,session,id,number,before.state,call);Plan decided=plan;Call executed=call;
-    var after=write(()->{var row=lease(user,session,id,token);var state=before.state;state.message=result.message();state.failures=0;observe(state,result.observation());finishEvent(id,number,executed,result.status(),result.message(),result.observation(),decided);return persist(row,state,result.stage(),result.stage().equals("RUNNING")?token:null);});
+    Plan decided=plan;Call executed=call;Row after;
+    if(chosen.equals("submit_task")){
+     // Recheck lease, exact authorization and original business under the same scope/write lock.
+     after=write(()->{var row=lease(user,session,id,token);var result=tools.execute(user,session,id,number,row.state,executed);row.state.message=result.message();row.state.failures=0;observe(row.state,result.observation());finishEvent(id,number,executed,result.status(),result.message(),result.observation(),decided);return persist(row,row.state,result.stage(),token);});
+    }else{
+     var result=tools.execute(user,session,id,number,before.state,call);
+     after=write(()->{var row=lease(user,session,id,token);var state=before.state;state.message=result.message();state.failures=0;observe(state,result.observation());finishEvent(id,number,executed,result.status(),result.message(),result.observation(),decided);return persist(row,state,result.stage(),result.stage().equals("RUNNING")?token:null);});
+    }
     if(!after.stage.equals("RUNNING"))return view(user,after);
    }catch(ApiException failure){
     var current=raw(id);if(!current.stage.equals("RUNNING")||!Objects.equals(current.token,token))return view(user,current);
@@ -115,6 +122,7 @@ public class AgentGoalService {
     var after=write(()->{
      var row=raw(id);if(!row.stage.equals("RUNNING")||!Objects.equals(row.token,token))return row;
      var state=row.state;state.failures++;state.message=failure.getMessage();
+     if(failure.code().equals("GOAL_SUBMISSION_CHANGED")&&taskKey(failedCall)!=null)state.tasks.stream().filter(task->task.key.equals(taskKey(failedCall))).forEach(task->task.submissionHash=null);
      var observation=Map.<String,Object>of("tool",toolName(failedCall),"taskKey",Objects.toString(taskKey(failedCall),""),"status","ERROR","code",failure.code());observe(state,observation);
      finishEvent(id,number,failedCall,"FAILED",failure.code()+"："+failure.getMessage(),observation,failedPlan);
      boolean authentication=failure.status()==HttpStatus.UNAUTHORIZED;boolean provider=failure.code().startsWith("MODEL_");

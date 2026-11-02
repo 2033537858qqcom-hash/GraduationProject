@@ -29,6 +29,8 @@ public final class AgentGoalToolCatalog {
   var search=new LinkedHashMap<String,Object>();for(String name:List.of("campus","participants","startsAt","endsAt","keyword"))search.put(name,fields.get(name));
   tools.add(tool("revise_reservation","原方案冲突或无候选时查询替代时间或校区；本人仍须核对实际方案",Map.of("taskKey",key,"fields",object(search,List.of())),"taskKey","fields"));
   tools.add(tool("await_user","提出明确缺项问题或等待本人核对当前预览与确认",Map.of("taskKey",key,"question",text(300)),"question"));
+  if(submitAllowed)tools.add(tool("submit_task","仅提交已经本人按当前精确原申请快照授权的任务",Map.of("taskKey",key),"taskKey"));
+  tools.add(tool("verify_submission","读取原申请，核验实际提交结果和最新状态",Map.of("taskKey",key),"taskKey"));
   tools.add(tool("finish","只有所有任务按目标完成且结果已核验时结束",Map.of()));
   return List.copyOf(tools);
  }

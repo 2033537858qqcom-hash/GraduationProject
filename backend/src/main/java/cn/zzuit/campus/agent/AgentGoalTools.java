@@ -19,14 +19,17 @@ public class AgentGoalTools {
  private final AgentGuides guides;
  private final IdentityService identities;
  private final Validator validator;
+ private final AgentGoalBusiness business;
  private final JsonMapper json=JsonMapper.builder().build();
  private static final Map<String,String> PERMISSIONS=Map.of("RESERVATION","reservation:apply","REPAIR","repair:apply","LEAVE","leave:apply","CERTIFICATE","certificate:apply");
- public AgentGoalTools(AgentMissionService missions,AgentGuides guides,IdentityService identities,Validator validator){this.missions=missions;this.guides=guides;this.identities=identities;this.validator=validator;}
+ public AgentGoalTools(AgentMissionService missions,AgentGuides guides,IdentityService identities,Validator validator,AgentGoalBusiness business){this.missions=missions;this.guides=guides;this.identities=identities;this.validator=validator;this.business=business;}
  public record Outcome(String stage,String status,String message,Map<String,Object> observation){}
  public List<String> kinds(CampusPrincipal user){var permissions=identities.permissions(user.id());return PERMISSIONS.entrySet().stream().filter(e->permissions.contains(e.getValue())&&(!e.getKey().equals("RESERVATION")||permissions.contains("portal:read"))).map(Map.Entry::getKey).sorted().toList();}
  public AgentMissionModels.View mission(CampusPrincipal user,long session,Task task){return task.missionId==null?null:missions.detail(user,session,task.missionId);}
  public Task task(State state,String key){return state.tasks.stream().filter(t->Objects.equals(t.key,key)).findFirst().orElseThrow(()->invalid("GOAL_TASK_UNKNOWN","请选择当前计划中的任务"));}
- public List<TaskView> views(CampusPrincipal user,long session,State state){return state.tasks.stream().map(t->new TaskView(t.key,t.kind,t.label,t.target,t.dependsOn,t.cancelled,mission(user,session,t),t.submissionHash,t.submissionVerified,t.watching)).toList();}
+ public List<TaskView> views(CampusPrincipal user,long session,State state){return state.tasks.stream().map(t->new TaskView(t.key,t.kind,t.label,t.target,t.dependsOn,t.cancelled,mission(user,session,t),t.submissionHash,t.submissionVerified,t.watching,business.preview(user,session,t))).toList();}
+ public boolean authorized(State state){return state.tasks.stream().anyMatch(task->!task.cancelled&&task.submissionHash!=null);}
+ public void authorize(CampusPrincipal user,long session,State state,String key,String hash,Boolean confirmed){business.authorize(user,session,task(state,key),hash,confirmed);}
  public boolean complete(CampusPrincipal user,long session,Task task){
   if(task.cancelled)return true;var view=mission(user,session,task);
   return view!=null&&view.stage().equals("DONE")&&view.business()!=null&&(task.target.equals("DRAFT")||task.submissionVerified&&!task.target.equals("TRACK"));
@@ -35,7 +38,7 @@ public class AgentGoalTools {
   var tasks=new ArrayList<Map<String,Object>>();
   for(var task:state.tasks){
    var item=new LinkedHashMap<String,Object>();item.put("key",task.key);item.put("kind",task.kind);item.put("target",task.target);item.put("dependsOn",task.dependsOn);item.put("cancelled",task.cancelled);
-   var view=mission(user,session,task);item.put("stage",view==null?"NOT_PREPARED":view.stage());item.put("complete",complete(user,session,task));
+   var view=mission(user,session,task);item.put("stage",view==null?"NOT_PREPARED":view.stage());item.put("complete",complete(user,session,task));item.put("submissionAuthorized",task.submissionHash!=null);item.put("submissionVerified",task.submissionVerified);
    if(view!=null){item.put("missing",view.missing());item.put("businessStatus",view.business()==null?"NONE":view.business().status());item.put("conflictCount",view.conflicts().size());
     if(task.kind.equals("RESERVATION")){var f=view.fields();var query=new LinkedHashMap<String,Object>();query.put("campus",f.campus());query.put("startsAt",f.startsAt());query.put("endsAt",f.endsAt());query.put("participants",f.participants());query.put("keyword",f.keyword());item.put("search",query);
      item.put("options",view.options().stream().map(o->Map.of("key",o.key(),"name",o.name(),"location",o.location(),"capacity",o.capacity()==null?0:o.capacity())).toList());}
@@ -100,7 +103,9 @@ public class AgentGoalTools {
    }
    case "refresh_task"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));var view=mission(user,session,task);return observed(name,task.key,"OK","已重新读取当前任务及原申请状态。",Map.of("stage",view==null?"NOT_PREPARED":view.stage(),"businessStatus",view==null||view.business()==null?"NONE":view.business().status(),"complete",complete(user,session,task)));}
    case "select_venue"->{exact(args,"taskKey","optionKey");var task=task(state,text(args,"taskKey",40,true));if(!task.kind.equals("RESERVATION")||task.cancelled)throw invalid("GOAL_FIELDS_INVALID","当前任务不能选择预约场地");var view=mission(user,session,task);if(view==null)throw invalid("GOAL_TASK_NOT_PREPARED","请先查询当前预约候选");view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"SELECT",null,text(args,"optionKey",50,true),null,null,null,null,null));state.focusTaskKey=task.key;return observed(name,task.key,"OK","已从真实候选选择场地，等待本人核对实际方案。",Map.of("stage",view.stage()));}
-   case "await_user"->{exact(args,"taskKey","question");String key=text(args,"taskKey",40,false);var task=key==null?null:task(state,key);var view=task==null?null:mission(user,session,task);state.focusTaskKey=key;String stage=view!=null&&view.stage().equals("WAITING_CONFIRMATION")?"WAITING_CONFIRMATION":"WAITING_INPUT";return outcome(stage,"WAITING",text(args,"question",300,true),Map.of("tool",name,"taskKey",Objects.toString(key,""),"status",stage));}
+   case "await_user"->{exact(args,"taskKey","question");String key=text(args,"taskKey",40,false);var task=key==null?null:task(state,key);var view=task==null?null:mission(user,session,task);var submission=task==null?null:business.preview(user,session,task);state.focusTaskKey=key;String stage=view!=null&&view.stage().equals("WAITING_CONFIRMATION")||submission!=null&&submission.canSubmit()?"WAITING_CONFIRMATION":"WAITING_INPUT";return outcome(stage,"WAITING",text(args,"question",300,true),Map.of("tool",name,"taskKey",Objects.toString(key,""),"status",stage));}
+   case "submit_task"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));business.submit(user,session,task,operation);return observed(name,task.key,"SUBMITTED","已按本人授权提交原申请，正在等待回读核验。",Map.of("businessStatus","SUBMITTED"));}
+   case "verify_submission"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));String status=business.verify(user,session,task);return observed(name,task.key,"VERIFIED","已读取原申请核验真实提交结果和当前状态。",Map.of("businessStatus",status));}
    case "finish"->{exact(args);if(state.tasks.isEmpty()||state.tasks.stream().anyMatch(t->!complete(user,session,t)))throw invalid("GOAL_NOT_COMPLETE","还有任务未按目标完成并核验，请继续执行或请求本人补充");return observedFinish();}
    default->throw invalid("GOAL_TOOL_REJECTED","模型选择的工具不在当前允许范围内");
   }

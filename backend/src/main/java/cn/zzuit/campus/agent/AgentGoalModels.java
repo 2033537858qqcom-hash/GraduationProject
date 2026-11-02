@@ -24,6 +24,7 @@ public final class AgentGoalModels {
      public CertificateFields certificateFields;
      public boolean cancelled,submissionVerified,watching;
      public String submissionHash,lastBusinessStatus;
+     public Integer submittedVersion;
  }
  public static class State {
      public List<Task> tasks=new ArrayList<>();
@@ -33,7 +34,10 @@ public final class AgentGoalModels {
      public int failures;
  }
  public record TaskView(String key,String kind,String label,String target,List<String> dependsOn,boolean cancelled,
-     AgentMissionModels.View mission,String submissionHash,boolean submissionVerified,boolean watching){}
+     AgentMissionModels.View mission,String submissionHash,boolean submissionVerified,boolean watching,SubmissionPreview submissionPreview){}
+ public record SubmissionField(String label,String value){}
+ public record SubmissionPreview(String kind,long businessId,String status,int version,List<SubmissionField> fields,
+     String proposalHash,boolean canSubmit,List<String> issues,String targetPath){}
  public record Event(int number,String tool,String taskKey,String status,String message,Integer promptTokens,Integer completionTokens,LocalDateTime createdAt){}
  public record Summary(long id,String requestKey,String goal,String stage,int version,LocalDateTime updatedAt){}
  public record View(long id,long sessionId,String goal,String stage,int version,List<String> instructions,List<TaskView> tasks,

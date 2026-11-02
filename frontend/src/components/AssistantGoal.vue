@@ -26,8 +26,8 @@ let generation = 0, timer: ReturnType<typeof setTimeout> | null = null, controll
 watch(working, value => emit('working', value))
 function base(session = props.sessionId) { return `/assistant/sessions/${session}/goals` }
 function stopPolling() { if (timer) clearTimeout(timer); timer = null }
-function schedulePolling() { stopPolling(); if (props.active && (running.value || busy.value)) timer = setTimeout(() => { void poll() }, 1500) }
-function apply(view: GoalView) { current.value = view; submitConfirmed.value = false; if (!view.tasks.some(task => task.key === chosenTask.value)) chosenTask.value = ''; schedulePolling() }
+function schedulePolling() { stopPolling(); if (props.active && (running.value || busy.value || current.value?.stage === 'MONITORING')) timer = setTimeout(() => { void poll() }, running.value || busy.value ? 1500 : 15000) }
+function apply(view: GoalView) { current.value = view; submitConfirmed.value = false; if (!view.tasks.some(task => task.key === chosenTask.value && !task.cancelled)) chosenTask.value = ''; schedulePolling() }
 async function poll() {
  const session = props.sessionId, epoch = generation
  if (!props.active || !session) return
@@ -82,6 +82,10 @@ async function authorizeSubmission() {
  if (!current.value || !activeTask.value || !submission.value?.canSubmit || !submitConfirmed.value || working.value || running.value || pending.value) return
  await mutate(`${base()}/${current.value.id}/actions`, { requestKey: crypto.randomUUID(), version: current.value.version, action: 'AUTHORIZE_SUBMIT', taskKey: activeTask.value.key, confirmed: true, proposalHash: submission.value.proposalHash })
 }
+async function cancelTask(key: string) {
+ if (!current.value || working.value || running.value || pending.value || !window.confirm('停止这个事项的后续办理？未保存的本地编辑不再用于此目标，已经保存或提交的原申请仍保留。')) return
+ await mutate(`${base()}/${current.value.id}/actions`, { requestKey: crypto.randomUUID(), version: current.value.version, action: 'CANCEL_TASK', taskKey: key, confirmed: true })
+}
 async function retry() { const request = pending.value; if (request && request.session === props.sessionId) await mutate(request.path, request.body) }
 async function cancel() {
  if (!current.value || current.value.stage === 'CANCELLED') return
@@ -128,7 +132,7 @@ defineExpose({ allowLeave })
    <div class="goal-state" role="status"><strong>{{ goalStageLabels[current.stage] ?? current.stage }}</strong><span>{{ current.events.length }} 次工具决策</span></div>
    <p class="goal-objective">{{ current.goal }}</p><p>{{ current.message }}</p>
    <details v-if="current.instructions.length"><summary>已补充的要求</summary><ol><li v-for="(instruction, index) in current.instructions" :key="index">{{ instruction }}</li></ol></details>
-   <div v-if="current.tasks.length" class="goal-plan"><h3>任务计划</h3><ol><li v-for="task in current.tasks" :key="task.key"><button type="button" :disabled="working || running" :aria-pressed="activeTask?.key === task.key" @click="selectTask(task.key)"><strong>{{ task.label }}</strong><span>{{ goalKindLabels[task.kind] ?? task.kind }} · {{ goalTargetLabels[task.target] }}</span><small>{{ task.cancelled ? '已取消' : task.mission?.business ? missionBusinessStatusLabel(task.mission.business.status) : task.mission ? task.mission.message : '尚未准备' }}</small></button><p v-if="task.dependsOn.length" class="goal-note">前置：{{ task.dependsOn.map(key => current?.tasks.find(parent => parent.key === key)?.label ?? key).join('、') }}</p></li></ol></div>
+   <div v-if="current.tasks.length" class="goal-plan"><h3>任务计划</h3><ol><li v-for="task in current.tasks" :key="task.key"><button type="button" :disabled="working || running" :aria-pressed="activeTask?.key === task.key" @click="selectTask(task.key)"><strong>{{ task.label }}</strong><span>{{ goalKindLabels[task.kind] ?? task.kind }} · {{ goalTargetLabels[task.target] }}</span><small>{{ task.cancelled ? '已取消' : task.mission?.business ? missionBusinessStatusLabel(task.mission.business.status) : task.mission ? task.mission.message : '尚未准备' }}</small></button><p v-if="task.watching" class="goal-note">持续跟踪中，状态变化时站内提醒。</p><p v-else-if="task.trackingComplete" class="goal-note">本事项的办理跟踪已结束。</p><button v-if="!terminal && !task.cancelled" type="button" :disabled="working || running || !!pending" @click="cancelTask(task.key)">停止此事项后续办理</button><p v-if="task.dependsOn.length" class="goal-note">前置：{{ task.dependsOn.map(key => current?.tasks.find(parent => parent.key === key)?.label ?? key).join('、') }}</p></li></ol></div>
    <details v-if="current.events.length" class="goal-trace"><summary>自主执行记录 · {{ current.events.length }} 步</summary><ol><li v-for="event in current.events" :key="event.number"><strong>{{ goalToolLabels[event.tool] ?? event.tool }}</strong><span>{{ event.status === 'FAILED' ? '已记录失败，核对后调整' : event.status === 'RUNNING' ? '执行中' : '已记录结果' }}</span><p>{{ event.message }}</p></li></ol></details>
    <AssistantMission v-if="activeTask?.mission && !activeTask.cancelled && (!activeTask.mission.business || activeTask.mission.business.status === 'DRAFT')" :key="activeTask.key" ref="child" embedded :mission-id="activeTask.mission.id" :session-id="sessionId" :active="active && !running && !busy" :model-ready="modelReady" @working="childBusy = $event" @updated="childUpdated" />
    <section v-if="submission && !activeTask?.cancelled" class="goal-submission" aria-label="原申请提交核对">

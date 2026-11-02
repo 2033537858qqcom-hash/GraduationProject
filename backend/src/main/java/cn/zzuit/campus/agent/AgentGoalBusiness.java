@@ -68,7 +68,7 @@ public class AgentGoalBusiness {
  }
  public SubmissionPreview preview(CampusPrincipal user,long session,Task task){
   if(task.missionId==null||task.cancelled||task.target.equals("DRAFT"))return null;var mission=missions.detail(user,session,task.missionId);if(mission.business()==null)return null;
-  var snapshot=snapshot(user,task,mission.business().id());String hash=hashes.hash(Arrays.asList(task.kind,user.id(),user.securityVersion(),snapshot.original,snapshot.eligibility,snapshot.guideVersion));
+  var snapshot=snapshot(user,task,mission.business().id());String hash=hashes.hash(Arrays.asList(task.kind,task.target,user.id(),user.securityVersion(),snapshot.original,snapshot.eligibility,snapshot.guideVersion));
   return new SubmissionPreview(task.kind,mission.business().id(),snapshot.status,snapshot.version,snapshot.fields,hash,snapshot.issues.isEmpty(),snapshot.issues,mission.business().targetPath());
  }
  public void authorize(CampusPrincipal user,long session,Task task,String hash,Boolean confirmed){

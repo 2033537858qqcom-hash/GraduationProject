@@ -145,7 +145,7 @@ async function newSession() {
 }
 async function deleteSession(item: AssistantSession) {
   if (busy.value || preparingDraft.value || savingDraft.value || sessionLoading.value || !await allowSessionChange()) return
-  if (!window.confirm(`删除对话“${item.title}”？历史提问和准备任务将删除，已保存的业务申请不会取消。`)) return
+  if (!window.confirm(`删除对话“${item.title}”？历史提问和准备任务将删除，该对话的进度跟踪会停止，已保存的业务申请仍保留。`)) return
   sessionLoading.value = true; error.value = ''
   try {
     await api<void>(`/assistant/sessions/${item.id}`, { method: 'DELETE' })

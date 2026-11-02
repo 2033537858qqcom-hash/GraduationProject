@@ -81,8 +81,10 @@ public class AgentGoalService {
     case "CONTINUE"->{}
     case "REVISE"->{consent(Boolean.TRUE.equals(input.externalConsent()));if(input.message()==null||input.message().isBlank())throw error(HttpStatus.BAD_REQUEST,"GOAL_MESSAGE_REQUIRED","请明确说明目标如何调整");if(row.state.instructions.size()>=8)throw changed("本目标已有8次补充，请新建目标以保持要求清晰");row.state.instructions.add(input.message().trim());for(var task:row.state.tasks)task.submissionHash=null;row.state.failures=0;}
     case "AUTHORIZE_SUBMIT"->{tools.authorize(user,session,row.state,input.taskKey(),input.proposalHash(),input.confirmed());}
+    case "CANCEL_TASK"->{if(!Boolean.TRUE.equals(input.confirmed()))throw error(HttpStatus.BAD_REQUEST,"GOAL_CANCEL_CONFIRM_REQUIRED","请明确确认停止这个事项的后续执行，原申请仍保留");var task=tools.task(row.state,input.taskKey());task.cancelled=true;task.watching=false;task.submissionHash=null;row.state.focusTaskKey=row.state.tasks.stream().filter(item->!item.cancelled).map(item->item.key).findFirst().orElse(null);}
     default->throw error(HttpStatus.BAD_REQUEST,"GOAL_ACTION_INVALID","当前目标不支持该操作");
    }
+   if(input.action().equals("CANCEL_TASK")&&(row.state.tasks.stream().allMatch(task->task.cancelled)||!model.ready())){remember(row,input,hash);boolean all=row.state.tasks.stream().allMatch(task->task.cancelled);row.state.message=all?"所有计划事项已停止后续执行，原业务记录保留。":"这个事项已停止后续执行，其他计划保留；模型连接后可继续。";return new Claim(persist(row,row.state,all?"CANCELLED":"PAUSED",null),false);}
    if(row.count>=TOTAL_STEPS){row.state.message="目标已达到80步执行上限，请核对历史后新建目标。";return new Claim(persist(row,row.state,"FAILED",null),false);}
    consent(row.consent);remember(row,input,hash);String token=UUID.randomUUID().toString();
    jdbc.sql("UPDATE agent_goal SET security_version=:security WHERE id=:id").param("security",user.securityVersion()).param("id",id).update();
@@ -90,6 +92,7 @@ public class AgentGoalService {
    return new Claim(persist(row,row.state,"RUNNING",token),true);
   });
   if(input.action().equals("CANCEL")){tools.cancel(user,session,id,claim.row.state);return view(user,claim.row);}
+  if(input.action().equals("CANCEL_TASK"))tools.cancelTask(user,session,id,tools.task(claim.row.state,input.taskKey()));
   return claim.run?run(user,session,id,claim.row.token):view(user,claim.row);
  }
  private void remember(Row row,Action input,String hash){jdbc.sql("UPDATE agent_goal SET last_request_key=:key,last_request_hash=:hash WHERE id=:id").param("key",input.requestKey()).param("hash",hash).param("id",row.id).update();}

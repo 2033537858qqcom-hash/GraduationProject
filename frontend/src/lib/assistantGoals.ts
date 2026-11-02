@@ -4,6 +4,7 @@ export interface GoalTask {
  key: string; kind: string; label: string; target: 'DRAFT' | 'SUBMIT' | 'TRACK'; dependsOn: string[]; cancelled: boolean
  mission: MissionView | null; submissionHash: string | null; submissionVerified: boolean; watching: boolean
  submissionPreview?: { kind: string; businessId: number; status: string; version: number; fields: {label: string; value: string}[]; proposalHash: string; canSubmit: boolean; issues: string[]; targetPath: string } | null
+ lastBusinessStatus?: string | null; trackingComplete?: boolean; lastCheckedAt?: string | null
 }
 export interface GoalSummary { id: number; requestKey: string; goal: string; stage: string; version: number; updatedAt: string }
 export interface GoalEvent { number: number; tool: string; taskKey: string | null; status: string; message: string; promptTokens: number | null; completionTokens: number | null; createdAt: string }

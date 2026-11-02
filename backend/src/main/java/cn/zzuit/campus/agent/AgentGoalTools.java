@@ -9,6 +9,7 @@ import jakarta.validation.Validator;
 import java.util.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -20,9 +21,10 @@ public class AgentGoalTools {
  private final IdentityService identities;
  private final Validator validator;
  private final AgentGoalBusiness business;
+ private final JdbcClient jdbc;
  private final JsonMapper json=JsonMapper.builder().build();
  private static final Map<String,String> PERMISSIONS=Map.of("RESERVATION","reservation:apply","REPAIR","repair:apply","LEAVE","leave:apply","CERTIFICATE","certificate:apply");
- public AgentGoalTools(AgentMissionService missions,AgentGuides guides,IdentityService identities,Validator validator,AgentGoalBusiness business){this.missions=missions;this.guides=guides;this.identities=identities;this.validator=validator;this.business=business;}
+ public AgentGoalTools(AgentMissionService missions,AgentGuides guides,IdentityService identities,Validator validator,AgentGoalBusiness business,JdbcClient jdbc){this.missions=missions;this.guides=guides;this.identities=identities;this.validator=validator;this.business=business;this.jdbc=jdbc;}
  public record Outcome(String stage,String status,String message,Map<String,Object> observation){}
  public List<String> kinds(CampusPrincipal user){var permissions=identities.permissions(user.id());return PERMISSIONS.entrySet().stream().filter(e->permissions.contains(e.getValue())&&(!e.getKey().equals("RESERVATION")||permissions.contains("portal:read"))).map(Map.Entry::getKey).sorted().toList();}
  public AgentMissionModels.View mission(CampusPrincipal user,long session,Task task){return task.missionId==null?null:missions.detail(user,session,task.missionId);}
@@ -95,11 +97,12 @@ public class AgentGoalTools {
    case "set_task_fields","revise_reservation"->{exact(args,"taskKey","fields");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");if(name.equals("revise_reservation")&&!task.kind.equals("RESERVATION"))throw invalid("GOAL_FIELDS_INVALID","只有预约任务可以调整场地查询方案");patch(user,session,task,args.path("fields"),operation,name.equals("revise_reservation"));return observed(name,task.key,"OK","已更新尚未写入的任务条件，后续须核对实际预览。",Map.of("updated",args.path("fields").properties().stream().map(Map.Entry::getKey).toList()));}
    case "prepare_task"->{
     exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");
-    for(var dependency:task.dependsOn)if(!complete(user,session,task(state,dependency)))throw invalid("GOAL_DEPENDENCY_PENDING","前置任务尚未按目标完成");
-    var view=mission(user,session,task);
+    for(var dependency:task.dependsOn){var parent=task(state,dependency);if(parent.cancelled)throw invalid("GOAL_DEPENDENCY_CANCELLED","前置任务已由本人停止，请重新组织剩余依赖");if(!complete(user,session,parent))throw invalid("GOAL_DEPENDENCY_PENDING","前置任务尚未按目标完成");}
+    var view=mission(user,session,task);boolean recovered=false;
+    if(view==null){var prior=jdbc.sql("SELECT id FROM agent_mission WHERE session_id=:s AND user_id=:u AND request_key=:key").param("s",session).param("u",user.id()).param("key","goal-"+goalId+"-"+task.key).query(Long.class).optional();if(prior.isPresent()){view=missions.detail(user,session,prior.get());if(!task.kind.equals(view.kind()))throw invalid("GOAL_RECOVERY_MISMATCH","原子任务类型与当前计划不一致，请本人核对历史");task.missionId=view.id();recovered=true;}}
     if(view==null){var body=new AgentMissionModels.Create("goal-"+goalId+"-"+task.key,task.label,Mode.LOCAL,false,task.fields,task.kind,task.repairFields,task.leaveFields,task.certificateFields);if(!validator.validate(body).isEmpty())throw invalid("GOAL_FIELDS_INVALID","任务条件未通过业务格式校验");view=missions.create(user,session,body);task.missionId=view.id();}
     else if(view.canContinue())view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"CONTINUE",null,null,null,null,null,null,null));
-    state.focusTaskKey=task.key;return observed(name,task.key,"OK","已核对原业务条件并准备任务预览。",Map.of("stage",view.stage(),"missing",view.missing(),"optionCount",view.options().size(),"conflictCount",view.conflicts().size()));
+    state.focusTaskKey=task.key;return observed(name,task.key,"OK",recovered?"已恢复关联先前准备的本人子任务，保留原字段和业务记录，请核对当前预览。":"已核对原业务条件并准备任务预览。",Map.of("stage",view.stage(),"missing",view.missing(),"optionCount",view.options().size(),"conflictCount",view.conflicts().size(),"recovered",recovered));
    }
    case "refresh_task"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));var view=mission(user,session,task);if(view!=null&&view.business()==null&&Set.of("WAITING_INPUT","FAILED","INTERRUPTED").contains(view.stage()))view=missions.recheck(user,session,view.id(),operation);return observed(name,task.key,"OK","已重新读取当前任务及原申请状态。",Map.of("stage",view==null?"NOT_PREPARED":view.stage(),"businessStatus",view==null||view.business()==null?"NONE":view.business().status(),"complete",complete(user,session,task)));}
    case "select_venue"->{exact(args,"taskKey","optionKey");var task=task(state,text(args,"taskKey",40,true));if(!task.kind.equals("RESERVATION")||task.cancelled)throw invalid("GOAL_FIELDS_INVALID","当前任务不能选择预约场地");var view=mission(user,session,task);if(view==null)throw invalid("GOAL_TASK_NOT_PREPARED","请先查询当前预约候选");view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"SELECT",null,text(args,"optionKey",50,true),null,null,null,null,null));state.focusTaskKey=task.key;return observed(name,task.key,"OK","已从真实候选选择场地，等待本人核对实际方案。",Map.of("stage",view.stage()));}
@@ -118,6 +121,7 @@ public class AgentGoalTools {
   }
  }
  private Outcome observedFinish(){return outcome("DONE","DONE","目标中的全部任务已按办理目标完成并核验。",Map.of("tool","finish","status","DONE"));}
- public void cancel(CampusPrincipal user,long session,long goalId,State state){for(var task:state.tasks)if(task.missionId!=null){var view=mission(user,session,task);if(!Set.of("DONE","CANCELLED").contains(view.stage()))missions.action(user,session,view.id(),new AgentMissionModels.Action("goal-cancel-"+goalId+"-"+task.key,view.version(),"CANCEL",null,null,null,null,null,null,null));}}
+ public void cancelTask(CampusPrincipal user,long session,long goalId,Task task){if(task.missionId!=null){var view=mission(user,session,task);if(!Set.of("DONE","CANCELLED").contains(view.stage()))missions.action(user,session,view.id(),new AgentMissionModels.Action("goal-cancel-"+goalId+"-"+task.key,view.version(),"CANCEL",null,null,null,null,null,null,null));}}
+ public void cancel(CampusPrincipal user,long session,long goalId,State state){for(var task:state.tasks)cancelTask(user,session,goalId,task);}
  private ApiException invalid(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

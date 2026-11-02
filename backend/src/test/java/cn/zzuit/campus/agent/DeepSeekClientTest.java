@@ -16,6 +16,18 @@ import tools.jackson.databind.json.JsonMapper;
 
 class DeepSeekClientTest {
     final JsonMapper json=JsonMapper.builder().build();
+    @Test void goalPlannerHasParameterizedToolChoiceRatherThanOneForcedAction() throws Exception {
+        var captured=new AtomicReference<JsonNode>();
+        var server=server(200,"{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"read_guide\",\"arguments\":\"{\\\"kind\\\":\\\"CERTIFICATE\\\"}\"}}]}}]}",captured,new AtomicReference<>());
+        try {
+            var plan=client(server).nextGoalStep("准备证明",AgentGoalToolCatalog.tools(List.of("CERTIFICATE"),false),json.valueToTree(Map.of("tasks",List.of(),"observations",List.of())));
+            assertThat(plan.calls().getFirst().name()).isEqualTo("read_guide");
+            assertThat(captured.get().path("tool_choice").asText()).isEqualTo("required");
+            assertThat(captured.get().path("tools").size()).isGreaterThan(5);
+            assertThat(captured.get().path("tools").toString()).contains("set_plan","set_task_fields","prepare_task").doesNotContain("contactPhone","studentId","identityNumber");
+            assertThat(captured.get().path("max_tokens").asInt()).isEqualTo(2400);
+        } finally { server.stop(0); }
+    }
     @Test void wireContractUsesNonThinkingToolsAndIgnoresModelFreeText() throws Exception {
         var captured=new AtomicReference<JsonNode>(); var auth=new AtomicReference<String>();
         var server=server(200,"{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"content\":\"已批准你的请假（模型虚构）\",\"tool_calls\":[{\"id\":\"c1\",\"type\":\"function\",\"function\":{\"name\":\"my_notice_summary\",\"arguments\":\"{}\"}}]}}],\"usage\":{\"prompt_tokens\":50,\"completion_tokens\":10}}",captured,auth);

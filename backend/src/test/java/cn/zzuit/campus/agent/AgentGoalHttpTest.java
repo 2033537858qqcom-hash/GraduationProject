@@ -95,6 +95,25 @@ class AgentGoalHttpTest {
   assertThat(goal.path("instructions").toString()).contains("暂时只准备证明");assertThat(goal.path("tasks").size()).isEqualTo(1);
   assertThat(goal.path("events").toString()).contains("read_guide");
  }
+ @Test void malformedModelArgumentsAreRecordedAndPlannerCanRecover()throws Exception{
+  decisions.add(new Call("set_plan",null));certificatePlan();var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));
+  assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(goal.path("events").toString()).contains("GOAL_TOOL_REJECTED");
+ }
+ @Test void activeGoalLeasePreventsDeletingItsConversation()throws Exception{
+  var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+  strategy=context->{entered.countDown();try{if(!release.await(10,java.util.concurrent.TimeUnit.SECONDS))throw new IllegalStateException("test release timeout");}catch(InterruptedException ex){Thread.currentThread().interrupt();throw new IllegalStateException(ex);}return call("await_user",Map.of("question","请补充用途。"));};
+  var user=login("20260001");long s=session(user);var response=java.util.concurrent.CompletableFuture.supplyAsync(()->{try{return user.post(path(s),input());}catch(Exception ex){throw new IllegalStateException(ex);}});
+  try{assertThat(entered.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();assertThat(user.delete("/api/assistant/sessions/"+s).statusCode()).isEqualTo(409);}
+  finally{release.countDown();response.get(15,java.util.concurrent.TimeUnit.SECONDS);}
+ }
+ @Test void allSupportedDomainsProvideAnActualPublishedGuide()throws Exception{
+  decisions.add(call("read_guide",Map.of("kind","RESERVATION")));var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));
+  assertThat(goal.path("events").get(0).path("status").asText()).isEqualTo("OK");
+ }
+ @Test void repeatedInvalidPlansStopWithinTheFailureBudget()throws Exception{
+  strategy=context->call("set_plan",Map.of("tasks",List.of()));var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));
+  assertThat(goal.path("stage").asText()).isEqualTo("FAILED");assertThat(goal.path("events").size()).isEqualTo(3);
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}
@@ -105,5 +124,6 @@ class AgentGoalHttpTest {
   HttpResponse<String> get(String path)throws Exception{return http.send(request(path).GET().build(),HttpResponse.BodyHandlers.ofString());}
   void csrf()throws Exception{var data=JSON.readTree(get("/api/auth/csrf").body());header=data.path("headerName").asText();token=data.path("token").asText();}
   HttpResponse<String> post(String path,Map<String,?> body)throws Exception{return http.send(request(path).header(header,token).header("Content-Type","application/json").POST(HttpRequest.BodyPublishers.ofString(JSON.writeValueAsString(body))).build(),HttpResponse.BodyHandlers.ofString());}
+  HttpResponse<String> delete(String path)throws Exception{return http.send(request(path).header(header,token).DELETE().build(),HttpResponse.BodyHandlers.ofString());}
  }
 }

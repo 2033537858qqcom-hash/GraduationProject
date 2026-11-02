@@ -82,6 +82,12 @@ class AgentGoalSubmissionHttpTest {
   strategy=context->{if(!once.getAndSet(true)){jdbc.sql("UPDATE certificate_request SET purpose='另一窗口修改',version=version+1 WHERE id=:id").param("id",id).update();return call("submit_task",Map.of("taskKey","certificate"));}return call("await_user",Map.of("taskKey","certificate","question","原申请已变化，请重新核对提交。"));};
   goal=act(user,s,goal,authorize(goal));assertThat(goal.path("events").toString()).contains("GOAL_SUBMISSION_CHANGED");assertThat(jdbc.sql("SELECT status FROM certificate_request WHERE id=:id").param("id",id).query(String.class).single()).isEqualTo("DRAFT");
  }
+ @Test void submissionAuthorizationAlsoBindsTheRequestedTaskOutcome()throws Exception{
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);var authorization=authorize(goal);long id=goal.path("id").asLong();
+  var state=JSON.readValue(jdbc.sql("SELECT state_json FROM agent_goal WHERE id=:id").param("id",id).query(String.class).single(),AgentGoalModels.State.class);state.tasks.get(0).target="TRACK";
+  jdbc.sql("UPDATE agent_goal SET state_json=:state WHERE id=:id").param("state",JSON.writeValueAsString(state)).param("id",id).update();
+  assertThat(user.post(path(s)+"/"+id+"/actions",authorization).statusCode()).isEqualTo(409);
+ }
  JsonNode savedGoal(Browser user,long s)throws Exception{
   prepareCertificate();var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));
   decisions.add(call("refresh_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对原申请后确认提交。")));

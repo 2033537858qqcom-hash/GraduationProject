@@ -114,6 +114,21 @@ class AgentGoalHttpTest {
   strategy=context->call("set_plan",Map.of("tasks",List.of()));var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));
   assertThat(goal.path("stage").asText()).isEqualTo("FAILED");assertThat(goal.path("events").size()).isEqualTo(3);
  }
+ @Test void cancellingOnePlannedItemPreservesItsBusinessAndReplansRemainingDependencies()throws Exception{
+  decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of()),task("leave","LEAVE",List.of("certificate"))))));certificateFields();decisions.add(call("prepare_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请先核对证明。")));
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));long id=ok(user.get(path(s)+"/"+goal.path("id").asLong())).path("tasks").get(0).path("mission").path("business").path("id").asLong();
+  decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of()),task("leave","LEAVE",List.of())))));decisions.add(call("prepare_task",Map.of("taskKey","leave")));
+  var cancel=action(goal,"CANCEL_TASK");cancel.put("taskKey","certificate");cancel.put("confirmed",true);goal=act(user,s,goal,cancel);
+  assertThat(goal.path("tasks").get(0).path("cancelled").asBoolean()).isTrue();assertThat(goal.path("tasks").get(1).path("mission").isNull()).isFalse();
+  assertThat(jdbc.sql("SELECT status FROM certificate_request WHERE id=:id").param("id",id).query(String.class).single()).isEqualTo("DRAFT");
+ }
+ @Test void interruptedGoalRebindsAnAlreadyPreparedChildEvenAfterItsPlanLabelChanged()throws Exception{
+  prepareCertificate();var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));long id=goal.path("id").asLong(),child=goal.path("tasks").get(0).path("mission").path("id").asLong();
+  var state=JSON.readValue(jdbc.sql("SELECT state_json FROM agent_goal WHERE id=:id").param("id",id).query(String.class).single(),AgentGoalModels.State.class);state.tasks.get(0).missionId=null;state.tasks.get(0).label="更新后的计划说明";
+  jdbc.sql("UPDATE agent_goal SET state_json=:state,stage='PAUSED',runner_token=NULL,lease_until=NULL,version=version+1 WHERE id=:id").param("state",JSON.writeValueAsString(state)).param("id",id).update();goal=ok(user.get(path(s)+"/"+id));
+  decisions.add(call("prepare_task",Map.of("taskKey","certificate")));goal=act(user,s,goal,action(goal,"CONTINUE"));
+  assertThat(goal.path("tasks").get(0).path("mission").path("id").asLong()).isEqualTo(child);assertThat(jdbc.sql("SELECT COUNT(*) FROM agent_mission WHERE session_id=:s").param("s",s).query(Long.class).single()).isEqualTo(1);
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

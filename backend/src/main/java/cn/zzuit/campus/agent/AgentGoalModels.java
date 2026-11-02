@@ -22,9 +22,10 @@ public final class AgentGoalModels {
      public RepairFields repairFields;
      public LeaveFields leaveFields;
      public CertificateFields certificateFields;
-     public boolean cancelled,submissionVerified,watching;
+     public boolean cancelled,submissionVerified,watching,trackingComplete;
      public String submissionHash,lastBusinessStatus;
      public Integer submittedVersion;
+     public LocalDateTime lastCheckedAt;
  }
  public static class State {
      public List<Task> tasks=new ArrayList<>();
@@ -34,7 +35,8 @@ public final class AgentGoalModels {
      public int failures;
  }
  public record TaskView(String key,String kind,String label,String target,List<String> dependsOn,boolean cancelled,
-     AgentMissionModels.View mission,String submissionHash,boolean submissionVerified,boolean watching,SubmissionPreview submissionPreview){}
+     AgentMissionModels.View mission,String submissionHash,boolean submissionVerified,boolean watching,SubmissionPreview submissionPreview,
+     String lastBusinessStatus,boolean trackingComplete,LocalDateTime lastCheckedAt){}
  public record SubmissionField(String label,String value){}
  public record SubmissionPreview(String kind,long businessId,String status,int version,List<SubmissionField> fields,
      String proposalHash,boolean canSubmit,List<String> issues,String targetPath){}

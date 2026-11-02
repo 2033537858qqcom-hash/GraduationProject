@@ -48,7 +48,7 @@ class AgentGoalMonitorHttpTest {
  @Test void followsRealReviewChangesQuietlyAndCompletesAtTerminalOutcome()throws Exception{
   var user=login("20260001");long s=session(user);var goal=watchingGoal(user,s);long id=businessId(goal),before=notices(id);clearInvocations(model);
   due(goal);monitor.check();assertThat(notices(id)).isEqualTo(before);
-  decide(id,"RETURN");due(goal);monitor.check();goal=ok(user.get(path(s)+"/"+goal.path("id").asLong()));
+  decide(id,"RETURN");due(goal);assertThat(monitor.check()).as("本次真实审核变化").isEqualTo(1);goal=ok(user.get(path(s)+"/"+goal.path("id").asLong()));
   assertThat(goal.path("stage").asText()).isEqualTo("MONITORING");assertThat(goal.path("tasks").get(0).path("lastBusinessStatus").asText()).isEqualTo("RETURNED");assertThat(notices(id)).isEqualTo(before+1);
   due(goal);monitor.check();assertThat(notices(id)).isEqualTo(before+1);
   var original=ok(user.get("/api/certificates/mine/"+id));ok(user.post("/api/certificates/mine/"+id+"/submit",Map.of("version",original.path("version").asInt(),"comment","本人核对后重新提交")));
@@ -79,7 +79,7 @@ class AgentGoalMonitorHttpTest {
  }
  long businessId(JsonNode goal){return goal.path("tasks").get(0).path("mission").path("business").path("id").asLong();}
  long notices(long id){return jdbc.sql("SELECT COUNT(*) FROM user_notice WHERE source_type='CERTIFICATE' AND source_id=:id AND title='Agent 跟踪状态更新'").param("id",id).query(Long.class).single();}
- void due(JsonNode goal){jdbc.sql("UPDATE agent_goal SET monitor_after=CURRENT_TIMESTAMP WHERE id=:id").param("id",goal.path("id").asLong()).update();}
+ void due(JsonNode goal){jdbc.sql("UPDATE agent_goal SET monitor_after=:due WHERE id=:id").param("due",AgentMissionTools.now().minusMinutes(1)).param("id",goal.path("id").asLong()).update();}
  void decide(long id,String decision)throws Exception{var reviewer=login("affairs1001");var original=ok(reviewer.get("/api/certificates/review/"+id));ok(reviewer.post("/api/certificates/review/"+id+"/decision",Map.of("version",original.path("version").asInt(),"action",decision,"comment","隔离验收实际审核结果")));}
  JsonNode savedGoal(Browser user,long s)throws Exception{
   prepareCertificate();var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));

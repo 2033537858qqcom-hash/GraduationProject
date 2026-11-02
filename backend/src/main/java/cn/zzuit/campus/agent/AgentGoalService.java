@@ -4,6 +4,8 @@ import static cn.zzuit.campus.agent.AgentGoalModels.*;
 import cn.zzuit.campus.agent.AgentModels.*;
 import cn.zzuit.campus.common.ApiException;
 import cn.zzuit.campus.identity.CampusPrincipal;
+import cn.zzuit.campus.identity.IdentityService;
+import cn.zzuit.campus.notice.NoticeWriter;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.*;
@@ -27,10 +29,14 @@ public class AgentGoalService {
  private final AgentMissionTools hashes;
  private final DeepSeekClient model;
  private final TransactionTemplate tx;
+ private final IdentityService identities;
+ private final NoticeWriter notices;
+ private final AgentGoalBusiness business;
+ private static final org.slf4j.Logger LOG=org.slf4j.LoggerFactory.getLogger(AgentGoalService.class);
  private final JsonMapper json=JsonMapper.builder().build();
  private record Row(long id,long session,long user,String goal,boolean consent,long security,String stage,State state,int count,int version,String token,LocalDateTime lease,String lastKey,String lastHash,LocalDateTime updated){}
  private record Claim(Row row,boolean run){}
- public AgentGoalService(JdbcClient jdbc,AgentSessions sessions,AgentGoalTools tools,AgentMissionTools hashes,DeepSeekClient model,TransactionTemplate tx){this.jdbc=jdbc;this.sessions=sessions;this.tools=tools;this.hashes=hashes;this.model=model;this.tx=tx;}
+ public AgentGoalService(JdbcClient jdbc,AgentSessions sessions,AgentGoalTools tools,AgentMissionTools hashes,DeepSeekClient model,TransactionTemplate tx,IdentityService identities,NoticeWriter notices,AgentGoalBusiness business){this.jdbc=jdbc;this.sessions=sessions;this.tools=tools;this.hashes=hashes;this.model=model;this.tx=tx;this.identities=identities;this.notices=notices;this.business=business;}
  private LocalDateTime now(){return AgentMissionTools.now();}
  private <T>T write(Supplier<T> operation){return tx.execute(ignored->{jdbc.sql("UPDATE foundation_write_lock SET revision=revision+1 WHERE id=1").update();return operation.get();});}
  private Row row(ResultSet r,int ignored)throws SQLException{return new Row(r.getLong("id"),r.getLong("session_id"),r.getLong("user_id"),r.getString("goal"),r.getBoolean("external_consent"),r.getLong("security_version"),r.getString("stage"),json.readValue(r.getString("state_json"),State.class),r.getInt("step_count"),r.getInt("version"),r.getString("runner_token"),r.getObject("lease_until",LocalDateTime.class),r.getString("last_request_key"),r.getString("last_request_hash"),r.getObject("updated_at",LocalDateTime.class));}
@@ -39,8 +45,8 @@ public class AgentGoalService {
  private boolean running(Row row){return row.stage.equals("RUNNING")&&row.lease!=null&&row.lease.isAfter(now());}
  private Row lease(CampusPrincipal user,long session,long id,String token){var row=load(user,session,id);if(!row.stage.equals("RUNNING")||!Objects.equals(row.token,token))throw changed("目标执行权已变化，请刷新状态");return row;}
  private Row persist(Row row,State state,String stage,String token){
-  if(jdbc.sql("UPDATE agent_goal SET state_json=:state,stage=:stage,runner_token=:token,lease_until=:lease,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v")
-      .param("state",json.writeValueAsString(state)).param("stage",stage).param("token",token).param("lease",token==null?null:now().plus(LEASE)).param("id",row.id).param("v",row.version).update()!=1)throw changed("目标状态已变化，请刷新");return raw(row.id);
+  if(jdbc.sql("UPDATE agent_goal SET state_json=:state,stage=:stage,runner_token=:token,lease_until=:lease,monitor_after=CASE WHEN :watching THEN COALESCE(monitor_after,:monitor) ELSE NULL END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v")
+      .param("state",json.writeValueAsString(state)).param("stage",stage).param("token",token).param("lease",token==null?null:now().plus(LEASE)).param("watching",state.tasks.stream().anyMatch(task->task.watching)).param("monitor",now().plusMinutes(1)).param("id",row.id).param("v",row.version).update()!=1)throw changed("目标状态已变化，请刷新");return raw(row.id);
  }
  public List<Summary> list(CampusPrincipal user,long session){sessions.session(user,session);return jdbc.sql("SELECT * FROM agent_goal WHERE session_id=:s AND user_id=:u ORDER BY id DESC LIMIT 10").param("s",session).param("u",user.id()).query((r,n)->new Summary(r.getLong("id"),r.getString("request_key"),r.getString("goal"),r.getString("stage").equals("RUNNING")&&(r.getObject("lease_until",LocalDateTime.class)==null||r.getObject("lease_until",LocalDateTime.class).isBefore(now()))?"INTERRUPTED":r.getString("stage"),r.getInt("version"),r.getObject("updated_at",LocalDateTime.class))).list();}
  private List<Event> events(long id){return jdbc.sql("SELECT * FROM agent_goal_event WHERE goal_id=:id ORDER BY step_number").param("id",id).query((r,n)->new Event(r.getInt("step_number"),r.getString("tool"),r.getString("task_key"),r.getString("status"),r.getString("message"),r.getObject("prompt_tokens",Integer.class),r.getObject("completion_tokens",Integer.class),r.getObject("created_at",LocalDateTime.class))).list();}
@@ -79,6 +85,7 @@ public class AgentGoalService {
    }
    if(row.count>=TOTAL_STEPS){row.state.message="目标已达到80步执行上限，请核对历史后新建目标。";return new Claim(persist(row,row.state,"FAILED",null),false);}
    consent(row.consent);remember(row,input,hash);String token=UUID.randomUUID().toString();
+   jdbc.sql("UPDATE agent_goal SET security_version=:security WHERE id=:id").param("security",user.securityVersion()).param("id",id).update();
    jdbc.sql("UPDATE agent_goal_event SET status='INTERRUPTED',message='上轮执行已中断，重新读取结果后继续决策' WHERE goal_id=:id AND status='RUNNING'").param("id",id).update();
    return new Claim(persist(row,row.state,"RUNNING",token),true);
   });
@@ -137,6 +144,37 @@ public class AgentGoalService {
   return stop(user,session,id,token,"PAUSED","本轮预算已用完，计划与结果已保存；继续执行会重新读取当前状态。每个目标最多80步。");
  }
  private View stop(CampusPrincipal user,long session,long id,String token,String stage,String message){return view(user,write(()->{var row=lease(user,session,id,token);row.state.message=message;return persist(row,row.state,stage,null);}));}
+ /** Background checks use the stored owner and security version; no model calls or arbitrary actors. */
+ public int pollMonitored(){
+  var ids=jdbc.sql("SELECT id FROM agent_goal WHERE monitor_after<=:now AND runner_token IS NULL AND stage IN ('MONITORING','WAITING_INPUT','WAITING_CONFIRMATION','PAUSED') ORDER BY monitor_after,id LIMIT 50").param("now",now()).query(Long.class).list();int changed=0;
+  for(long id:ids){try{changed+=write(()->pollOne(id));}catch(RuntimeException failure){LOG.warn("Agent monitor will retry goal {} after {}",id,failure.getClass().getSimpleName());}}
+  return changed;
+ }
+ private int pollOne(long id){
+  var found=jdbc.sql("SELECT * FROM agent_goal WHERE id=:id").param("id",id).query(this::row).optional();if(found.isEmpty())return 0;var row=found.get();
+  if(row.token!=null||!Set.of("MONITORING","WAITING_INPUT","WAITING_CONFIRMATION","PAUSED").contains(row.stage))return 0;
+  var owner=identities.current(row.user).orElse(null);
+  if(owner==null||owner.securityVersion()!=row.security){for(var task:row.state.tasks)task.watching=false;row.state.message="账号或岗位授权已变化，已停止后台跟踪；请重新登录后明确继续。";persist(row,row.state,"PAUSED",null);return 0;}
+  int changes=0;boolean unavailable=false;
+  for(var task:row.state.tasks){
+   if(!task.watching||task.cancelled)continue;
+   try{
+    var view=tools.mission(owner,row.session,task);if(view==null||view.business()==null)throw changed("原申请当前不可读取");var current=view.business();
+    if(!Objects.equals(task.lastBusinessStatus,current.status())){
+     notices.write(owner.id(),"Agent 跟踪状态更新",task.kind,current.id(),"MINE","状态由 "+Objects.toString(task.lastBusinessStatus,"待核对")+" 变为 "+current.status()+"，请进入原申请查看办理意见和下一步。");
+     task.lastBusinessStatus=current.status();task.lastCheckedAt=now();row.state.focusTaskKey=task.key;changes++;
+    }
+    if(business.terminal(current.status())){task.trackingComplete=true;task.watching=false;}
+   }catch(ApiException failure){task.watching=false;task.submissionHash=null;unavailable=true;row.state.message="部分事项的当前访问授权或原申请已变化，已停止其跟踪，请本人重新核对。";}
+  }
+  boolean complete=!row.state.tasks.isEmpty()&&row.state.tasks.stream().allMatch(task->tools.complete(owner,row.session,task));
+  if(changes>0||unavailable||complete){
+   String stage=complete?"DONE":unavailable?"PAUSED":row.stage;
+   if(complete)row.state.message="办理跟踪已结束，结果以各原申请的真实状态为准。";else if(!unavailable)row.state.message="原申请状态已更新，请查看对应任务、办理意见与下一步。";
+   persist(row,row.state,stage,null);
+  }
+  jdbc.sql("UPDATE agent_goal SET monitor_after=:next WHERE id=:id AND monitor_after IS NOT NULL").param("next",now().plusMinutes(1)).param("id",id).update();return changes;
+ }
  private ApiException changed(String message){return error(HttpStatus.CONFLICT,"GOAL_CHANGED",message);}
  private ApiException error(HttpStatus status,String code,String message){return new ApiException(status,code,message);}
 }

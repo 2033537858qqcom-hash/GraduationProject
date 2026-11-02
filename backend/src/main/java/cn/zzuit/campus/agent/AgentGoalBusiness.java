@@ -95,5 +95,6 @@ public class AgentGoalBusiness {
   if(business==null||!submitted.contains(business.status())||task.submittedVersion!=null&&business.version()<task.submittedVersion)throw changed("原申请尚未达到可核验的已提交状态");
   task.submissionVerified=true;task.lastBusinessStatus=business.status();return business.status();
  }
+ public boolean terminal(String status){return Set.of("COMPLETED","REJECTED","WITHDRAWN","CANCELLED","EXPIRED").contains(status);}
  private ApiException changed(String message){return new ApiException(HttpStatus.CONFLICT,"GOAL_SUBMISSION_CHANGED",message);}
 }

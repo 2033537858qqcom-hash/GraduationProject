@@ -27,18 +27,18 @@ public class AgentGoalTools {
  public List<String> kinds(CampusPrincipal user){var permissions=identities.permissions(user.id());return PERMISSIONS.entrySet().stream().filter(e->permissions.contains(e.getValue())&&(!e.getKey().equals("RESERVATION")||permissions.contains("portal:read"))).map(Map.Entry::getKey).sorted().toList();}
  public AgentMissionModels.View mission(CampusPrincipal user,long session,Task task){return task.missionId==null?null:missions.detail(user,session,task.missionId);}
  public Task task(State state,String key){return state.tasks.stream().filter(t->Objects.equals(t.key,key)).findFirst().orElseThrow(()->invalid("GOAL_TASK_UNKNOWN","请选择当前计划中的任务"));}
- public List<TaskView> views(CampusPrincipal user,long session,State state){return state.tasks.stream().map(t->new TaskView(t.key,t.kind,t.label,t.target,t.dependsOn,t.cancelled,mission(user,session,t),t.submissionHash,t.submissionVerified,t.watching,business.preview(user,session,t))).toList();}
+ public List<TaskView> views(CampusPrincipal user,long session,State state){return state.tasks.stream().map(t->new TaskView(t.key,t.kind,t.label,t.target,t.dependsOn,t.cancelled,mission(user,session,t),t.submissionHash,t.submissionVerified,t.watching,business.preview(user,session,t),t.lastBusinessStatus,t.trackingComplete,t.lastCheckedAt)).toList();}
  public boolean authorized(State state){return state.tasks.stream().anyMatch(task->!task.cancelled&&task.submissionHash!=null);}
  public void authorize(CampusPrincipal user,long session,State state,String key,String hash,Boolean confirmed){business.authorize(user,session,task(state,key),hash,confirmed);}
  public boolean complete(CampusPrincipal user,long session,Task task){
   if(task.cancelled)return true;var view=mission(user,session,task);
-  return view!=null&&view.stage().equals("DONE")&&view.business()!=null&&(task.target.equals("DRAFT")||task.submissionVerified&&!task.target.equals("TRACK"));
+  return view!=null&&view.stage().equals("DONE")&&view.business()!=null&&(task.target.equals("DRAFT")||task.submissionVerified&&(task.target.equals("SUBMIT")||task.trackingComplete));
  }
  public JsonNode context(CampusPrincipal user,long session,State state){
   var tasks=new ArrayList<Map<String,Object>>();
   for(var task:state.tasks){
    var item=new LinkedHashMap<String,Object>();item.put("key",task.key);item.put("kind",task.kind);item.put("target",task.target);item.put("dependsOn",task.dependsOn);item.put("cancelled",task.cancelled);
-   var view=mission(user,session,task);item.put("stage",view==null?"NOT_PREPARED":view.stage());item.put("complete",complete(user,session,task));item.put("submissionAuthorized",task.submissionHash!=null);item.put("submissionVerified",task.submissionVerified);
+   var view=mission(user,session,task);item.put("stage",view==null?"NOT_PREPARED":view.stage());item.put("complete",complete(user,session,task));item.put("submissionAuthorized",task.submissionHash!=null);item.put("submissionVerified",task.submissionVerified);item.put("watching",task.watching);item.put("trackingComplete",task.trackingComplete);
    if(view!=null){item.put("missing",view.missing());item.put("businessStatus",view.business()==null?"NONE":view.business().status());item.put("conflictCount",view.conflicts().size());
     if(task.kind.equals("RESERVATION")){var f=view.fields();var query=new LinkedHashMap<String,Object>();query.put("campus",f.campus());query.put("startsAt",f.startsAt());query.put("endsAt",f.endsAt());query.put("participants",f.participants());query.put("keyword",f.keyword());item.put("search",query);
      item.put("options",view.options().stream().map(o->Map.of("key",o.key(),"name",o.name(),"location",o.location(),"capacity",o.capacity()==null?0:o.capacity())).toList());}
@@ -106,6 +106,13 @@ public class AgentGoalTools {
    case "await_user"->{exact(args,"taskKey","question");String key=text(args,"taskKey",40,false);var task=key==null?null:task(state,key);var view=task==null?null:mission(user,session,task);var submission=task==null?null:business.preview(user,session,task);state.focusTaskKey=key;String stage=view!=null&&view.stage().equals("WAITING_CONFIRMATION")||submission!=null&&submission.canSubmit()?"WAITING_CONFIRMATION":"WAITING_INPUT";return outcome(stage,"WAITING",text(args,"question",300,true),Map.of("tool",name,"taskKey",Objects.toString(key,""),"status",stage));}
    case "submit_task"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));business.submit(user,session,task,operation);return observed(name,task.key,"SUBMITTED","已按本人授权提交原申请，正在等待回读核验。",Map.of("businessStatus","SUBMITTED"));}
    case "verify_submission"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));String status=business.verify(user,session,task);return observed(name,task.key,"VERIFIED","已读取原申请核验真实提交结果和当前状态。",Map.of("businessStatus",status));}
+   case "watch_task"->{
+    exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled||!task.target.equals("TRACK")||!task.submissionVerified)throw invalid("GOAL_MONITOR_NOT_READY","跟踪任务必须在计划中明确要求TRACK并已核验实际提交");
+    var view=mission(user,session,task);if(view==null||view.business()==null)throw invalid("GOAL_MONITOR_NOT_READY","尚未关联可跟踪的本人原申请");
+    task.lastBusinessStatus=view.business().status();task.lastCheckedAt=AgentMissionTools.now();task.trackingComplete=business.terminal(task.lastBusinessStatus);task.watching=!task.trackingComplete;
+    boolean allDone=state.tasks.stream().allMatch(t->complete(user,session,t));boolean waitingOnly=state.tasks.stream().allMatch(t->complete(user,session,t)||t.watching);
+    return outcome(allDone?"DONE":waitingOnly?"MONITORING":"RUNNING","WATCHING",allDone?"办理跟踪已结束，结果以各原申请状态为准。":"已开始持久跟踪；状态不变时保持安静，变化或需要本人处理时发送站内提醒。",Map.of("tool",name,"taskKey",task.key,"status",task.trackingComplete?"DONE":"MONITORING","businessStatus",task.lastBusinessStatus));
+   }
    case "finish"->{exact(args);if(state.tasks.isEmpty()||state.tasks.stream().anyMatch(t->!complete(user,session,t)))throw invalid("GOAL_NOT_COMPLETE","还有任务未按目标完成并核验，请继续执行或请求本人补充");return observedFinish();}
    default->throw invalid("GOAL_TOOL_REJECTED","模型选择的工具不在当前允许范围内");
   }

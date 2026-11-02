@@ -146,6 +146,28 @@ test('leave mission sends only its domain fields and editing contact requires a 
  }finally{globalThis.fetch=oldFetch}
 })
 
+test('certificate mission sends only purpose and rejects confirmation after editing it',async()=>{
+ const oldFetch=globalThis.fetch,commands=[]
+ const certificateFields={purpose:'本地实际证明用途'}
+ const fields={campus:null,startsAt:null,endsAt:null,participants:null,keyword:null,activityTheme:null,activityType:null,contactPhone:null}
+ const view={id:1,sessionId:1,kind:'CERTIFICATE',stage:'WAITING_CONFIRMATION',version:3,fields,certificateFields,options:[],conflicts:[],missing:[],proposalHash:'a'.repeat(64),business:null}
+ globalThis.fetch=async(path,options={})=>{
+  if(path==='/api/auth/csrf')return Response.json({headerName:'X-CSRF-TOKEN',token:'test'})
+  if(options.method==='POST'){commands.push(JSON.parse(options.body));return Response.json(view)}
+  return Response.json([])
+ }
+ try{
+  const errors=await checkPageSetup('/assistant-mission-test',undefined,async state=>{
+   state.goal.value='帮我准备在校证明草稿';state.certificateForm.value=certificateFields;await state.create()
+   assert.equal(commands[0].fields,null);assert.equal(commands[0].repairFields,null);assert.equal(commands[0].leaveFields,null)
+   assert.deepEqual(commands[0].certificateFields,certificateFields);assert.equal(state.isCertificate.value,true);assert.equal(state.dirty.value,false)
+   state.confirmed.value=true;state.certificateForm.value.purpose='修改后的实际用途';await state.confirm();assert.equal(commands.length,1)
+   await state.action('REVISE');assert.equal(commands[1].certificateFields.purpose,'修改后的实际用途');assert.equal(commands[1].action,'REVISE')
+  },{sessionId:1,active:false,modelReady:false})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
 test('workbench initializes its task queue before starting filter watchers', async () => {
   const errors = await checkPageSetup('/workbench')
   assert.ifError(errors[0])

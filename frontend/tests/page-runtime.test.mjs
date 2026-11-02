@@ -128,6 +128,26 @@ test('autonomous goals require consent and retry the identical request after a l
  }finally{globalThis.fetch=oldFetch}
 })
 
+test('goal submission requires checking the exact current business snapshot',async()=>{
+ const oldFetch=globalThis.fetch,commands=[]
+ const view={id:8,sessionId:1,goal:'提交证明',stage:'WAITING_CONFIRMATION',version:5,instructions:[],tasks:[{key:'proof',kind:'CERTIFICATE',label:'提交证明',target:'SUBMIT',dependsOn:[],cancelled:false,mission:null,submissionPreview:{proposalHash:'b'.repeat(64),canSubmit:true,fields:[{label:'实际用途',value:'实习核验'}],issues:[],status:'DRAFT',version:0}}],message:'请确认提交',focusTaskKey:'proof',events:[],canContinue:true}
+ globalThis.fetch=async(path,options={})=>{
+  if(path==='/api/auth/csrf')return Response.json({headerName:'X-CSRF-TOKEN',token:'test'})
+  if(options.method==='POST'){commands.push(JSON.parse(options.body));return Response.json(view)}
+  return Response.json([])
+ }
+ try{
+  const errors=await checkPageSetup('/assistant-goal-test',undefined,async state=>{
+   state.current.value=view;await state.authorizeSubmission();assert.equal(commands.length,0)
+   state.submitConfirmed.value=true;await state.authorizeSubmission();assert.equal(commands.length,1)
+   assert.equal(commands[0].action,'AUTHORIZE_SUBMIT');assert.equal(commands[0].taskKey,'proof');assert.equal(commands[0].proposalHash,'b'.repeat(64))
+   state.submitConfirmed.value=true;state.current.value={...view,tasks:[{...view.tasks[0],submissionPreview:{...view.tasks[0].submissionPreview,proposalHash:'c'.repeat(64)}}]}
+   await new Promise(resolve=>setImmediate(resolve));assert.equal(state.submitConfirmed.value,false)
+  },{sessionId:1,active:false,modelReady:true})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
 test('repair mission local field edits require a new server preview before confirmation', async () => {
  const oldFetch=globalThis.fetch,commands=[]
  const repairFields={category:'ELECTRICITY',title:'灯具故障',description:'灯具无法开启',locationId:1,locationDetail:'走廊',contact:'owner@example.test',contactWindow:'白天'}

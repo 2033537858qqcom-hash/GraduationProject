@@ -1,3 +1,6 @@
+import type { AssistantCertificatePreview } from './assistantCertificate'
+
+export interface CertificateMissionFields { purpose: string | null }
 export interface MissionFields {
  campus: string | null; startsAt: string | null; endsAt: string | null; participants: number | null
  keyword: string | null; activityTheme: string | null; activityType: string | null; contactPhone: string | null
@@ -14,6 +17,7 @@ export interface MissionView extends Omit<MissionSummary, 'requestKey'> {
  repairFields?: RepairMissionFields | null; repairPreview?: {ready:boolean;summary:string;locationName:string|null;issues:string[]} | null
  repairLocations?: {id:number;campusName:string;name:string}[]
  leaveFields?: LeaveMissionFields|null;leavePreview?:{ready:boolean;summary:string;duration:string|null;issues:string[];eligibilityMessage:string}|null
+ certificateFields?: CertificateMissionFields | null; certificatePreview?: AssistantCertificatePreview | null
 }
 const clean = (value: unknown) => typeof value === 'string' && value.trim() ? value.trim() : null
 export function missionFieldsPayload(input: Partial<Record<keyof MissionFields, unknown>>): MissionFields {
@@ -27,9 +31,11 @@ export function repairMissionFieldsPayload(input: Partial<Record<keyof RepairMis
  return {category:clean(input.category),title:clean(input.title),description:clean(input.description),locationId:Number.isSafeInteger(value)&&value>0?value:null,locationDetail:clean(input.locationDetail),contact:clean(input.contact),contactWindow:clean(input.contactWindow)}
 }
 export function leaveMissionFieldsPayload(input:Partial<Record<keyof LeaveMissionFields,unknown>>):LeaveMissionFields{return {reasonType:clean(input.reasonType),reason:clean(input.reason),contact:clean(input.contact),startDate:clean(input.startDate),startTime:clean(input.startTime),endDate:clean(input.endDate),endTime:clean(input.endTime)}}
-type Proposal = Pick<MissionView, 'version' | 'stage' | 'proposalHash'> & {kind?:string;fields:MissionFields|null;repairFields?:RepairMissionFields|null;leaveFields?:LeaveMissionFields|null}
+export function certificateMissionFieldsPayload(input: Partial<Record<keyof CertificateMissionFields, unknown>>): CertificateMissionFields { return { purpose: clean(input.purpose) } }
+type Proposal = Pick<MissionView, 'version' | 'stage' | 'proposalHash'> & {kind?:string;fields:MissionFields|null;repairFields?:RepairMissionFields|null;leaveFields?:LeaveMissionFields|null;certificateFields?:CertificateMissionFields|null}
 export function canConfirmMission(mission: Proposal | null, fields: Partial<Record<string, unknown>>, confirmed: boolean) {
  if(!mission||mission.stage!=='WAITING_CONFIRMATION'||!confirmed||!/^[a-f0-9]{64}$/.test(mission.proposalHash??''))return false
+ if(mission.kind==='CERTIFICATE')return JSON.stringify(certificateMissionFieldsPayload(fields))===JSON.stringify(certificateMissionFieldsPayload(mission.certificateFields??{}))
  if(mission.kind==='LEAVE')return JSON.stringify(leaveMissionFieldsPayload(fields))===JSON.stringify(leaveMissionFieldsPayload(mission.leaveFields??{}))
  return mission.kind==='REPAIR'?JSON.stringify(repairMissionFieldsPayload(fields))===JSON.stringify(repairMissionFieldsPayload(mission.repairFields??{})):JSON.stringify(missionFieldsPayload(fields))===JSON.stringify(missionFieldsPayload(mission.fields??{}))
 }
@@ -43,4 +49,5 @@ export function missionStageLabel(stage: string) {
 }
 export const missionActionLabels: Record<string, string> = { planning: '规划下一步', request_input: '核对缺少的条件', check_schedule: '检查本人日程', find_venues: '查找可用场地', present_options: '展示候选场地', prepare_reservation: '核对预约预览', save_reservation: '保存本人草稿', verify_reservation: '读取原申请核验', finish: '确认任务完成',check_leave_requirements:'核对请假规则和时间',inspect_leave_eligibility:'核对本人请假资格',prepare_leave:'核对请假预览',save_leave:'保存本人请假草稿',verify_leave:'读取原请假申请核验',check_repair_requirements:'核对报修资料与指南',inspect_repair_location:'检查本人可报修地点',prepare_repair:'核对报修预览',save_repair:'保存本人报修草稿',verify_repair:'读取原工单核验' }
 export function missionStepStatusLabel(status: string) { return ({ RUNNING: '执行中', OK: '完成', PARTIAL: '部分完成', NO_DATA: '暂无候选', NEEDS_INPUT: '等待补充', WAITING_SELECTION: '等待选择', WAITING_CONFIRMATION: '等待确认', SAVED: '已保存', VERIFIED: '已核验', DONE: '完成', FAILED: '未完成', CANCELLED: '已取消', INTERRUPTED: '已中断' } as Record<string, string>)[status] ?? '待核对' }
+Object.assign(missionActionLabels, { check_certificate_requirements: '核对证明用途与指南', inspect_certificate_identity: '读取本人登记资料和资格', prepare_certificate: '核对证明预览', save_certificate: '保存本人证明草稿', verify_certificate: '读取原证明申请核验' })
 export function missionBusinessStatusLabel(status: string) { return ({ DRAFT: '草稿', SUBMITTED: '待审核', RETURNED: '待补充', APPROVED: '已批准', IN_USE: '使用中', COMPLETED: '已结束', REJECTED: '已拒绝', WITHDRAWN: '已撤回', CANCELLED: '已取消', EXPIRED: '已过期' } as Record<string, string>)[status] ?? '查看最新状态' }

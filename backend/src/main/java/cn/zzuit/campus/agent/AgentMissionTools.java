@@ -27,10 +27,13 @@ public class AgentMissionTools {
     private final JdbcClient jdbc;
     private final AgentRepairMissionTools repair;
     private final AgentLeaveMissionTools leave;
+    private final AgentCertificateMissionTools certificate;
     private final JsonMapper json=JsonMapper.builder().build();
-    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair,AgentLeaveMissionTools leave) {
-        this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;this.repair=repair;this.leave=leave;
+    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair,AgentLeaveMissionTools leave,AgentCertificateMissionTools certificate) {
+        this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;this.repair=repair;this.leave=leave;this.certificate=certificate;
     }
+    public boolean certificate(State s){return "CERTIFICATE".equals(s.kind);}
+    public CertificateFields normalizeCertificate(CertificateFields fields){return certificate.normalize(fields);}
     public boolean leave(State s){return "LEAVE".equals(s.kind);}
     public LeaveFields normalizeLeave(LeaveFields f){return leave.normalize(f);}
     public boolean repair(State s){return "REPAIR".equals(s.kind);}
@@ -60,6 +63,7 @@ public class AgentMissionTools {
     }
     private boolean scheduleBlocked(State state){return !state.scheduleStatus.equals("OK")||state.conflictCount>0;}
     public List<String> allowed(State state) {
+        if(certificate(state))return certificate.allowed(state);
         if(leave(state))return leave.allowed(state);
         if(repair(state))return repair.allowed(state);
         if(!missing(state.fields).isEmpty())return List.of("request_input");
@@ -92,18 +96,20 @@ public class AgentMissionTools {
         if(scheduleBlocked(state))throw changed("本人日程存在冲突或部分来源不可核对，请修改时段后重新规划");
         if(reservations.checkConflict(new CheckConflictCommand(venue.id(),date(state.fields.startsAt()),date(state.fields.endsAt()),null)).hasConflict())throw changed("场地已有新的占用，请重新选择时段或场地");
     }
-    public String fingerprint(State state,CampusPrincipal user){return leave(state)?hash(leave.fingerprint(state,user)):repair(state)?hash(repair.fingerprint(state,user)):hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
+    public String fingerprint(State state,CampusPrincipal user){return certificate(state)?hash(certificate.fingerprint(state,user)):leave(state)?hash(leave.fingerprint(state,user)):repair(state)?hash(repair.fingerprint(state,user)):hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
     public String hash(Object input) {
         try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsString(input).getBytes(StandardCharsets.UTF_8)));}
         catch(Exception failure){throw new IllegalStateException("任务请求摘要生成失败",failure);}
     }
     public void invalidate(State state,String message) {
+        if(certificate(state)){certificate.invalidate(state,message);return;}
         if(leave(state)){leave.invalidate(state,message);return;}
         if(repair(state)){repair.invalidate(state,message);return;}
         state.options=List.of();state.selectedKey=null;state.proposalHash=null;state.proposalReady=false;state.confirmed=false;
         state.scheduleChecked=false;state.venuesChecked=false;state.conflicts=List.of();state.conflictCount=0;state.message=message;state.missing=List.of("startsAt","endsAt","keyword");
     }
     public Outcome execute(CampusPrincipal user,String action,State state,String businessKey) {
+        if(certificate(state))return certificate.execute(user,action,state,businessKey,this::hash);
         if(leave(state))return leave.execute(user,action,state,businessKey,this::hash);
         if(repair(state))return repair.execute(user,action,state,businessKey,this::hash);
         switch(action) {
@@ -148,6 +154,7 @@ public class AgentMissionTools {
         }
     }
     public Business business(CampusPrincipal user,State state) {
+        if(certificate(state))return certificate.business(user,state);
         if(leave(state))return leave.business(user,state);
         if(repair(state))return repair.business(user,state);
         if(state.draftId==null)return null;var detail=reservations.getDetail(user,state.draftId);

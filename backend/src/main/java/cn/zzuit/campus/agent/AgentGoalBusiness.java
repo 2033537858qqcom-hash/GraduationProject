@@ -96,5 +96,6 @@ public class AgentGoalBusiness {
   task.submissionVerified=true;task.lastBusinessStatus=business.status();return business.status();
  }
  public boolean terminal(String status){return Set.of("COMPLETED","REJECTED","WITHDRAWN","CANCELLED","EXPIRED").contains(status);}
+ public String statusLabel(String status){return Map.ofEntries(Map.entry("DRAFT","草稿"),Map.entry("SUBMITTED","待审核"),Map.entry("RETURNED","待补充"),Map.entry("APPROVED","已批准"),Map.entry("IN_USE","使用中"),Map.entry("COMPLETED","已完成"),Map.entry("REJECTED","已拒绝"),Map.entry("WITHDRAWN","已撤回"),Map.entry("CANCELLED","已取消"),Map.entry("EXPIRED","已过期"),Map.entry("ASSIGNED","已派单"),Map.entry("IN_PROGRESS","维修中"),Map.entry("AWAITING_CONFIRMATION","待本人验收")).getOrDefault(Objects.toString(status,""),"待核对");}
  private ApiException changed(String message){return new ApiException(HttpStatus.CONFLICT,"GOAL_SUBMISSION_CHANGED",message);}
 }

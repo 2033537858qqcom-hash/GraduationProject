@@ -161,13 +161,14 @@ public class AgentGoalService {
    try{
     var view=tools.mission(owner,row.session,task);if(view==null||view.business()==null)throw changed("原申请当前不可读取");var current=view.business();
     if(!Objects.equals(task.lastBusinessStatus,current.status())){
-     notices.write(owner.id(),"Agent 跟踪状态更新",task.kind,current.id(),"MINE","状态由 "+Objects.toString(task.lastBusinessStatus,"待核对")+" 变为 "+current.status()+"，请进入原申请查看办理意见和下一步。");
+     notices.write(owner.id(),"Agent 跟踪状态更新",task.kind,current.id(),"MINE","状态由“"+business.statusLabel(task.lastBusinessStatus)+"”变为“"+business.statusLabel(current.status())+"”，请进入原申请查看办理意见和下一步。");
      task.lastBusinessStatus=current.status();task.lastCheckedAt=now();row.state.focusTaskKey=task.key;changes++;
     }
     if(business.terminal(current.status())){task.trackingComplete=true;task.watching=false;}
    }catch(ApiException failure){task.watching=false;task.submissionHash=null;unavailable=true;row.state.message="部分事项的当前访问授权或原申请已变化，已停止其跟踪，请本人重新核对。";}
   }
-  boolean complete=!row.state.tasks.isEmpty()&&row.state.tasks.stream().allMatch(task->tools.complete(owner,row.session,task));
+  boolean complete=!unavailable&&!row.state.tasks.isEmpty();
+  if(complete)for(var task:row.state.tasks){try{if(!tools.complete(owner,row.session,task)){complete=false;break;}}catch(ApiException failure){complete=false;unavailable=true;row.state.message="部分事项当前已无访问权限，请本人重新核对；跟踪不会绕过权限。";break;}}
   if(changes>0||unavailable||complete){
    String stage=complete?"DONE":unavailable?"PAUSED":row.stage;
    if(complete)row.state.message="办理跟踪已结束，结果以各原申请的真实状态为准。";else if(!unavailable)row.state.message="原申请状态已更新，请查看对应任务、办理意见与下一步。";

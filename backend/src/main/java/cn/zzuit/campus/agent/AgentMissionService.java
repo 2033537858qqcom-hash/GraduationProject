@@ -54,6 +54,8 @@ public class AgentMissionService {
     private boolean running(Row r){return r.stage().equals("RUNNING")&&r.lease()!=null&&r.lease().isAfter(now());}
     public List<Summary> list(CampusPrincipal user,long session){require(user,session);return jdbc.sql("SELECT id,request_key,goal,mode,stage,version,updated_at,lease_until,kind FROM agent_mission WHERE session_id=:s AND user_id=:u ORDER BY id DESC LIMIT 10").param("s",session).param("u",user.id()).query((r,n)->new Summary(r.getLong(1),r.getString(2),r.getString(3),Mode.valueOf(r.getString(4)),r.getString(5).equals("RUNNING")&&(r.getObject(8,LocalDateTime.class)==null||r.getObject(8,LocalDateTime.class).isBefore(now()))?"INTERRUPTED":r.getString(5),r.getInt(6),r.getObject(7,LocalDateTime.class),r.getString(9))).list().stream().filter(s->s.kind().equals("CERTIFICATE")?identities.permissions(user.id()).contains("certificate:apply"):s.kind().equals("LEAVE")?identities.permissions(user.id()).contains("leave:apply"):s.kind().equals("REPAIR")?identities.permissions(user.id()).contains("repair:apply"):identities.permissions(user.id()).containsAll(List.of("reservation:apply","portal:read"))).toList();}
     public View detail(CampusPrincipal user,long session,long id){return view(user,load(user,session,id));}
+    /** Internal goal tool: refresh transient evidence without changing user fields or authorizing writes. */
+    public View recheck(CampusPrincipal user,long session,long id,String requestKey){var row=load(user,session,id);return action(user,session,id,new Action(requestKey,row.version(),"RECHECK",null,null,null,null,null,null,null));}
     private List<Step> steps(long id){return jdbc.sql("SELECT * FROM agent_mission_step WHERE mission_id=:id ORDER BY step_number").param("id",id).query((r,n)->new Step(r.getInt("step_number"),r.getString("action"),r.getString("status"),r.getString("message"),r.getString("observation_json")==null?null:json.readValue(r.getString("observation_json"),Observation.class),r.getObject("prompt_tokens",Integer.class),r.getObject("completion_tokens",Integer.class),r.getObject("created_at",LocalDateTime.class))).list();}
     private View view(CampusPrincipal user,Row r){
         String stage=r.stage().equals("RUNNING")&&!running(r)?"INTERRUPTED":r.stage();var s=r.state();
@@ -103,6 +105,7 @@ public class AgentMissionService {
                     else{if(input.fields()==null)throw error(HttpStatus.BAD_REQUEST,"MISSION_FIELDS_REQUIRED","请提供完整任务条件");var fields=tools.normalize(input.fields());if(!tools.sameSearch(s.fields,fields))tools.invalidate(s,"条件已更新，正在重新规划。");s.fields=fields;}
                     s.proposalReady=false;s.proposalHash=null;s.confirmed=false;s.missing=List.of();
                 }
+                case "RECHECK" -> {if(s.draftId!=null)throw conflict("已有业务草稿，请在原页面核对");tools.invalidate(s,"正在重新读取当前条件、资格与可用结果。");}
                 case "SELECT" -> {
                     if(!r.stage().equals("WAITING_SELECTION")||input.optionKey()==null||s.options.stream().noneMatch(o->o.key().equals(input.optionKey())))throw conflict("请选择当前候选列表中的场地");
                     s.selectedKey=input.optionKey();s.proposalReady=false;s.confirmed=false;s.proposalHash=null;

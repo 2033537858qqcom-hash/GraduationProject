@@ -27,9 +27,11 @@ import tools.jackson.databind.json.JsonMapper;
 class AgentGoalLiveEvaluation {
  static final JsonMapper JSON=JsonMapper.builder().build();
  static final String PRIVATE_PHONE="13900009991",PRIVATE_EMAIL="goal-private@example.test";
- final Path corpus=Path.of("../.Codex/evals/agent-goal-autonomy-v1.json");
- final Path report=Path.of("../output/agent-autonomy-20261103-live/live-report-v1.json");
+ final Path corpus=Path.of(System.getenv().getOrDefault("CAMPUS_AGENT_EVAL_CORPUS","../.Codex/evals/agent-goal-autonomy-v1.json"));
+ final Path report=Path.of(System.getenv().getOrDefault("CAMPUS_AGENT_EVAL_REPORT","../output/agent-autonomy-20261103-live/live-report-v1-development.json"));
  final List<Map<String,Object>> results=new ArrayList<>();
+ final List<Map<String,Object>> plannerCalls=Collections.synchronizedList(new ArrayList<>());
+ volatile String currentCase="";
  @LocalServerPort int port;
  @Autowired JdbcClient jdbc;
  @Autowired cn.zzuit.campus.identity.IdentityService identities;
@@ -44,8 +46,11 @@ class AgentGoalLiveEvaluation {
  @BeforeAll void fixture()throws Exception{
   if(!"true".equals(System.getenv("CAMPUS_AGENT_LIVE_EVAL")))throw new IllegalStateException("Explicit live evaluation opt-in required");
   assertThat(model.ready()).isTrue();
-  assertThat(sha(corpus)).isEqualTo("2c33135f9fa9680c8c41538abec526c40ed4faa3e972645db043f9afd9a1fa58");
-  doAnswer(invocation->{JsonNode context=invocation.getArgument(2);assertThat(context.toString()).doesNotContain(PRIVATE_PHONE,PRIVATE_EMAIL,"identityNumber","studentName","contactPhone");return invocation.callRealMethod();}).when(model).nextGoalStep(anyString(),anyList(),any());
+  assertThat(sha(corpus)).isEqualTo(System.getenv().getOrDefault("CAMPUS_AGENT_EVAL_CORPUS_SHA256","2c33135f9fa9680c8c41538abec526c40ed4faa3e972645db043f9afd9a1fa58"));
+  doAnswer(invocation->{
+   JsonNode context=invocation.getArgument(2);assertThat(context.toString()).doesNotContain(PRIVATE_PHONE,PRIVATE_EMAIL,"identityNumber","studentName","contactPhone");
+   var answer=(AgentModels.Plan)invocation.callRealMethod();var entry=new LinkedHashMap<String,Object>();entry.put("case",currentCase);entry.put("callCount",answer.calls().size());entry.put("tools",answer.calls().stream().map(call->Objects.toString(call.name(),"invalid")).toList());entry.put("promptTokens",answer.promptTokens());entry.put("completionTokens",answer.completionTokens());plannerCalls.add(entry);return answer;
+  }).when(model).nextGoalStep(anyString(),anyList(),any());
   long reviewer=jdbc.sql("SELECT u.id FROM app_user u JOIN user_role ur ON ur.user_id=u.id JOIN role_permission rp ON rp.role_code=ur.role_code WHERE u.enabled=TRUE AND rp.permission_code='reservation:review' ORDER BY u.id LIMIT 1").query(Long.class).single();
   var other=(cn.zzuit.campus.identity.CampusPrincipal)identities.loadUserByUsername("20260002");
   for(int capacity:List.of(24,48)){
@@ -61,7 +66,7 @@ class AgentGoalLiveEvaluation {
  @Test void frozenGoalsReachRealOutcomesWithoutSendingLocalPrivateFields()throws Exception{
   var data=JSON.readTree(Files.readString(corpus));int failures=0;
   for(var example:data.path("cases")){
-   String id=example.path("id").asText();long start=System.nanoTime(),s=0,before=businessCount();JsonNode goal=null;
+   String id=example.path("id").asText();currentCase=id;long start=System.nanoTime(),s=0,before=businessCount();JsonNode goal=null;
    var result=new LinkedHashMap<String,Object>();result.put("id",id);result.put("goal",render(example.path("goal").asText()));
    try{
     var user=login(example.path("username").asText());s=session(user);
@@ -100,6 +105,7 @@ class AgentGoalLiveEvaluation {
     if(goal!=null&&s!=0){try{goal=ok(login(example.path("username").asText()).get(base(s)+"/"+goal.path("id").asLong()));}catch(Exception ignored){}}
    }finally{
     result.put("durationMillis",(System.nanoTime()-start)/1_000_000);
+    result.put("plannerCalls",plannerCalls.stream().filter(call->id.equals(call.get("case"))).toList());
     if(goal!=null){
      result.put("stage",goal.path("stage").asText());result.put("events",goal.path("events"));
      var tasks=new ArrayList<Map<String,Object>>();
@@ -170,7 +176,7 @@ class AgentGoalLiveEvaluation {
  String clean(String value){String text=value.replace(PRIVATE_PHONE,"[local contact]").replace(PRIVATE_EMAIL,"[local contact]");return text.substring(0,Math.min(600,text.length()));}
  long businessCount(){return jdbc.sql("SELECT (SELECT COUNT(*) FROM certificate_request)+(SELECT COUNT(*) FROM leave_request)+(SELECT COUNT(*) FROM repair_request)+(SELECT COUNT(*) FROM venue_reservation)").query(Long.class).single();}
  long bookingCount(){return jdbc.sql("SELECT COUNT(*) FROM venue_reservation").query(Long.class).single();}
- void saveReport()throws Exception{Files.createDirectories(report.getParent());Files.writeString(report,JSON.writeValueAsString(Map.of("corpus",corpus.toString(),"corpusSha256",sha(corpus),"sourceCommit",Objects.toString(System.getenv("CAMPUS_AGENT_EVAL_COMMIT"),"unspecified"),"plannerSha256",sha(Path.of("src/main/java/cn/zzuit/campus/agent/DeepSeekClient.java")),"time",OffsetDateTime.now(ZoneId.of("Asia/Shanghai")).toString(),"cases",results)));}
+ void saveReport()throws Exception{Files.createDirectories(report.getParent());Files.writeString(report,JSON.writeValueAsString(Map.of("role",System.getenv().getOrDefault("CAMPUS_AGENT_EVAL_ROLE","development"),"corpus",corpus.toString(),"corpusSha256",sha(corpus),"sourceCommit",Objects.toString(System.getenv("CAMPUS_AGENT_EVAL_COMMIT"),"unspecified"),"plannerSha256",sha(Path.of("src/main/java/cn/zzuit/campus/agent/DeepSeekClient.java")),"time",OffsetDateTime.now(ZoneId.of("Asia/Shanghai")).toString(),"cases",results)));}
  String sha(Path file)throws Exception{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)));}
  String base(long session){return "/api/assistant/sessions/"+session+"/goals";}
  long session(Browser user)throws Exception{return ok(user.post("/api/assistant/sessions",Map.of("requestKey",UUID.randomUUID().toString()))).path("id").asLong();}

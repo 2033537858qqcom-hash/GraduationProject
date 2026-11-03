@@ -88,6 +88,15 @@ class AgentGoalSubmissionHttpTest {
   jdbc.sql("UPDATE agent_goal SET state_json=:state WHERE id=:id").param("state",JSON.writeValueAsString(state)).param("id",id).update();
   assertThat(user.post(path(s)+"/"+id+"/actions",authorization).statusCode()).isEqualTo(409);
  }
+ @Test void genuineHumanAuthorizationHasAnExplicitObservationForThePlanner()throws Exception{
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);var observed=new java.util.concurrent.atomic.AtomicReference<JsonNode>();
+  strategy=context->{observed.set(context);return call("await_user",Map.of("taskKey","certificate","question","测试回执已读取。"));};act(user,s,goal,authorize(goal));
+  assertThat(observed.get().path("observations").toString()).contains("SUBMISSION_AUTHORIZED","human_authorization");assertThat(observed.get().path("tasks").get(0).path("submissionAuthorized").asBoolean()).isTrue();
+ }
+ @Test void cancellingAPendingAuthorizedGoalClearsItsUnusedSubmissionAuthority()throws Exception{
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);goal=act(user,s,goal,authorize(goal));goal=act(user,s,goal,action(goal,"CANCEL"));
+  assertThat(goal.path("stage").asText()).isEqualTo("CANCELLED");assertThat(goal.path("tasks").get(0).path("submissionHash").isNull()).isTrue();assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("DRAFT");
+ }
  JsonNode savedGoal(Browser user,long s)throws Exception{
   prepareCertificate();var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));
   decisions.add(call("refresh_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对原申请后确认提交。")));

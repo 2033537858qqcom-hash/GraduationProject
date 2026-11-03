@@ -182,6 +182,24 @@ class AgentGoalHttpTest {
   for(int attempts=0;attempts<12&&goal.path("canContinue").asBoolean();attempts++)goal=act(user,s,goal,action(goal,"CONTINUE"));
   assertThat(goal.path("stage").asText()).isEqualTo("FAILED");assertThat(goal.path("events").size()).isEqualTo(80);
  }
+ @Test void aRevisedPurposeSurvivesPlanReorganizationAndUsesANewPreview()throws Exception{
+  prepareCertificate();var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));String old=goal.path("tasks").get(0).path("mission").path("proposalHash").asText();
+  decisions.add(call("set_task_fields",Map.of("taskKey","certificate","fields",Map.of("purpose","实习单位核验"))));certificatePlan();
+  var revision=action(goal,"REVISE");revision.put("message","用途改为实习单位核验");revision.put("externalConsent",true);goal=act(user,s,goal,revision);
+  assertThat(goal.path("tasks").get(0).path("mission").path("certificateFields").path("purpose").asText()).isEqualTo("实习单位核验");assertThat(goal.path("tasks").get(0).path("mission").path("proposalHash").asText()).isNotEqualTo(old);
+ }
+ @Test void repeatingIdenticalFieldsDoesNotPretendToUpdateTheTask()throws Exception{
+  certificatePlan();certificateFields();certificateFields();var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));
+  assertThat(goal.path("events").toString()).contains("GOAL_FIELDS_UNCHANGED");
+ }
+ @Test void cancellingWhileTheModelIsPendingClosesItsEventAndCannotExecuteTheReturnedTool()throws Exception{
+  var entered=new java.util.concurrent.CountDownLatch(1);var release=new java.util.concurrent.CountDownLatch(1);
+  strategy=context->{entered.countDown();try{release.await(10,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException failure){Thread.currentThread().interrupt();throw new IllegalStateException(failure);}return call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of()))));};
+  var user=login("20260001");long s=session(user);var response=java.util.concurrent.CompletableFuture.supplyAsync(()->{try{return user.post(path(s),input());}catch(Exception failure){throw new IllegalStateException(failure);}});
+  try{assertThat(entered.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();var listed=ok(user.get(path(s)));var goal=ok(user.get(path(s)+"/"+listed.get(0).path("id").asLong()));goal=act(user,s,goal,action(goal,"CANCEL"));assertThat(goal.path("events").get(0).path("status").asText()).isEqualTo("CANCELLED");}
+  finally{release.countDown();response.get(15,java.util.concurrent.TimeUnit.SECONDS);}
+  var listed=ok(user.get(path(s)));var goal=ok(user.get(path(s)+"/"+listed.get(0).path("id").asLong()));assertThat(goal.path("stage").asText()).isEqualTo("CANCELLED");assertThat(goal.path("tasks").size()).isZero();
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

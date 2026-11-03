@@ -75,6 +75,16 @@ class AgentGoalRecoveryHttpTest {
   decisions.add(call("refresh_task",Map.of("taskKey","room")));decisions.add(call("await_user",Map.of("taskKey","room","question","请核对重新读取的候选。")));goal=act(user,s,goal,action(goal,"CONTINUE"));
   assertThat(goal.path("tasks").get(0).path("mission").path("stage").asText()).isEqualTo("WAITING_SELECTION");assertThat(goal.path("tasks").get(0).path("mission").path("options").size()).isEqualTo(2);
  }
+ @Test void explicitSpaceSeparatedLocalTimesAreCanonicalizedBeforeQuerying()throws Exception{
+  var fields=new HashMap<String,Object>(bookingFields(18));String expected=fields.get("startsAt").toString();fields.put("startsAt",expected.replace('T',' '));fields.put("endsAt",fields.get("endsAt").toString().replace('T',' '));
+  reservationPlan();decisions.add(call("set_task_fields",Map.of("taskKey","room","fields",fields)));decisions.add(call("prepare_task",Map.of("taskKey","room")));
+  var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));var mission=goal.path("tasks").get(0).path("mission");
+  assertThat(mission.path("fields").path("startsAt").asText()).isEqualTo(expected);assertThat(mission.path("stage").asText()).isEqualTo("WAITING_SELECTION");assertThat(mission.path("options").size()).isEqualTo(2);
+ }
+ @Test void ambiguousTimeIsRejectedAsAFormatIssueInsteadOfBeingReportedAsUpdated()throws Exception{
+  var fields=new HashMap<String,Object>(bookingFields(19));fields.put("startsAt","明天下午");reservationPlan();decisions.add(call("set_task_fields",Map.of("taskKey","room","fields",fields)));
+  var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));assertThat(goal.path("events").toString()).contains("GOAL_TIME_FORMAT");assertThat(goal.path("tasks").get(0).path("mission").isNull()).isTrue();
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

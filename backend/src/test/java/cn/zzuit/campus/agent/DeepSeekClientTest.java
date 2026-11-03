@@ -16,6 +16,11 @@ import tools.jackson.databind.json.JsonMapper;
 
 class DeepSeekClientTest {
     final JsonMapper json=JsonMapper.builder().build();
+    @Test void latestGoalRevisionIsPresentedAsTheCurrentRequest()throws Exception{
+        var captured=new AtomicReference<JsonNode>();var server=server(200,"{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"await_user\",\"arguments\":\"{\\\"question\\\":\\\"请核对\\\"}\"}}]}}]}",captured,new AtomicReference<>());
+        try{client(server).nextGoalStep("原来用于入职材料",AgentGoalToolCatalog.tools(List.of("CERTIFICATE"),false),json.valueToTree(Map.of("instructions",List.of("用途改为实习单位核验"),"tasks",List.of(),"observations",List.of())));var message=json.readTree(captured.get().path("messages").get(1).path("content").asText());assertThat(message.path("currentRequest").asText()).isEqualTo("用途改为实习单位核验");assertThat(message.path("originalGoal").asText()).isEqualTo("原来用于入职材料");}
+        finally{server.stop(0);}
+    }
     @Test void goalPlannerHasParameterizedToolChoiceRatherThanOneForcedAction() throws Exception {
         var captured=new AtomicReference<JsonNode>();
         var server=server(200,"{\"choices\":[{\"finish_reason\":\"tool_calls\",\"message\":{\"tool_calls\":[{\"type\":\"function\",\"function\":{\"name\":\"read_guide\",\"arguments\":\"{\\\"kind\\\":\\\"CERTIFICATE\\\"}\"}}]}}]}",captured,new AtomicReference<>());

@@ -37,6 +37,7 @@ public final class AgentGoalModels {
      public String message="正在理解目标并选择工具。",focusTaskKey,currentUserDirective="";
      public int failures;
      public int planEpoch,lastPlanEpoch=-1;
+     public boolean directivePending;
      public Map<String,Guide> guidesRead=new LinkedHashMap<>();
  }
  public record TaskView(String key,String kind,String label,String target,List<String> dependsOn,boolean cancelled,

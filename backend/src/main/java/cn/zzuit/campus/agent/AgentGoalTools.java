@@ -39,7 +39,7 @@ public class AgentGoalTools {
   return result;
  }
  public List<Map<String,Object>> schemas(CampusPrincipal user,long session,State state){
-  if(!state.tasks.isEmpty()&&state.lastPlanEpoch==state.planEpoch&&state.tasks.stream().allMatch(task->complete(user,session,task)))
+  if(!state.tasks.isEmpty()&&!state.directivePending&&state.tasks.stream().allMatch(task->complete(user,session,task)))
    return AgentGoalToolCatalog.tools(kinds(user),false).stream().filter(schema->((Map<?,?>)schema.get("function")).get("name").equals("finish")).toList();
   var current=currentGuides(user);var unread=current.entrySet().stream().filter(entry->!state.guidesRead.containsKey(entry.getKey())||state.guidesRead.get(entry.getKey()).version()!=entry.getValue().version()).map(Map.Entry::getKey).toList();
   var result=new ArrayList<Map<String,Object>>();
@@ -69,7 +69,14 @@ public class AgentGoalTools {
     @SuppressWarnings("unchecked") var function=new LinkedHashMap<String,Object>((Map<String,Object>)schema.get("function"));
     @SuppressWarnings("unchecked") var parameters=new LinkedHashMap<String,Object>((Map<String,Object>)function.get("parameters"));
     @SuppressWarnings("unchecked") var properties=new LinkedHashMap<String,Object>((Map<String,Object>)parameters.get("properties"));
-    properties.put("taskKey",AgentGoalToolCatalog.choice(eligible));parameters.put("properties",properties);function.put("parameters",parameters);result.add(Map.of("type","function","function",function));
+    properties.put("taskKey",AgentGoalToolCatalog.choice(eligible));
+    if(name.equals("set_task_fields")||name.equals("revise_reservation")){
+     var names=new HashSet<String>();for(var task:state.tasks)if(eligible.contains(task.key))names.addAll(name.equals("revise_reservation")?Set.of("campus","startsAt","endsAt","startDate","startTime","endDate","endTime","participants","keyword"):fields(task.kind));
+     @SuppressWarnings("unchecked") var shape=new LinkedHashMap<String,Object>((Map<String,Object>)properties.get("fields"));
+     @SuppressWarnings("unchecked") var choices=new LinkedHashMap<String,Object>((Map<String,Object>)shape.get("properties"));
+     choices.keySet().retainAll(names);shape.put("properties",choices);properties.put("fields",shape);
+    }
+    parameters.put("properties",properties);function.put("parameters",parameters);result.add(Map.of("type","function","function",function));
    }
   }
   return List.copyOf(result);
@@ -143,10 +150,10 @@ public class AgentGoalTools {
   var done=new HashSet<String>();boolean progress=true;while(progress){progress=false;for(var task:next)if(!done.contains(task.key)&&done.containsAll(task.dependsOn)){done.add(task.key);progress=true;}}
   if(done.size()!=next.size())throw invalid("GOAL_PLAN_INVALID","任务依赖存在循环");
   if(!state.tasks.isEmpty()&&state.lastPlanEpoch==state.planEpoch&&planStructure(state.tasks).equals(planStructure(next)))throw invalid("GOAL_PLAN_UNCHANGED","计划没有新增事项、目标或依赖变化；请使用实际字段、查询、核验或等待本人操作，不要重发相同计划");
-  state.tasks=next;state.lastPlanEpoch=state.planEpoch;
+  state.tasks=next;state.lastPlanEpoch=state.planEpoch;state.directivePending=false;
  }
  private Object currentFields(Task task,AgentMissionModels.View view){return switch(task.kind){case "CERTIFICATE"->view==null?task.certificateFields:view.certificateFields();case "LEAVE"->view==null?task.leaveFields:view.leaveFields();case "REPAIR"->view==null?task.repairFields:view.repairFields();default->view==null?task.fields:view.fields();};}
- private Set<String> fields(String kind){return switch(kind){case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime","startsAt","endsAt");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","participants","keyword","activityTheme","activityType");};}
+ private Set<String> fields(String kind){return switch(kind){case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime","startsAt","endsAt");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","startDate","startTime","endDate","endTime","participants","keyword","activityTheme","activityType");};}
  private String localTime(Object value){
   if(value==null)return null;String raw;if(value instanceof JsonNode node){if(node.isNull())return null;raw=node.asText();}else raw=value.toString();
   raw=raw.trim();if(raw.isBlank())return null;
@@ -155,7 +162,7 @@ public class AgentGoalTools {
   catch(java.time.format.DateTimeParseException failure){throw invalid("GOAL_TIME_FORMAT","日期或时刻不合法，请核对YYYY-MM-DDTHH:mm格式");}
  }
  private boolean patch(CampusPrincipal user,long session,Task task,JsonNode patch,String operationKey,boolean searchOnly,int instructionCount){
-  var allowed=searchOnly?Set.of("campus","startsAt","endsAt","participants","keyword"):fields(task.kind);
+  var allowed=searchOnly?Set.of("campus","startsAt","endsAt","startDate","startTime","endDate","endTime","participants","keyword"):fields(task.kind);
   if(!patch.isObject()||patch.isEmpty()||patch.properties().stream().anyMatch(e->!allowed.contains(e.getKey())||(!e.getKey().equals("participants")&&!e.getValue().isString())||(e.getKey().equals("participants")&&!e.getValue().isIntegralNumber())))throw invalid("GOAL_FIELDS_INVALID","条件包含未允许或类型不正确的字段，身份、地点和联系方式须在本地核对");
   var view=mission(user,session,task);if(view!=null&&view.business()!=null)throw invalid("GOAL_RESULT_EXISTS","原申请已保存，请到原页面修改；Agent保留历史");
   var values=new LinkedHashMap<String,Object>();var original=currentFields(task,view);if(original!=null)json.valueToTree(original).properties().forEach(e->values.put(e.getKey(),e.getValue()));patch.properties().forEach(e->values.put(e.getKey(),e.getValue()));
@@ -166,7 +173,19 @@ public class AgentGoalTools {
     values.put(prefix+"Date",day);values.put(prefix+"Time",clock);
    }
   }
-  if(task.kind.equals("RESERVATION"))for(String name:List.of("startsAt","endsAt"))if(values.containsKey(name))values.put(name,localTime(values.get(name)));
+  if(task.kind.equals("RESERVATION")){
+   for(String prefix:List.of("start","end")){
+    if(patch.has(prefix+"Date")||patch.has(prefix+"Time")){
+     String day=patch.path(prefix+"Date").asText(),clock=patch.path(prefix+"Time").asText();
+     if(day.isBlank()||clock.isBlank())throw invalid("GOAL_TIME_FORMAT","分开的预约日期时间需要同时提供"+prefix+"Date和"+prefix+"Time；请核对明确日期，不能猜测");
+     String value=localTime(day+"T"+clock);
+     if(patch.has(prefix+"sAt")&&!Objects.equals(value,localTime(patch.path(prefix+"sAt"))))throw invalid("GOAL_TIME_FORMAT","两种预约时间格式互相冲突，请核对");
+     values.put(prefix+"sAt",value);
+    }
+    values.remove(prefix+"Date");values.remove(prefix+"Time");
+   }
+   for(String name:List.of("startsAt","endsAt"))if(values.containsKey(name))values.put(name,localTime(values.get(name)));
+  }
   Object typed;
   try{typed=switch(task.kind){case "CERTIFICATE"->missionTools.normalizeCertificate(json.convertValue(values,CertificateFields.class));case "LEAVE"->missionTools.normalizeLeave(json.convertValue(values,LeaveFields.class));case "REPAIR"->missionTools.normalizeRepair(json.convertValue(values,RepairFields.class));default->missionTools.normalize(json.convertValue(values,AgentMissionModels.Fields.class));};}
   catch(Exception invalid){throw invalid("GOAL_FIELDS_INVALID","条件类型不正确");}
@@ -183,7 +202,7 @@ public class AgentGoalTools {
   switch(name){
    case "set_plan"->{exact(args,"tasks");setPlan(user,session,state,args.path("tasks"));return observed(name,null,"OK","已记录多业务任务计划和依赖，已结束事项的历史保留。",Map.of("taskCount",state.tasks.size()));}
    case "read_guide"->{exact(args,"kind");String kind=text(args,"kind",20,true);if(!kinds(user).contains(kind))throw invalid("GOAL_PLAN_INVALID","当前账号没有该业务权限");var guide=guides.detail(kind.toLowerCase(Locale.ROOT));state.guidesRead.put(kind,new Guide(guide.slug(),guide.title(),guide.body().substring(0,Math.min(2000,guide.body().length())),guide.version(),guide.updatedAt(),guide.targetPath()));return observed(name,null,"OK","已读取有效办理指南："+guide.title(),Map.of("kind",kind,"version",guide.version()));}
-   case "set_task_fields","revise_reservation"->{exact(args,"taskKey","fields");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");if(name.equals("revise_reservation")&&!task.kind.equals("RESERVATION"))throw invalid("GOAL_FIELDS_INVALID","只有预约任务可以调整场地查询方案");boolean changed=patch(user,session,task,args.path("fields"),operation,name.equals("revise_reservation"),state.instructions.size());task.fieldsInstructionCount=state.instructions.size();return observed(name,task.key,changed?"OK":"UNCHANGED",changed?"已更新尚未写入的任务条件，后续须核对实际预览。":"已按本次补充核对现有条件，字段保持原值。",Map.of("updated",args.path("fields").properties().stream().map(Map.Entry::getKey).toList()));}
+   case "set_task_fields","revise_reservation"->{exact(args,"taskKey","fields");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");if(name.equals("revise_reservation")&&!task.kind.equals("RESERVATION"))throw invalid("GOAL_FIELDS_INVALID","只有预约任务可以调整场地查询方案");boolean changed=patch(user,session,task,args.path("fields"),operation,name.equals("revise_reservation"),state.instructions.size());task.fieldsInstructionCount=state.instructions.size();state.directivePending=false;return observed(name,task.key,changed?"OK":"UNCHANGED",changed?"已更新尚未写入的任务条件，后续须核对实际预览。":"已按本次补充核对现有条件，字段保持原值。",Map.of("updated",args.path("fields").properties().stream().map(Map.Entry::getKey).toList()));}
    case "prepare_task"->{
     exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");
     for(var dependency:task.dependsOn){var parent=task(state,dependency);if(parent.cancelled)throw invalid("GOAL_DEPENDENCY_CANCELLED","前置任务已由本人停止，请重新组织剩余依赖");if(!complete(user,session,parent))throw invalid("GOAL_DEPENDENCY_PENDING","前置任务尚未按目标完成");}

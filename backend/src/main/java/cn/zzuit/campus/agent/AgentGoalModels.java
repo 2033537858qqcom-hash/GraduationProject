@@ -26,6 +26,7 @@ public final class AgentGoalModels {
      public String submissionHash,lastBusinessStatus;
      public Integer submittedVersion;
      public LocalDateTime lastCheckedAt;
+     public int fieldsInstructionCount=-1;
  }
  public static class State {
      public List<Task> tasks=new ArrayList<>();
@@ -33,6 +34,8 @@ public final class AgentGoalModels {
      public List<Map<String,Object>> observations=new ArrayList<>();
      public String message="正在理解目标并选择工具。",focusTaskKey;
      public int failures;
+     public int planEpoch,lastPlanEpoch=-1;
+     public Map<String,Guide> guidesRead=new LinkedHashMap<>();
  }
  public record TaskView(String key,String kind,String label,String target,List<String> dependsOn,boolean cancelled,
      AgentMissionModels.View mission,String submissionHash,boolean submissionVerified,boolean watching,SubmissionPreview submissionPreview,

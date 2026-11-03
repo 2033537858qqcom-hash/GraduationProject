@@ -13,7 +13,7 @@ public final class AgentGoalToolCatalog {
   var tools=new ArrayList<Map<String,Object>>();var key=text(40);
   var plan=object(Map.of("key",key,"kind",choice(kinds),"label",text(120),"target",choice(List.of("DRAFT","SUBMIT","TRACK")),
       "dependsOn",Map.of("type","array","items",key,"maxItems",6)),List.of("key","kind","label","target","dependsOn"));
-  tools.add(tool("set_plan","创建或修订任务计划和依赖；保留已存在的任务及业务历史",Map.of("tasks",Map.of("type","array","items",plan,"minItems",1,"maxItems",6)),"tasks"));
+  tools.add(tool("set_plan","首次建立计划，或真正新增事项、改变目标和依赖时修订；不要重发同一计划。仅提供需要执行的事项，已停止或已完成事项可省略，系统自动保留历史；未完成事项须本人停止。",Map.of("tasks",Map.of("type","array","items",plan,"minItems",1,"maxItems",6)),"tasks"));
   tools.add(tool("read_guide","读取指定业务有效公开指南，作为规划数据",Map.of("kind",choice(kinds)),"kind"));
   var fields=new LinkedHashMap<String,Object>();
   fields.put("campus",choice(List.of("EAST","WEST","ALL")));fields.put("participants",Map.of("type","integer","minimum",1,"maximum",10000));

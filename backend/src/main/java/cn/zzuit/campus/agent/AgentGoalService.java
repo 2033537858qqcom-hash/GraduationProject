@@ -79,9 +79,9 @@ public class AgentGoalService {
    if(row.stage.equals("CANCELLED")||row.stage.equals("DONE")&&!input.action().equals("REVISE"))throw changed("目标已结束，请查看原记录或新建目标");
    switch(input.action()){
     case "CONTINUE"->{}
-    case "REVISE"->{consent(Boolean.TRUE.equals(input.externalConsent()));if(input.message()==null||input.message().isBlank())throw error(HttpStatus.BAD_REQUEST,"GOAL_MESSAGE_REQUIRED","请明确说明目标如何调整");if(row.state.instructions.size()>=8)throw changed("本目标已有8次补充，请新建目标以保持要求清晰");row.state.instructions.add(input.message().trim());for(var task:row.state.tasks)task.submissionHash=null;row.state.failures=0;}
+    case "REVISE"->{consent(Boolean.TRUE.equals(input.externalConsent()));if(input.message()==null||input.message().isBlank())throw error(HttpStatus.BAD_REQUEST,"GOAL_MESSAGE_REQUIRED","请明确说明目标如何调整");if(row.state.instructions.size()>=8)throw changed("本目标已有8次补充，请新建目标以保持要求清晰");row.state.instructions.add(input.message().trim());row.state.planEpoch++;for(var task:row.state.tasks)task.submissionHash=null;row.state.failures=0;}
     case "AUTHORIZE_SUBMIT"->{tools.authorize(user,session,row.state,input.taskKey(),input.proposalHash(),input.confirmed());}
-    case "CANCEL_TASK"->{if(!Boolean.TRUE.equals(input.confirmed()))throw error(HttpStatus.BAD_REQUEST,"GOAL_CANCEL_CONFIRM_REQUIRED","请明确确认停止这个事项的后续执行，原申请仍保留");var task=tools.task(row.state,input.taskKey());task.cancelled=true;task.watching=false;task.submissionHash=null;row.state.focusTaskKey=row.state.tasks.stream().filter(item->!item.cancelled).map(item->item.key).findFirst().orElse(null);}
+    case "CANCEL_TASK"->{if(!Boolean.TRUE.equals(input.confirmed()))throw error(HttpStatus.BAD_REQUEST,"GOAL_CANCEL_CONFIRM_REQUIRED","请明确确认停止这个事项的后续执行，原申请仍保留");var task=tools.task(row.state,input.taskKey());task.cancelled=true;task.watching=false;task.submissionHash=null;row.state.planEpoch++;row.state.focusTaskKey=row.state.tasks.stream().filter(item->!item.cancelled).map(item->item.key).findFirst().orElse(null);}
     default->throw error(HttpStatus.BAD_REQUEST,"GOAL_ACTION_INVALID","当前目标不支持该操作");
    }
    if(input.action().equals("CANCEL_TASK")&&(row.state.tasks.stream().allMatch(task->task.cancelled)||!model.ready())){remember(row,input,hash);boolean all=row.state.tasks.stream().allMatch(task->task.cancelled);row.state.message=all?"所有计划事项已停止后续执行，原业务记录保留。":"这个事项已停止后续执行，其他计划保留；模型连接后可继续。";return new Claim(persist(row,row.state,all?"CANCELLED":"PAUSED",null),false);}
@@ -101,6 +101,7 @@ public class AgentGoalService {
  private void finishEvent(long id,int number,Call call,String status,String message,Map<String,Object> observation,Plan plan){jdbc.sql("UPDATE agent_goal_event SET tool=:tool,task_key=:task,status=:status,message=:message,arguments_json=:args,observation_json=:observation,prompt_tokens=:prompt,completion_tokens=:completion WHERE goal_id=:id AND step_number=:step")
      .param("tool",toolName(call)).param("task",taskKey(call)).param("status",status).param("message",message.substring(0,Math.min(500,message.length()))).param("args",call==null?null:json.writeValueAsString(call.arguments())).param("observation",json.writeValueAsString(observation)).param("prompt",plan==null?null:plan.promptTokens()).param("completion",plan==null?null:plan.completionTokens()).param("id",id).param("step",number).update();}
  private void observe(State state,Map<String,Object> observation){state.observations.add(observation);while(state.observations.size()>12)state.observations.removeFirst();}
+ private Map<String,Object> actualObservation(AgentGoalTools.Outcome result,Plan plan){var observation=new LinkedHashMap<String,Object>(result.observation());if(plan.calls().size()>1)observation.put("deferredTools",plan.calls().stream().skip(1).map(this::toolName).toList());return observation;}
  private View run(CampusPrincipal user,long session,long id,String token){
   long deadline=System.nanoTime()+BUDGET.toNanos();
   for(int iteration=0;iteration<STEPS_PER_RUN&&System.nanoTime()<deadline;iteration++){
@@ -111,19 +112,19 @@ public class AgentGoalService {
     jdbc.sql("UPDATE agent_goal SET step_count=:step,lease_until=:lease WHERE id=:id").param("step",next).param("lease",now().plus(LEASE)).param("id",id).update();return next;});
    Plan plan=null;Call call=null;
    try{
-    var schemas=AgentGoalToolCatalog.tools(tools.kinds(user),tools.authorized(before.state));
+    var schemas=tools.schemas(user,session,before.state);
     plan=model.nextGoalStep(before.goal,schemas,tools.context(user,session,before.state));
-    if(plan==null||plan.calls()==null||plan.calls().size()!=1||plan.calls().getFirst()==null)throw error(HttpStatus.BAD_GATEWAY,"GOAL_MODEL_ACTION_INVALID","模型必须选择一个明确的工具动作");
+    if(plan==null||plan.calls()==null||plan.calls().isEmpty()||plan.calls().size()>4||plan.calls().getFirst()==null)throw error(HttpStatus.BAD_GATEWAY,"GOAL_MODEL_ACTION_INVALID","模型必须提供有效的工具建议；本轮只执行首项，其他建议需等待实际结果后重新决策");
     call=plan.calls().getFirst();String chosen=call.name();if(chosen==null||schemas.stream().noneMatch(s->((Map<?,?>)s.get("function")).get("name").equals(chosen))||call.arguments()==null||!call.arguments().isObject())throw error(HttpStatus.BAD_GATEWAY,"GOAL_TOOL_REJECTED","模型动作不在当前工具范围内");
     lease(user,session,id,token);
     // Child task preparation is idempotent and local; never hold the goal lock across its executor.
     Plan decided=plan;Call executed=call;Row after;
     if(chosen.equals("submit_task")){
      // Recheck lease, exact authorization and original business under the same scope/write lock.
-     after=write(()->{var row=lease(user,session,id,token);var result=tools.execute(user,session,id,number,row.state,executed);row.state.message=result.message();row.state.failures=0;observe(row.state,result.observation());finishEvent(id,number,executed,result.status(),result.message(),result.observation(),decided);return persist(row,row.state,result.stage(),token);});
+     after=write(()->{var row=lease(user,session,id,token);var result=tools.execute(user,session,id,number,row.state,executed);var observation=actualObservation(result,decided);row.state.message=result.message();row.state.failures=0;observe(row.state,observation);finishEvent(id,number,executed,result.status(),result.message(),observation,decided);return persist(row,row.state,result.stage(),token);});
     }else{
      var result=tools.execute(user,session,id,number,before.state,call);
-     after=write(()->{var row=lease(user,session,id,token);var state=before.state;state.message=result.message();state.failures=0;observe(state,result.observation());finishEvent(id,number,executed,result.status(),result.message(),result.observation(),decided);return persist(row,state,result.stage(),result.stage().equals("RUNNING")?token:null);});
+     after=write(()->{var row=lease(user,session,id,token);var state=before.state;var observation=actualObservation(result,decided);state.message=result.message();state.failures=0;observe(state,observation);finishEvent(id,number,executed,result.status(),result.message(),observation,decided);return persist(row,state,result.stage(),result.stage().equals("RUNNING")?token:null);});
     }
     if(!after.stage.equals("RUNNING"))return view(user,after);
    }catch(ApiException failure){
@@ -144,6 +145,7 @@ public class AgentGoalService {
    }
   }
   var current=load(user,session,id);if(!current.stage.equals("RUNNING")||!Objects.equals(current.token,token))return view(user,current);
+  if(current.count>=TOTAL_STEPS)return stop(user,session,id,token,"FAILED","目标达到80步上限，请核对执行记录后新建目标。");
   return stop(user,session,id,token,"PAUSED","本轮预算已用完，计划与结果已保存；继续执行会重新读取当前状态。每个目标最多80步。");
  }
  private View stop(CampusPrincipal user,long session,long id,String token,String stage,String message){return view(user,write(()->{var row=lease(user,session,id,token);row.state.message=message;return persist(row,row.state,stage,null);}));}

@@ -32,6 +32,22 @@ public class AgentGoalTools {
  public List<TaskView> views(CampusPrincipal user,long session,State state){return state.tasks.stream().map(t->new TaskView(t.key,t.kind,t.label,t.target,t.dependsOn,t.cancelled,mission(user,session,t),t.submissionHash,t.submissionVerified,t.watching,business.preview(user,session,t),t.lastBusinessStatus,t.trackingComplete,t.lastCheckedAt)).toList();}
  public boolean authorized(State state){return state.tasks.stream().anyMatch(task->!task.cancelled&&task.submissionHash!=null);}
  public void authorize(CampusPrincipal user,long session,State state,String key,String hash,Boolean confirmed){business.authorize(user,session,task(state,key),hash,confirmed);}
+ private Map<String,Guide> currentGuides(CampusPrincipal user){
+  var result=new LinkedHashMap<String,Guide>();
+  for(String kind:kinds(user))try{result.put(kind,guides.detail(kind.toLowerCase(Locale.ROOT)));}catch(ApiException failure){if(failure.status()!=HttpStatus.NOT_FOUND)throw failure;}
+  return result;
+ }
+ public List<Map<String,Object>> schemas(CampusPrincipal user,long session,State state){
+  var current=currentGuides(user);var unread=current.entrySet().stream().filter(entry->!state.guidesRead.containsKey(entry.getKey())||state.guidesRead.get(entry.getKey()).version()!=entry.getValue().version()).map(Map.Entry::getKey).toList();
+  var result=new ArrayList<Map<String,Object>>();
+  for(var schema:AgentGoalToolCatalog.tools(kinds(user),authorized(state))){
+   String name=((Map<?,?>)schema.get("function")).get("name").toString();
+   if(name.equals("read_guide")){
+    if(!unread.isEmpty())result.add(AgentGoalToolCatalog.tool("read_guide","读取尚未读取或版本变化的有效指南；已读指南节选会在上下文持续提供",Map.of("kind",AgentGoalToolCatalog.choice(unread)),"kind"));
+   }else result.add(schema);
+  }
+  return List.copyOf(result);
+ }
  public boolean complete(CampusPrincipal user,long session,Task task){
   if(task.cancelled)return true;var view=mission(user,session,task);
   return view!=null&&view.stage().equals("DONE")&&view.business()!=null&&(task.target.equals("DRAFT")||task.submissionVerified&&(task.target.equals("SUBMIT")||task.trackingComplete));
@@ -39,21 +55,28 @@ public class AgentGoalTools {
  public JsonNode context(CampusPrincipal user,long session,State state){
   var tasks=new ArrayList<Map<String,Object>>();
   for(var task:state.tasks){
-   var item=new LinkedHashMap<String,Object>();item.put("key",task.key);item.put("kind",task.kind);item.put("target",task.target);item.put("dependsOn",task.dependsOn);item.put("cancelled",task.cancelled);
+   var item=new LinkedHashMap<String,Object>();item.put("key",task.key);item.put("kind",task.kind);item.put("label",task.label);item.put("target",task.target);item.put("dependsOn",task.dependsOn);item.put("cancelled",task.cancelled);
    var view=mission(user,session,task);item.put("stage",view==null?"NOT_PREPARED":view.stage());item.put("complete",complete(user,session,task));item.put("submissionAuthorized",task.submissionHash!=null);item.put("submissionVerified",task.submissionVerified);item.put("watching",task.watching);item.put("trackingComplete",task.trackingComplete);
+   var present=new ArrayList<String>();Object local=currentFields(task,view);if(local!=null)for(var field:json.valueToTree(local).properties())if(fields(task.kind).contains(field.getKey())&&!field.getValue().isNull()&&(!field.getValue().isString()||!field.getValue().asText().isBlank()))present.add(field.getKey());
+   item.put("providedFields",present);item.put("fieldsUpdatedForInstruction",task.fieldsInstructionCount);item.put("currentInstruction",state.instructions.size());
    if(view!=null){item.put("missing",view.missing());item.put("businessStatus",view.business()==null?"NONE":view.business().status());item.put("conflictCount",view.conflicts().size());
+    item.put("checks",view.steps().stream().map(AgentMissionModels.Step::observation).filter(Objects::nonNull).skip(Math.max(0,view.steps().size()-8)).toList());
     if(task.kind.equals("RESERVATION")){var f=view.fields();var query=new LinkedHashMap<String,Object>();query.put("campus",f.campus());query.put("startsAt",f.startsAt());query.put("endsAt",f.endsAt());query.put("participants",f.participants());query.put("keyword",f.keyword());item.put("search",query);
      item.put("options",view.options().stream().map(o->Map.of("key",o.key(),"name",o.name(),"location",o.location(),"capacity",o.capacity()==null?0:o.capacity())).toList());}
    }
    tasks.add(item);
   }
-  return json.valueToTree(Map.of("time",AgentMissionTools.now().toString(),"instructions",state.instructions,"tasks",tasks,"observations",state.observations));
+  var known=new ArrayList<Map<String,Object>>();var sources=currentGuides(user);
+  for(String kind:kinds(user)){var source=sources.get(kind);var cached=state.guidesRead.get(kind);var item=new LinkedHashMap<String,Object>();item.put("kind",kind);item.put("status",source==null?"UNAVAILABLE":cached==null||cached.version()!=source.version()?"NEEDS_REFRESH":"CURRENT");
+   if(source!=null)item.put("currentVersion",source.version());if(source!=null&&cached!=null&&cached.version()==source.version()){item.put("title",cached.title());item.put("excerpt",cached.body());}known.add(item);}
+  return json.valueToTree(Map.of("time",AgentMissionTools.now().toString(),"instructions",state.instructions,"tasks",tasks,"guides",known,"observations",state.observations));
  }
  private Outcome outcome(String stage,String status,String message,Map<String,Object> observation){return new Outcome(stage,status,message,observation);}
  private Outcome observed(String tool,String task,String status,String message,Object value){return outcome("RUNNING",status,message,Map.of("tool",tool,"taskKey",Objects.toString(task,""),"status",status,"result",value));}
  private String text(JsonNode args,String field,int max,boolean required){var value=args.path(field);if(value.isMissingNode()&&!required)return null;if(!value.isString()||value.asText().isBlank()||value.asText().length()>max)throw invalid("GOAL_ARGUMENTS_INVALID","工具参数无效："+field);return value.asText().trim();}
  private void exact(JsonNode args,String... allowed){if(args==null||!args.isObject()||args.properties().stream().anyMatch(e->!Set.of(allowed).contains(e.getKey())))throw invalid("GOAL_ARGUMENTS_INVALID","工具包含未允许的参数");}
- private void setPlan(CampusPrincipal user,State state,JsonNode input){
+ private Object planStructure(List<Task> tasks){return tasks.stream().sorted(Comparator.comparing(task->task.key)).map(task->List.of(task.key,task.kind,task.target,task.dependsOn.stream().sorted().toList(),task.cancelled)).toList();}
+ private void setPlan(CampusPrincipal user,long session,State state,JsonNode input){
   if(!input.isArray()||input.isEmpty()||input.size()>6)throw invalid("GOAL_PLAN_INVALID","计划须包含1至6个任务");
   var next=new ArrayList<Task>();var keys=new HashSet<String>();var allowed=kinds(user);
   for(var row:input){
@@ -69,10 +92,15 @@ public class AgentGoalTools {
    for(var dependency:dependencies){if(!dependency.isString()||dependency.asText().equals(key)||parents.contains(dependency.asText()))throw invalid("GOAL_PLAN_INVALID","任务依赖无效");parents.add(dependency.asText());}
    task.dependsOn=List.copyOf(parents);next.add(task);
   }
-  if(state.tasks.stream().anyMatch(t->!keys.contains(t.key)))throw invalid("GOAL_PLAN_INVALID","已有任务须保留，取消请由本人明确操作");
+  for(var previous:state.tasks)if(!keys.contains(previous.key)){
+   if(!previous.cancelled&&!complete(user,session,previous))throw invalid("GOAL_PLAN_REMOVAL_REQUIRES_USER","尚未完成的事项不能直接删除，请由本人明确停止其后续执行");
+   next.add(json.readValue(json.writeValueAsString(previous),Task.class));keys.add(previous.key);
+  }
   for(var task:next)if(!keys.containsAll(task.dependsOn))throw invalid("GOAL_PLAN_INVALID","依赖指向不存在的任务");
   var done=new HashSet<String>();boolean progress=true;while(progress){progress=false;for(var task:next)if(!done.contains(task.key)&&done.containsAll(task.dependsOn)){done.add(task.key);progress=true;}}
-  if(done.size()!=next.size())throw invalid("GOAL_PLAN_INVALID","任务依赖存在循环");state.tasks=next;
+  if(done.size()!=next.size())throw invalid("GOAL_PLAN_INVALID","任务依赖存在循环");
+  if(!state.tasks.isEmpty()&&state.lastPlanEpoch==state.planEpoch&&planStructure(state.tasks).equals(planStructure(next)))throw invalid("GOAL_PLAN_UNCHANGED","计划没有新增事项、目标或依赖变化；请使用实际字段、查询、核验或等待本人操作，不要重发相同计划");
+  state.tasks=next;state.lastPlanEpoch=state.planEpoch;
  }
  private Object currentFields(Task task,AgentMissionModels.View view){return switch(task.kind){case "CERTIFICATE"->view==null?task.certificateFields:view.certificateFields();case "LEAVE"->view==null?task.leaveFields:view.leaveFields();case "REPAIR"->view==null?task.repairFields:view.repairFields();default->view==null?task.fields:view.fields();};}
  private Set<String> fields(String kind){return switch(kind){case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","participants","keyword","activityTheme","activityType");};}
@@ -92,9 +120,9 @@ public class AgentGoalTools {
   String name=call.name();JsonNode args=call.arguments();if(args==null||!args.isObject())throw invalid("GOAL_ARGUMENTS_INVALID","工具参数须为对象");
   String operation="goal-"+goalId+"-step-"+step;
   switch(name){
-   case "set_plan"->{exact(args,"tasks");setPlan(user,state,args.path("tasks"));return observed(name,null,"OK","已记录多业务任务计划和依赖。",Map.of("taskCount",state.tasks.size()));}
-   case "read_guide"->{exact(args,"kind");String kind=text(args,"kind",20,true);if(!kinds(user).contains(kind))throw invalid("GOAL_PLAN_INVALID","当前账号没有该业务权限");var guide=guides.detail(kind.equals("RESERVATION")?"reservation":kind.toLowerCase(Locale.ROOT));return observed(name,null,"OK","已读取有效办理指南："+guide.title(),Map.of("kind",kind,"version",guide.version(),"content",guide.body().substring(0,Math.min(2000,guide.body().length()))));}
-   case "set_task_fields","revise_reservation"->{exact(args,"taskKey","fields");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");if(name.equals("revise_reservation")&&!task.kind.equals("RESERVATION"))throw invalid("GOAL_FIELDS_INVALID","只有预约任务可以调整场地查询方案");patch(user,session,task,args.path("fields"),operation,name.equals("revise_reservation"));return observed(name,task.key,"OK","已更新尚未写入的任务条件，后续须核对实际预览。",Map.of("updated",args.path("fields").properties().stream().map(Map.Entry::getKey).toList()));}
+   case "set_plan"->{exact(args,"tasks");setPlan(user,session,state,args.path("tasks"));return observed(name,null,"OK","已记录多业务任务计划和依赖，已结束事项的历史保留。",Map.of("taskCount",state.tasks.size()));}
+   case "read_guide"->{exact(args,"kind");String kind=text(args,"kind",20,true);if(!kinds(user).contains(kind))throw invalid("GOAL_PLAN_INVALID","当前账号没有该业务权限");var guide=guides.detail(kind.toLowerCase(Locale.ROOT));state.guidesRead.put(kind,new Guide(guide.slug(),guide.title(),guide.body().substring(0,Math.min(2000,guide.body().length())),guide.version(),guide.updatedAt(),guide.targetPath()));return observed(name,null,"OK","已读取有效办理指南："+guide.title(),Map.of("kind",kind,"version",guide.version()));}
+   case "set_task_fields","revise_reservation"->{exact(args,"taskKey","fields");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");if(name.equals("revise_reservation")&&!task.kind.equals("RESERVATION"))throw invalid("GOAL_FIELDS_INVALID","只有预约任务可以调整场地查询方案");patch(user,session,task,args.path("fields"),operation,name.equals("revise_reservation"));task.fieldsInstructionCount=state.instructions.size();return observed(name,task.key,"OK","已更新尚未写入的任务条件，后续须核对实际预览。",Map.of("updated",args.path("fields").properties().stream().map(Map.Entry::getKey).toList()));}
    case "prepare_task"->{
     exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));if(task.cancelled)throw invalid("GOAL_TASK_CANCELLED","该任务已取消");
     for(var dependency:task.dependsOn){var parent=task(state,dependency);if(parent.cancelled)throw invalid("GOAL_DEPENDENCY_CANCELLED","前置任务已由本人停止，请重新组织剩余依赖");if(!complete(user,session,parent))throw invalid("GOAL_DEPENDENCY_PENDING","前置任务尚未按目标完成");}

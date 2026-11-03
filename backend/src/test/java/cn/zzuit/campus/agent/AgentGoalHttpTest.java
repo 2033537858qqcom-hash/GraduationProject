@@ -222,6 +222,12 @@ class AgentGoalHttpTest {
   decisions.add(call("set_task_fields",Map.of("taskKey","leave","fields",Map.of("reasonType","PERSONAL","reason","实际事由","startsAt","2095-06-03T09:00","endsAt","2095-06-03T17:00"))));decisions.add(call("prepare_task",Map.of("taskKey","leave")));
   var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));var fields=goal.path("tasks").get(0).path("mission").path("leaveFields");assertThat(fields.path("startDate").asText()).isEqualTo("2095-06-03");assertThat(fields.path("startTime").asText()).isEqualTo("09:00");assertThat(fields.path("endTime").asText()).isEqualTo("17:00");
  }
+ @Test void finishingAfterAFieldRevisionDoesNotRequireRebuildingThePlan()throws Exception{
+  prepareCertificate();var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));decisions.add(call("set_task_fields",Map.of("taskKey","certificate","fields",Map.of("purpose","最新实际用途"))));
+  var revision=action(goal,"REVISE");revision.put("message","用途改为最新实际用途");revision.put("externalConsent",true);goal=act(user,s,goal,revision);saveChild(user,s,goal.path("tasks").get(0).path("mission"));var offered=new java.util.concurrent.atomic.AtomicReference<String>();
+  doAnswer(invocation->{offered.set(JSON.writeValueAsString(invocation.getArgument(1)));return new Plan(List.of(call("finish",Map.of())),20,5);}).when(model).nextGoalStep(anyString(),anyList(),any());goal=act(user,s,goal,action(goal,"CONTINUE"));
+  assertThat(offered.get()).doesNotContain("\"name\":\"await_user\"");assertThat(goal.path("stage").asText()).isEqualTo("DONE");
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

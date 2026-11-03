@@ -96,6 +96,10 @@ class AgentGoalRecoveryHttpTest {
   assertThat(captured.get().path("tasks").get(0).path("queryStatus").asText()).isEqualTo("NO_CANDIDATES");assertThat(captured.get().path("tasks").get(0).path("missing").size()).isZero();
   assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(goal.path("events").toString()).contains("NO_CHANGE");
  }
+ @Test void explicitReservationDateAndTimePartsCombineWithoutInventingTheEndDate()throws Exception{
+  var fields=new HashMap<String,Object>(bookingFields(25));String start=fields.remove("startsAt").toString(),end=fields.remove("endsAt").toString();fields.put("startDate",start.substring(0,10));fields.put("startTime","09:00");fields.put("endDate",end.substring(0,10));fields.put("endTime","11:00");
+  reservationPlan();decisions.add(call("set_task_fields",Map.of("taskKey","room","fields",fields)));decisions.add(call("prepare_task",Map.of("taskKey","room")));var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));assertThat(goal.path("tasks").get(0).path("mission").path("fields").path("startsAt").asText()).isEqualTo(start);assertThat(goal.path("tasks").get(0).path("mission").path("stage").asText()).isEqualTo("WAITING_SELECTION");
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

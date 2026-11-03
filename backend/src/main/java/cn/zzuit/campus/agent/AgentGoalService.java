@@ -52,6 +52,10 @@ public class AgentGoalService {
  private List<Event> events(long id){return jdbc.sql("SELECT * FROM agent_goal_event WHERE goal_id=:id ORDER BY step_number").param("id",id).query((r,n)->new Event(r.getInt("step_number"),r.getString("tool"),r.getString("task_key"),r.getString("status"),r.getString("message"),r.getObject("prompt_tokens",Integer.class),r.getObject("completion_tokens",Integer.class),r.getObject("created_at",LocalDateTime.class))).list();}
  private View view(CampusPrincipal user,Row row){String stage=row.stage.equals("RUNNING")&&!running(row)?"INTERRUPTED":row.stage;return new View(row.id,row.session,row.goal,stage,row.version,List.copyOf(row.state.instructions),tools.views(user,row.session,row.state),row.state.message,row.state.focusTaskKey,events(row.id),row.count<TOTAL_STEPS&&!Set.of("RUNNING","DONE","CANCELLED").contains(stage),row.updated);}
  public View detail(CampusPrincipal user,long session,long id){return view(user,load(user,session,id));}
+ public Optional<View> byRequestKey(CampusPrincipal user,long session,String requestKey){
+  sessions.session(user,session);
+  return jdbc.sql("SELECT * FROM agent_goal WHERE session_id=:s AND user_id=:u AND request_key=:k").param("s",session).param("u",user.id()).param("k",requestKey).query(this::row).optional().map(row->view(user,row));
+ }
  private void consent(boolean agreed){if(!agreed)throw error(HttpStatus.BAD_REQUEST,"MODEL_CONSENT_REQUIRED","请确认将本次目标、补充文字、公开办理指南与候选、脱敏执行结果发送至DeepSeek");if(!model.ready())throw error(HttpStatus.SERVICE_UNAVAILABLE,"MODEL_NOT_CONFIGURED","自主目标规划需要连接DeepSeek；可使用原有本地草稿流程");}
  public View create(CampusPrincipal user,long session,Create input){
   sessions.session(user,session);String hash=hashes.hash(input);

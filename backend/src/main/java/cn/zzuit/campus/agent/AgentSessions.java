@@ -19,6 +19,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -33,6 +34,7 @@ public class AgentSessions {
     private final IdentityService identities;
     private final AgentService agent;
     private final AgentPaymentQueries paymentQueries;
+    private final ObjectProvider<AgentGoalService> goals;
     private final AgentLeaveDrafts leaveDrafts;
     private final AgentCertificateDrafts certificateDrafts;
     private final AgentRepairDrafts repairDrafts;
@@ -46,8 +48,8 @@ public class AgentSessions {
     private final Set<Long> operations=ConcurrentHashMap.newKeySet();
     private final Map<Long,Long> activeTurns=new ConcurrentHashMap<>();
     private record Task(long id,long sessionId,String businessKey,String kind,String fields,String stage,Long businessId,int version,LocalDateTime updatedAt) {}
-    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,AgentHousingDrafts housingDrafts,HousingTransferService housingTransfers,PlatformTransactionManager manager,AgentPaymentQueries paymentQueries) {
-        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; this.housingDrafts=housingDrafts; this.housingTransfers=housingTransfers; transaction=new TransactionTemplate(manager);this.paymentQueries=paymentQueries;
+    public AgentSessions(JdbcClient jdbc,IdentityService identities,AgentService agent,AgentLeaveDrafts leaveDrafts,AgentCertificateDrafts certificateDrafts,AgentRepairDrafts repairDrafts,LeaveService leaves,CertificateService certificates,RepairService repairs,AgentHousingDrafts housingDrafts,HousingTransferService housingTransfers,PlatformTransactionManager manager,AgentPaymentQueries paymentQueries,ObjectProvider<AgentGoalService> goals) {
+        this.jdbc=jdbc; this.identities=identities; this.agent=agent; this.leaveDrafts=leaveDrafts; this.certificateDrafts=certificateDrafts; this.repairDrafts=repairDrafts; this.leaves=leaves; this.certificates=certificates; this.repairs=repairs; this.housingDrafts=housingDrafts; this.housingTransfers=housingTransfers; transaction=new TransactionTemplate(manager);this.paymentQueries=paymentQueries;this.goals=goals;
     }
     private void require(CampusPrincipal user) { identities.requirePermission(user,"agent:query"); }
     private void kind(CampusPrincipal user,String kind) { switch(kind) { case "LEAVE" -> leaveDrafts.require(user); case "CERTIFICATE" -> certificateDrafts.require(user); case "REPAIR" -> repairDrafts.require(user); case "HOUSING" -> housingDrafts.require(user); default -> throw missing(); } }
@@ -106,7 +108,7 @@ public class AgentSessions {
             if(prior.isPresent()) {
                 var requestedContext=jdbc.sql("SELECT context_type,context_id FROM agent_turn WHERE session_id=:id AND request_key=:key").param("id",id).param("key",input.requestKey()).query((r,n)->r.getString(1)==null?null:new Context(r.getString(1),r.getLong(2))).optional().orElse(null);
                 var old=prior.get(); if(!old.question().equals(query.message().trim()) || old.mode()!=query.mode() || !Objects.equals(requestedContext,query.context())) throw conflict("重复请求与原问题不同，请新建一次查询");
-                return new QueryResult(old,null,true);
+                return new QueryResult(old,null,true,goal(user,id,input.requestKey()));
             }
             turnId=write(()->{
                 session(user,id); var key=new GeneratedKeyHolder();
@@ -118,13 +120,16 @@ public class AgentSessions {
             activeTurns.put(user.id(),turnId);
             var resolved=paymentQueries.followUp(user,id,query);var continuation=paymentQueries.continueQuote(id,query);
             var answer=agent.queryWithLocalContinuation(user,resolved,continuation); long completeId=turnId;
-            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs,payment_quote_json=:quote,resolved_context_type=:type,resolved_context_id=:context WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("quote",paymentQueries.pendingQuote(answer,query,continuation)).param("type",resolved.context()==null?null:resolved.context().type()).param("context",resolved.context()==null?null:resolved.context().id()).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false); });
+            var started=answer.results().stream().filter(result->"start_goal".equals(result.name()) && "START_GOAL".equals(result.status())).findFirst();
+            var goal=started.map(result->goals.getObject().create(user,id,new AgentGoalModels.Create(input.requestKey(),result.message(),true))).orElse(null);
+            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs,payment_quote_json=:quote,resolved_context_type=:type,resolved_context_id=:context WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("quote",paymentQueries.pendingQuote(answer,query,continuation)).param("type",resolved.context()==null?null:resolved.context().type()).param("context",resolved.context()==null?null:resolved.context().id()).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false,goal); });
         } catch(RuntimeException ex) {
             if(turnId!=null) { long failedId=turnId; write(()->jdbc.sql("UPDATE agent_turn SET status='FAILED' WHERE id=:id").param("id",failedId).update()); }
             throw ex;
         } finally { activeTurns.remove(user.id()); operations.remove(user.id()); }
     }
     private Turn turn(CampusPrincipal user,long id) { return jdbc.sql("SELECT * FROM agent_turn WHERE id=:id").param("id",id).query((r,n)->turnRow(r,user)).single(); }
+    private AgentGoalModels.View goal(CampusPrincipal user,long session,String requestKey) { return goals.getObject().byRequestKey(user,session,requestKey).orElse(null); }
     public TaskView createTask(CampusPrincipal user,long sessionId,CreateTask input) {
         return write(()->{
             session(user,sessionId); kind(user,input.kind());

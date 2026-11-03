@@ -41,29 +41,40 @@ public class AgentService {
         try {
             rate(user.id());
             String question=input.message().trim();
-            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|提交|删除|撤回|取消|核销|发布|停用|开证明|派单|改派|验收|接单|支付|付款|退款)|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿|日程|预约|借用|账单|缴费|充值|电费|水费)").matcher(question).find()) {
+            if(Pattern.compile("(帮我|直接|自动|绕过|忽略).*(审批|审核通过|删除|撤回|取消|核销|发布|停用|派单|改派|验收|接单|支付|付款|退款)|(忽略|绕过|自动).*(提交)|直接提交|帮我提交|(别人|他人|其他同学|其他学生|其他账号|所有学生).*(成绩|申请|请假|材料|证明|课表|报修|宿舍|住宿|床位|调宿|日程|预约|借用|账单|缴费|充值|电费|水费)").matcher(question).find()) {
                 outcome="REFUSED"; return new Answer(run,input.mode(),false,"第一期仅查询本人或当前岗位获授权的信息。不能查询无关人员资料，也不能代替提交或审批，请通过原业务页面办理。",List.of(),now(),null,null);
             }
+            if(input.mode()==Mode.LOCAL && continuation==null && canHandle(user) && localGoalRequest(question)) {
+                outcome="NEEDS_INPUT";
+                return new Answer(run,input.mode(),false,"办理请假、证明、报修或场地预约需要选择 DeepSeek 并确认发送。校园Agent会组织计划并等待你核对保存；本地查询只回答进度和规则。",List.of(new ToolResult("start_goal","开始自主办理","NEEDS_INPUT","请改用 DeepSeek 并确认发送本次办理目标。",0,List.of(),List.of(),null)),now(),null,null);
+            }
             boolean modelUsed=input.mode()==Mode.DEEPSEEK&&continuation==null;
-            Plan plan=continuation!=null?new Plan(List.of(continuation),null,null):modelUsed?model.plan(question,tools.schemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
+            Plan plan=continuation!=null?new Plan(List.of(continuation),null,null):modelUsed?model.plan(question,planningSchemas(user),input.context()==null?null:input.context().type()):local(user,question,input.context());
             prompt=plan.promptTokens(); completion=plan.completionTokens();
+            if(plan.calls()!=null && plan.calls().stream().anyMatch(call->call!=null && "start_goal".equals(call.name()))) {
+                plan=new Plan(plan.calls().stream().filter(call->call!=null && "start_goal".equals(call.name())).limit(1).toList(),plan.promptTokens(),plan.completionTokens());
+            }
             if(input.mode()==Mode.LOCAL && plan.calls()!=null && (plan.calls().size()>4 || plan.calls().stream().map(Call::name).distinct().count()!=plan.calls().size())) {
                 outcome="NEEDS_INPUT";
                 return new Answer(run,input.mode(),false,"请拆分提问：一次最多查询4种不同事项；同一类事项有不同条件时，请分别查询，避免漏查或混用条件。",List.of(),now(),null,null);
             }
             if(plan.calls()==null || plan.calls().size()>4) throw new ApiException(HttpStatus.BAD_GATEWAY,"MODEL_RESPONSE_INVALID","查询计划超出限制，未执行工具");
             // Reject unknown or duplicate tool names before execution; each tool then validates its arguments.
-            var allowed=tools.capabilities(user).stream().map(Capability::name).toList(); var unique=new HashSet<String>();
+            var allowed=new ArrayList<>(tools.capabilities(user).stream().map(Capability::name).toList());
+            if(input.mode()==Mode.DEEPSEEK && canHandle(user)) allowed.add("start_goal");
+            var unique=new HashSet<String>();
             for(var call:plan.calls()) if(call==null || (input.mode()==Mode.DEEPSEEK && !allowed.contains(call.name())) || !unique.add(call.name())) throw new ApiException(HttpStatus.BAD_GATEWAY,"MODEL_TOOL_REJECTED","模型选择了不可用或重复工具，查询未执行");
             var results=new ArrayList<ToolResult>();
             for(var call:plan.calls()) {
                 identities.requirePermission(user,"agent:query"); called.add(call.name());
-                try { results.add(tools.execute(user,call,input.context())); }
+                try { results.add("start_goal".equals(call.name())?startGoal(call,question):tools.execute(user,call,input.context())); }
                 catch(ApiException ex) { if(ex.status()==HttpStatus.UNAUTHORIZED) throw ex; results.add(tools.failure(call.name(),ex)); }
             }
             identities.requirePermission(user,"agent:query");
-            outcome=results.isEmpty()?"NO_MATCH":results.stream().allMatch(x->x.status().equals("OK"))?"SUCCESS":"PARTIAL";
+            boolean started=results.size()==1 && results.getFirst().name().equals("start_goal") && results.getFirst().status().equals("START_GOAL");
+            outcome=results.isEmpty()?"NO_MATCH":started||results.stream().allMatch(x->x.status().equals("OK"))?"SUCCESS":"PARTIAL";
             String summary=results.isEmpty()?"没有匹配到可用查询。可问请假、证明或报修办理规则、本人日程、课表、成绩考试、预约进度、空闲场地、报修进度或未读消息。"
+                :started?"已开始自主办理。校园Agent会组织计划，并等待你核对后保存或提交。"
                 :outcome.equals("SUCCESS")?"已按当前账号范围完成 "+results.size()+" 项查询，结果以本地业务和当前有效指南为准。"
                 :"已尝试 "+results.size()+" 项查询，其中有未完成的项目，请查看各项提示。";
             return new Answer(run,input.mode(),modelUsed,summary,List.copyOf(results),now(),prompt,completion);
@@ -172,6 +183,33 @@ public class AgentService {
         rates.entrySet().removeIf(e->e.getValue().minute()<minute-2);
         var bucket=rates.compute(user,(k,b)->b==null || b.minute()!=minute?new Bucket(minute,1):new Bucket(minute,b.count()+1));
         if(bucket.count()>30) throw new ApiException(HttpStatus.TOO_MANY_REQUESTS,"QUERY_RATE_LIMIT","查询较频繁，请稍后重试");
+    }
+    private boolean canHandle(CampusPrincipal user) {
+        var permissions=identities.permissions(user.id());
+        return permissions.contains("certificate:apply")||permissions.contains("leave:apply")||permissions.contains("repair:apply")||permissions.containsAll(List.of("reservation:apply","portal:read"));
+    }
+    private boolean localGoalRequest(String question) {
+        if(question.matches(".*(怎么|如何|规则|最长|材料|领取|办理流程|进度|待办).*")) return false;
+        return question.matches("(?s).*(帮我|给我|请帮|替我|准备|办理).*(请假|休假|在校证明|学籍证明|证明草稿|报修|预约|借用).*")
+            || question.matches("(?s).*(请假|休假|在校证明|学籍证明|报修|预约|借用).*(草稿|提交|跟踪).*");
+    }
+    private List<Map<String,Object>> planningSchemas(CampusPrincipal user) {
+        var schemas=new ArrayList<>(tools.schemas(user));
+        if(!canHandle(user)) return schemas;
+        schemas.add(Map.of("type","function","function",Map.of("name","start_goal","description","当用户要求办理、准备草稿、确认后提交或跟踪本人的场地预约、报修、请假或在校证明（含混合目标）时使用。不要用于只读查询、调宿、缴费、审批或他人事项。goal填写用户原话中的办理目标。","parameters",Map.of("type","object","properties",Map.of("goal",Map.of("type","string","maxLength",1000)),"required",List.of(),"additionalProperties",false))));
+        return schemas;
+    }
+    private ToolResult startGoal(Call call,String question) {
+        var arguments=call.arguments();
+        if(arguments==null||!arguments.isObject()||arguments.properties().stream().anyMatch(field->!field.getKey().equals("goal"))) {
+            throw new ApiException(HttpStatus.BAD_GATEWAY,"MODEL_TOOL_REJECTED","模型选择了不可用或重复工具，查询未执行");
+        }
+        String goal=question;
+        if(arguments.has("goal")&&arguments.path("goal").isString()&&!arguments.path("goal").asText().isBlank()) {
+            goal=arguments.path("goal").asText().trim();
+            if(goal.length()>1000) throw new ApiException(HttpStatus.BAD_GATEWAY,"MODEL_TOOL_REJECTED","模型选择了不可用或重复工具，查询未执行");
+        }
+        return new ToolResult("start_goal","开始自主办理","START_GOAL",goal,0,List.of(),List.of(),null);
     }
     private Plan local(CampusPrincipal user,String q,Context context) {
         var calls=new ArrayList<Call>();

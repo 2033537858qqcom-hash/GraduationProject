@@ -13,8 +13,9 @@ import AssistantHousingDraft from './AssistantHousingDraft.vue'
 import AssistantMission from './AssistantMission.vue'
 import AssistantGoal from './AssistantGoal.vue'
 import BaseSelect from './BaseSelect.vue'
-import { latestAssistantTask, mergeAssistantTurns, restoredTurnLabel } from '../lib/assistantSessions'
+import { latestAssistantTask, mergeAssistantTurns, queryStartedGoal, restoredTurnLabel, resumeGoalFromSummaries } from '../lib/assistantSessions'
 import type { AssistantSession, AssistantSessionDetail, AssistantTurn, AssistantTaskSummary, AssistantTaskView, AssistantQueryResult } from '../lib/assistantSessions'
+import type { GoalSummary } from '../lib/assistantGoals'
 import type { AssistantContext } from '../lib/assistant'
 import { publicReducedMotion } from '../lib/publicMotion'
 
@@ -118,10 +119,18 @@ async function restoreLatest() {
     const result = await api<AssistantSessionDetail>(`/assistant/sessions/${id}`)
     if (current !== sessionGeneration) return
     session.value = result; turns.value = result.turns
+    await resumeSessionGoal(result.session.id)
   } catch (cause) { if (current === sessionGeneration) error.value = errorMessage(cause) }
   finally { if (current === sessionGeneration) sessionLoading.value = false }
 }
 async function allowSessionChange() { return (!leaveDraft.value || await leaveDraft.value.allowLeave()) && (!certificateDraft.value || await certificateDraft.value.allowLeave()) && (!repairDraft.value || await repairDraft.value.allowLeave()) && (!housingDraft.value || await housingDraft.value.allowLeave()) && (!missionDraft.value || await missionDraft.value.allowLeave()) && (!goalDraft.value || await goalDraft.value.allowLeave()) }
+async function resumeSessionGoal(sessionId: number) {
+  if (!canRunMission.value) return
+  try {
+    const goals = await api<GoalSummary[]>(`/assistant/sessions/${sessionId}/goals`)
+    if (resumeGoalFromSummaries(goals)) task.value = 'GOAL'
+  } catch { /* Keep the query conversation if the goal list cannot be read. */ }
+}
 function taskLabel(kind: string) { return kind === 'LEAVE' ? '请假准备' : kind === 'CERTIFICATE' ? '在校证明准备' : kind === 'REPAIR' ? '报修准备' : kind === 'HOUSING' ? '调宿准备' : '准备任务' }
 async function selectSession(id: number) {
   if (busy.value || preparingDraft.value || savingDraft.value || sessionLoading.value || !await allowSessionChange()) return
@@ -130,6 +139,7 @@ async function selectSession(id: number) {
     const result = await api<AssistantSessionDetail>(`/assistant/sessions/${id}`)
     if (current !== sessionGeneration) return
     session.value = result; turns.value = result.turns; messages.value = []; task.value = 'QUERY'; question.value = ''; consent.value = false; requeryContext.value = null; contextEnabled.value = true
+    await resumeSessionGoal(result.session.id)
   } catch (cause) { if (current === sessionGeneration) error.value = errorMessage(cause) }
   finally { if (current === sessionGeneration) sessionLoading.value = false }
 }
@@ -207,6 +217,7 @@ async function send() {
     if (answer) messages.value = [...messages.value.slice(-5), { question: text, answer }]
     else error.value = '这次请求已记录，未重复调用模型。可从历史提问手动重新查询。'
     question.value = ''; consent.value = false; queryKey.value = crypto.randomUUID(); await refreshSession()
+    if (queryStartedGoal(result)) task.value = 'GOAL'
     await nextTick()
     if (open.value && current === generation) {
       history.value?.scrollTo({ top: history.value.scrollHeight, behavior: publicReducedMotion.value ? 'auto' : 'smooth' })
@@ -327,9 +338,9 @@ onBeforeUnmount(() => {
 <template>
   <aside v-if="currentUser?.permissions.includes('agent:query')" id="campus-assistant" class="assistant-dock campus-assistant" :class="{ expanded: open, 'is-reduced': publicReducedMotion }">
     <section v-show="open" id="campus-assistant-panel" class="assistant-panel" role="dialog" aria-labelledby="campus-assistant-heading" @keydown.esc.stop="close">
-      <header class="assistant-head"><div><strong id="campus-assistant-heading">校园助手</strong><small>{{ task === 'HISTORY' ? '恢复本人对话与已核对的进度' : task !== 'QUERY' ? '整理资料，确认后保存本人草稿' : '查询当前账号可见的信息' }}</small></div><button class="assistant-icon" aria-label="收起 AI 对话" :disabled="savingDraft" @click="close"><ChevronDown :size="19" /></button></header>
+      <header class="assistant-head"><div><strong id="campus-assistant-heading">校园Agent</strong><small>{{ task === 'HISTORY' ? '恢复本人对话与已核对的进度' : task === 'GOAL' ? '说明目标，自主组织办理' : task === 'AGENT' ? '单项任务逐步办理' : task !== 'QUERY' ? '整理资料，确认后保存本人草稿' : '提问或说明要办的事，由校园Agent查询或开始办理' }}</small></div><button class="assistant-icon" aria-label="收起 AI 对话" :disabled="savingDraft" @click="close"><ChevronDown :size="19" /></button></header>
       <div class="assistant-session-bar"><span>{{ session?.session.title ?? '正在恢复本人对话' }}</span><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="listSessions()">历史对话</button><button :disabled="busy || preparingDraft || savingDraft || sessionLoading" @click="newSession">新对话</button></div>
-      <nav v-if="canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing || canRunMission" class="assistant-tasks" aria-label="AI 服务方式"><button :aria-pressed="task === 'QUERY'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'QUERY'">查询信息</button><button v-if="canRunMission" :aria-pressed="task === 'GOAL'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'GOAL'">自主Agent</button><button v-if="canRunMission" :aria-pressed="task === 'AGENT'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'AGENT'">Agent任务</button><button v-if="canPrepareLeave" :aria-pressed="task === 'LEAVE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'LEAVE'">准备请假</button><button v-if="canPrepareCertificate" :aria-pressed="task === 'CERTIFICATE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'CERTIFICATE'">准备证明</button><button v-if="canPrepareRepair" :aria-pressed="task === 'REPAIR'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'REPAIR'">准备报修</button><button v-if="canPrepareHousing" :aria-pressed="task === 'HOUSING'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'HOUSING'">准备调宿</button></nav>
+      <nav v-if="canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing || canRunMission" class="assistant-tasks" aria-label="AI 服务方式"><button :aria-pressed="task === 'QUERY'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'QUERY'">对话</button><button v-if="canRunMission" :aria-pressed="task === 'GOAL'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'GOAL'">自主办理</button><button v-if="canRunMission" :aria-pressed="task === 'AGENT'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'AGENT'">单项任务</button><button v-if="canPrepareLeave" :aria-pressed="task === 'LEAVE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'LEAVE'">准备请假</button><button v-if="canPrepareCertificate" :aria-pressed="task === 'CERTIFICATE'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'CERTIFICATE'">准备证明</button><button v-if="canPrepareRepair" :aria-pressed="task === 'REPAIR'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'REPAIR'">准备报修</button><button v-if="canPrepareHousing" :aria-pressed="task === 'HOUSING'" :disabled="busy || preparingDraft || savingDraft" @click="task = 'HOUSING'">准备调宿</button></nav>
       <div v-if="task !== 'HISTORY' && task !== 'AGENT' && task !== 'GOAL'" class="assistant-mode"><label>回答方式<BaseSelect v-model="mode" :options="modeOptions" compact :disabled="busy || loading || preparingDraft || savingDraft" aria-label="回答方式" /></label><span>{{ busy || preparingDraft ? '正在处理' : mode === 'LOCAL' ? task !== 'QUERY' ? '表单核对' : '关键词识别' : '自然语言识别' }}</span></div>
       <p v-if="loading" class="assistant-status" role="status">正在读取可用查询…</p>
       <p v-if="sessionLoading" class="assistant-status" role="status">正在恢复对话记录…</p>
@@ -348,7 +359,7 @@ onBeforeUnmount(() => {
         <button v-for="item in session?.tasks ?? []" :key="`task-${item.id}`" :disabled="sessionLoading" @click="resumeTask(item)"><strong>{{ taskLabel(item.kind) }} #{{ item.id }}</strong><span>{{ item.stage === 'LINKED' ? '已关联申请 · 恢复后核对最新状态' : item.version ? '已暂存预览 · 恢复后重新核对' : '待补齐信息' }}</span></button>
       </div>
       <div v-show="task === 'QUERY'" ref="history" class="assistant-history" aria-live="polite" aria-relevant="additions">
-        <div v-if="!messages.length && !turns.length" class="assistant-intro"><span class="assistant-intro-mark">AI</span><h2>从一个问题开始</h2><p>可以查办理指南、学习安排和办事进度。{{ canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing ? '也可以准备申请，核对后保存本人草稿。' : '办理请在原业务页面确认。' }}</p><small>规则与个人记录均为毕业设计演示。</small></div>
+        <div v-if="!messages.length && !turns.length" class="assistant-intro"><span class="assistant-intro-mark">AI</span><h2>从一个问题或目标开始</h2><p>可以查办理指南、学习安排和办事进度。{{ canRunMission ? '也可以直接说明要办理请假、证明、报修或预约，确认后保存本人草稿。' : canPrepareLeave || canPrepareCertificate || canPrepareRepair || canPrepareHousing ? '也可以准备申请，核对后保存本人草稿。' : '办理请在原业务页面确认。' }}</p><small>规则与个人记录均为毕业设计演示。</small></div>
         <button v-if="session?.hasOlder" class="assistant-older" :disabled="sessionLoading" @click="olderTurns">更早的提问</button>
         <article v-for="turn in turns.filter(item => !messages.some(entry => entry.answer.runId === item.runId))" :key="turn.id" class="assistant-restored"><p>{{ turn.question }}</p><small>{{ restoredTurnLabel(turn.status) }} · {{ turn.createdAt.replace('T',' ').slice(0,16) }}</small><button :disabled="busy || sessionLoading" @click="requery(turn)">重新查询</button></article>
         <article v-for="entry in messages" :key="entry.answer.runId" class="assistant-turn">
@@ -367,8 +378,8 @@ onBeforeUnmount(() => {
       <div v-if="context && task === 'QUERY'" class="assistant-context"><span>当前上下文：{{ contextLabel }}</span><button class="assistant-icon" aria-label="清除当前业务上下文" @click="contextEnabled = false"><X :size="13" /></button></div>
       <div v-show="task === 'QUERY'" class="assistant-prompts"><button v-for="text in suggestions.slice(0, 2)" :key="text" :disabled="busy" @click="choose(text)">{{ text }}</button></div>
       <form v-show="task === 'QUERY'" class="assistant-compose" @submit.prevent="send">
-        <label v-if="mode === 'DEEPSEEK'" class="assistant-consent"><input v-model="consent" type="checkbox" :disabled="busy" />同意将本次问题及页面业务类型发送至 DeepSeek。查询结果和从页面读取的编号留在本地。</label>
-        <label class="sr-only" for="assistant-question">输入查询问题</label><div class="assistant-input-row"><textarea id="assistant-question" ref="input" v-model="question" rows="2" maxlength="1000" placeholder="输入你想查询的事项…" :disabled="busy || loading" @keydown="keydown" /><button type="submit" class="assistant-send" :disabled="!canSend" aria-label="发送查询"><Send :size="17" /></button></div>
+        <label v-if="mode === 'DEEPSEEK'" class="assistant-consent"><input v-model="consent" type="checkbox" :disabled="busy" />同意将本次问题及页面业务类型发送至 DeepSeek。查询结果和从页面读取的编号留在本地；若开始办理，公开指南与脱敏执行结果也会发送。</label>
+        <label class="sr-only" for="assistant-question">输入查询或办理目标</label><div class="assistant-input-row"><textarea id="assistant-question" ref="input" v-model="question" rows="2" maxlength="1000" placeholder="输入想查询或要办理的事项…" :disabled="busy || loading" @keydown="keydown" /><button type="submit" class="assistant-send" :disabled="!canSend" aria-label="发送"><Send :size="17" /></button></div>
         <div class="assistant-compose-note"><span>Enter 发送 · Shift + Enter 换行</span><button v-if="busy" type="button" @click="stopWaiting">停止等待</button></div>
         <p v-if="error" class="assistant-error" role="alert">{{ error }} <button v-if="!capabilities" type="button" aria-label="重新读取可用查询" @click="loadCapabilities"><RotateCw :size="13" />重试</button></p>
       </form>
@@ -377,7 +388,7 @@ onBeforeUnmount(() => {
     </section>
     <div v-if="hint && !open" class="assistant-hint">
       <span class="assistant-hint-badge"><Sparkles :size="12" aria-hidden="true" /></span>
-      <button class="assistant-hint-btn" @click="show">可以帮你查{{ hintSubject }}</button>
+      <button class="assistant-hint-btn" @click="show">可以帮你查{{ hintSubject }}，也可以直接办理</button>
       <button class="assistant-hint-close" aria-label="关闭 AI 查询提示" @click="hint = false"><X :size="12" /></button>
     </div>
     <button

@@ -28,7 +28,7 @@ class AgentSessionConcurrencyTest {
             if(!resume.await(10,TimeUnit.SECONDS)) throw new AssertionError("transaction did not resume");
             return new SimpleTransactionStatus();
         });
-        var sessions=spy(new AgentSessions(jdbc,null,null,null,null,null,null,null,null,null,null,manager,null));
+        var sessions=spy(new AgentSessions(jdbc,null,null,null,null,null,null,null,null,null,null,manager,null,null));
         var user=new CampusPrincipal(7,"test","",true,List.of(),List.of("agent:query"),0);
         doReturn(new Session(1,"test",LocalDateTime.now(),LocalDateTime.now())).when(sessions).session(user,1);
         var executor=Executors.newSingleThreadExecutor();

@@ -10,9 +10,15 @@ export interface AssistantTaskSummary { id: number; kind: 'LEAVE' | 'CERTIFICATE
 export interface AssistantSessionDetail { session: AssistantSession; turns: AssistantTurn[]; tasks: AssistantTaskSummary[]; hasOlder: boolean }
 export interface AssistantBusiness { id: number; kind: 'LEAVE' | 'CERTIFICATE' | 'REPAIR' | 'HOUSING'; status: string; version: number; targetPath: string }
 export interface AssistantTaskView extends AssistantTaskSummary { leavePreview: AssistantLeavePreview | null; certificatePreview: AssistantCertificatePreview | null; repairPreview: AssistantRepairPreview | null; housingPreview: AssistantHousingPreview | null; business: AssistantBusiness | null }
-export interface AssistantQueryResult { turn: AssistantTurn; answer: AssistantAnswer | null; repeated: boolean }
+export interface AssistantQueryResult { turn: AssistantTurn; answer: AssistantAnswer | null; repeated: boolean; goal?: { id: number; stage: string } | null }
 export function latestAssistantTask(tasks: AssistantTaskSummary[], kind: AssistantTaskSummary['kind']) {
   return tasks.filter(task => task.kind === kind).sort((a, b) => b.id - a.id)[0]?.id ?? null
+}
+export function queryStartedGoal(result: { goal?: { id: number } | null }) {
+  return result.goal && Number.isInteger(result.goal.id) && result.goal.id > 0 ? result.goal.id : null
+}
+export function resumeGoalFromSummaries(goals: { id: number; stage: string }[]) {
+  return goals.find(goal => !['DONE', 'CANCELLED'].includes(goal.stage))?.id ?? null
 }
 export function mergeAssistantTurns(old: AssistantTurn[], fresh: AssistantTurn[]) {
   return [...new Map([...old, ...fresh].map(turn => [turn.id, turn])).values()].sort((a, b) => a.id - b.id)

@@ -16,7 +16,9 @@ public final class AgentSessionModels {
     public record Turn(long id,String question,Mode mode,Context context,String status,String runId,LocalDateTime createdAt) {}
     public record SessionDetail(Session session,List<Turn> turns,List<TaskSummary> tasks,boolean hasOlder) {}
     public record SessionQuery(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey,@NotNull @Valid Query input) {}
-    public record QueryResult(Turn turn,Answer answer,boolean repeated) {}
+    public record QueryResult(Turn turn,Answer answer,boolean repeated,AgentGoalModels.View goal) {
+        public QueryResult(Turn turn,Answer answer,boolean repeated) { this(turn,answer,repeated,null); }
+    }
     public record CreateTask(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey,@NotBlank @Pattern(regexp="LEAVE|CERTIFICATE|REPAIR|HOUSING") String kind) {}
     public record TaskSummary(long id,String kind,String stage,int version,LocalDateTime updatedAt) {}
     public record Business(long id,String kind,String status,int version,String targetPath) {}

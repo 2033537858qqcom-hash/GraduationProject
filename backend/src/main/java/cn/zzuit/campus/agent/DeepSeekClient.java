@@ -102,6 +102,8 @@ public class DeepSeekClient {
             报修工具只读取数量、状态和链接。不能猜测校园地点，也不能代替派单、接单、完成维修或验收。
             只有问题同时明确询问规则与本人信息时，才同时选择指南和业务工具；每个独立需求选择必要的工具即可。
             最多选择 4 个不同工具。日期按北京时间，以 ISO 日期输出。缺少具体申请编号或工单编号时使用页面上下文或列表，不猜测编号。
+            若工具列表包含 start_goal：用户明确要求办理、准备草稿、确认后提交或跟踪本人的预约、报修、请假或在校证明（含混合目标）时，只选择 start_goal，goal 使用用户原话，不要改写成查询，也不要同时选择只读工具。
+            只问规则、进度、课表、成绩、缴费、报价、消息或指南时不要选择 start_goal。调宿、支付、审批、派单和他人事项不能用 start_goal。
             日期：%s。页面业务类型：%s。页面具体编号留在本地，不会在提示中提供。
             """.formatted(LocalDate.now(ZoneId.of("Asia/Shanghai")),contextType==null?"无":contextType);
         return requestPlan(message,instruction,tools,"auto");

@@ -39,6 +39,8 @@ public class AgentGoalTools {
   return result;
  }
  public List<Map<String,Object>> schemas(CampusPrincipal user,long session,State state){
+  if(!state.tasks.isEmpty()&&state.lastPlanEpoch==state.planEpoch&&state.tasks.stream().allMatch(task->complete(user,session,task)))
+   return AgentGoalToolCatalog.tools(kinds(user),false).stream().filter(schema->((Map<?,?>)schema.get("function")).get("name").equals("finish")).toList();
   var current=currentGuides(user);var unread=current.entrySet().stream().filter(entry->!state.guidesRead.containsKey(entry.getKey())||state.guidesRead.get(entry.getKey()).version()!=entry.getValue().version()).map(Map.Entry::getKey).toList();
   var result=new ArrayList<Map<String,Object>>();
   for(var schema:AgentGoalToolCatalog.tools(kinds(user),authorized(state))){
@@ -144,7 +146,7 @@ public class AgentGoalTools {
   state.tasks=next;state.lastPlanEpoch=state.planEpoch;
  }
  private Object currentFields(Task task,AgentMissionModels.View view){return switch(task.kind){case "CERTIFICATE"->view==null?task.certificateFields:view.certificateFields();case "LEAVE"->view==null?task.leaveFields:view.leaveFields();case "REPAIR"->view==null?task.repairFields:view.repairFields();default->view==null?task.fields:view.fields();};}
- private Set<String> fields(String kind){return switch(kind){case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","participants","keyword","activityTheme","activityType");};}
+ private Set<String> fields(String kind){return switch(kind){case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime","startsAt","endsAt");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","participants","keyword","activityTheme","activityType");};}
  private String localTime(Object value){
   if(value==null)return null;String raw;if(value instanceof JsonNode node){if(node.isNull())return null;raw=node.asText();}else raw=value.toString();
   raw=raw.trim();if(raw.isBlank())return null;
@@ -157,6 +159,13 @@ public class AgentGoalTools {
   if(!patch.isObject()||patch.isEmpty()||patch.properties().stream().anyMatch(e->!allowed.contains(e.getKey())||(!e.getKey().equals("participants")&&!e.getValue().isString())||(e.getKey().equals("participants")&&!e.getValue().isIntegralNumber())))throw invalid("GOAL_FIELDS_INVALID","条件包含未允许或类型不正确的字段，身份、地点和联系方式须在本地核对");
   var view=mission(user,session,task);if(view!=null&&view.business()!=null)throw invalid("GOAL_RESULT_EXISTS","原申请已保存，请到原页面修改；Agent保留历史");
   var values=new LinkedHashMap<String,Object>();var original=currentFields(task,view);if(original!=null)json.valueToTree(original).properties().forEach(e->values.put(e.getKey(),e.getValue()));patch.properties().forEach(e->values.put(e.getKey(),e.getValue()));
+  if(task.kind.equals("LEAVE"))for(String prefix:List.of("start","end")){
+   String alias=prefix+"sAt";if(values.containsKey(alias)){String stamp=localTime(values.remove(alias));if(stamp==null)throw invalid("GOAL_TIME_FORMAT","请提供明确请假时间");
+    String day=stamp.substring(0,10),clock=stamp.substring(11);
+    if(patch.has(prefix+"Date")&&!patch.path(prefix+"Date").asText().equals(day)||patch.has(prefix+"Time")&&!patch.path(prefix+"Time").asText().equals(clock))throw invalid("GOAL_TIME_FORMAT","完整请假时间与分开的日期时刻互相冲突，请核对");
+    values.put(prefix+"Date",day);values.put(prefix+"Time",clock);
+   }
+  }
   if(task.kind.equals("RESERVATION"))for(String name:List.of("startsAt","endsAt"))if(values.containsKey(name))values.put(name,localTime(values.get(name)));
   Object typed;
   try{typed=switch(task.kind){case "CERTIFICATE"->missionTools.normalizeCertificate(json.convertValue(values,CertificateFields.class));case "LEAVE"->missionTools.normalizeLeave(json.convertValue(values,LeaveFields.class));case "REPAIR"->missionTools.normalizeRepair(json.convertValue(values,RepairFields.class));default->missionTools.normalize(json.convertValue(values,AgentMissionModels.Fields.class));};}

@@ -29,6 +29,7 @@ public class AgentMissionTools {
     private final AgentLeaveMissionTools leave;
     private final AgentCertificateMissionTools certificate;
     private final JsonMapper json=JsonMapper.builder().build();
+    private final JsonMapper canonicalJson=JsonMapper.builder().enable(tools.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build();
     public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair,AgentLeaveMissionTools leave,AgentCertificateMissionTools certificate) {
         this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;this.repair=repair;this.leave=leave;this.certificate=certificate;
     }
@@ -98,7 +99,7 @@ public class AgentMissionTools {
     }
     public String fingerprint(State state,CampusPrincipal user){return certificate(state)?hash(certificate.fingerprint(state,user)):leave(state)?hash(leave.fingerprint(state,user)):repair(state)?hash(repair.fingerprint(state,user)):hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
     public String hash(Object input) {
-        try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(json.writeValueAsString(input).getBytes(StandardCharsets.UTF_8)));}
+        try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonicalJson.writeValueAsString(input).getBytes(StandardCharsets.UTF_8)));}
         catch(Exception failure){throw new IllegalStateException("任务请求摘要生成失败",failure);}
     }
     public void invalidate(State state,String message) {

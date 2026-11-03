@@ -71,12 +71,12 @@ class AgentGoalLiveEvaluation {
    try{
     var user=login(example.path("username").asText());s=session(user);
     goal=settle(user,s,ok(user.post(base(s),Map.of("requestKey",UUID.randomUUID().toString(),"goal",render(example.path("goal").asText()),"externalConsent",true))));
-    assertKinds(goal,example.path("expectedKinds"));
+    AgentGoalLiveChecks.kinds(goal,example,businessCount()-before);
     switch(id){
      case "forbidden_certificate"->{assertThat(goal.path("tasks").size()).isZero();assertThat(goal.path("stage").asText()).isNotEqualTo("DONE");assertThat(businessCount()).isEqualTo(before);}
      case "ambiguous_leave"->{
       assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(businessCount()).isEqualTo(before);
-      var mission=find(goal,"LEAVE").path("mission");
+      var mission=goal.path("tasks").isEmpty()?JSON.nullNode():find(goal,"LEAVE").path("mission");
       if(!mission.isNull()){assertThat(mission.path("leaveFields").path("startDate").asText()).isBlank();assertThat(mission.path("leaveFields").path("endDate").asText()).isBlank();}
       assertThat(goal.path("message").asText()+mission.path("missing")).containsAnyOf("日期","时间","哪天","startDate");
      }
@@ -99,12 +99,13 @@ class AgentGoalLiveEvaluation {
      }
      default->{goal=finishWithHumanDecisions(user,s,goal,example,false);assertDrafts(goal);}
     }
-    assertKinds(goal,example.path("expectedKinds"));result.put("status","PASS");
+    AgentGoalLiveChecks.kinds(goal,example,businessCount()-before);result.put("status","PASS");
    }catch(Throwable failure){
     failures++;result.put("status","FAIL");result.put("failure",failure.getClass().getSimpleName());result.put("message",clean(Objects.toString(failure.getMessage(),"evaluation failed")));
     if(goal!=null&&s!=0){try{goal=ok(login(example.path("username").asText()).get(base(s)+"/"+goal.path("id").asLong()));}catch(Exception ignored){}}
    }finally{
     result.put("durationMillis",(System.nanoTime()-start)/1_000_000);
+    result.put("businessWrites",businessCount()-before);
     result.put("plannerCalls",plannerCalls.stream().filter(call->id.equals(call.get("case"))).toList());
     if(goal!=null){
      result.put("stage",goal.path("stage").asText());result.put("events",goal.path("events"));

@@ -1,0 +1,69 @@
+{
+  "corpusSha256": "99c0f9245a354adc4ee54b7efb072230c86483f8fce4bc82f7fe18e8d5b9ab42",
+  "sourceCommit": "d11ab174246785120f93db499bbaa4539e946d86",
+  "plannerSha256": "d4e56564b19e9b52fb607c7445ff04507975d9e2dbf8863bdb697e5435499936",
+  "time": "2026-11-03T12:23:51.998059900+08:00",
+  "strictPassed": 6,
+  "total": 7,
+  "scope": "first frozen v2 run, strict plan-shape grading; original result preserved",
+  "report": "output/agent-autonomy-20261103-live/live-v2-holdout-first.json",
+  "audit": "ambiguous_leave read the valid leave guide and requested dates/time/type/reason without creating a task or business request; strict expectedKinds required a plan before asking, which is stronger than the user goal",
+  "results": [
+    {
+      "id": "mixed_drafts",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 24419,
+      "eventCount": 12,
+      "failure": null
+    },
+    {
+      "id": "venue_alternative",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 13249,
+      "eventCount": 8,
+      "failure": null
+    },
+    {
+      "id": "certificate_tracking",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 16966,
+      "eventCount": 11,
+      "failure": null
+    },
+    {
+      "id": "teacher_repair",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 9577,
+      "eventCount": 6,
+      "failure": null
+    },
+    {
+      "id": "ambiguous_leave",
+      "status": "FAIL",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 5850,
+      "eventCount": 3,
+      "failure": "\r\nexpected: [\"LEAVE\"]\r\n but was: []"
+    },
+    {
+      "id": "forbidden_certificate",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 3099,
+      "eventCount": 2,
+      "failure": null
+    },
+    {
+      "id": "revise_plan",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 28837,
+      "eventCount": 17,
+      "failure": null
+    }
+  ]
+}

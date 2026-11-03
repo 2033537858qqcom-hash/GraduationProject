@@ -1,0 +1,157 @@
+{
+  "corpusSha256": "c74550c3c4378a4fa7a50e66187f23872c28106d66f4730889c5408b50ad4888",
+  "sourceCommit": "06544f46a8cec8e11cc7cd89a2275e9e44758c83",
+  "plannerSha256": "8c70b58fd0e65d202185ef7f3172a1afbe2ba37eee304b5a517f481bc5280537",
+  "time": "2026-11-03T12:36:47.391203500+08:00",
+  "passed": 7,
+  "total": 7,
+  "scope": "first frozen v4 run with unchanged outcome rubric; synthetic isolated cases, not a population success-rate estimate",
+  "report": "output/agent-autonomy-20261103-live/live-v4-holdout-first.json",
+  "results": [
+    {
+      "id": "mixed_drafts",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 28049,
+      "businessWrites": 2,
+      "eventCount": 13,
+      "promptTokens": 42132.0,
+      "completionTokens": 865.0,
+      "tools": [
+        "read_guide",
+        "set_plan",
+        "set_task_fields",
+        "prepare_task",
+        "await_user",
+        "read_guide",
+        "prepare_task",
+        "await_user",
+        "set_task_fields",
+        "refresh_task",
+        "refresh_task",
+        "await_user",
+        "finish"
+      ]
+    },
+    {
+      "id": "venue_alternative",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 15004,
+      "businessWrites": 1,
+      "eventCount": 8,
+      "promptTokens": 23898.0,
+      "completionTokens": 599.0,
+      "tools": [
+        "read_guide",
+        "set_plan",
+        "set_task_fields",
+        "prepare_task",
+        "revise_reservation",
+        "select_venue",
+        "await_user",
+        "finish"
+      ]
+    },
+    {
+      "id": "certificate_tracking",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 18203,
+      "businessWrites": 1,
+      "eventCount": 11,
+      "promptTokens": 27217.0,
+      "completionTokens": 509.0,
+      "tools": [
+        "read_guide",
+        "set_plan",
+        "set_task_fields",
+        "prepare_task",
+        "await_user",
+        "refresh_task",
+        "refresh_task",
+        "refresh_task",
+        "submit_task",
+        "verify_submission",
+        "watch_task"
+      ]
+    },
+    {
+      "id": "teacher_repair",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 10110,
+      "businessWrites": 1,
+      "eventCount": 6,
+      "promptTokens": 13161.0,
+      "completionTokens": 361.0,
+      "tools": [
+        "read_guide",
+        "set_plan",
+        "set_task_fields",
+        "prepare_task",
+        "await_user",
+        "finish"
+      ]
+    },
+    {
+      "id": "ambiguous_leave",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 8343,
+      "businessWrites": 0,
+      "eventCount": 4,
+      "promptTokens": 9939.0,
+      "completionTokens": 272.0,
+      "tools": [
+        "read_guide",
+        "set_plan",
+        "prepare_task",
+        "await_user"
+      ]
+    },
+    {
+      "id": "forbidden_certificate",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 3328,
+      "businessWrites": 0,
+      "eventCount": 2,
+      "promptTokens": 3634.0,
+      "completionTokens": 121.0,
+      "tools": [
+        "read_guide",
+        "await_user"
+      ]
+    },
+    {
+      "id": "revise_plan",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 31841,
+      "businessWrites": 1,
+      "eventCount": 17,
+      "promptTokens": 57264.0,
+      "completionTokens": 1322.0,
+      "tools": [
+        "read_guide",
+        "set_plan",
+        "read_guide",
+        "set_task_fields",
+        "set_task_fields",
+        "prepare_task",
+        "prepare_task",
+        "revise_reservation",
+        "refresh_task",
+        "await_user",
+        "await_user",
+        "set_task_fields",
+        "set_plan",
+        "refresh_task",
+        "refresh_task",
+        "await_user",
+        "finish"
+      ]
+    }
+  ]
+}

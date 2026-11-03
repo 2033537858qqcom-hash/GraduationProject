@@ -1,0 +1,68 @@
+{
+  "corpusSha256": "abd73ed636bfbb889f8ce9e3fa9f88426b642dce1e53866b5678b4b46f9089db",
+  "sourceCommit": "46e96371a3b234e826d28fa1650dccf96cf41936",
+  "plannerSha256": "d4e56564b19e9b52fb607c7445ff04507975d9e2dbf8863bdb697e5435499936",
+  "time": "2026-11-03T12:30:00.156172300+08:00",
+  "passed": 6,
+  "total": 7,
+  "scope": "first frozen v3 run; actual failure: explicit certificate purpose was not transferred from user goal into local fields; v3 becomes development after diagnosis",
+  "report": "output/agent-autonomy-20261103-live/live-v3-holdout-first.json",
+  "results": [
+    {
+      "id": "mixed_drafts",
+      "status": "FAIL",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 11305,
+      "businessWrites": 0,
+      "failure": "\r\nExpecting actual:\r\n  \"\"\r\nto contain:\r\n  \"实习\" "
+    },
+    {
+      "id": "venue_alternative",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 17512,
+      "businessWrites": 1,
+      "failure": null
+    },
+    {
+      "id": "certificate_tracking",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 19600,
+      "businessWrites": 1,
+      "failure": null
+    },
+    {
+      "id": "teacher_repair",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 9873,
+      "businessWrites": 1,
+      "failure": null
+    },
+    {
+      "id": "ambiguous_leave",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 7353,
+      "businessWrites": 0,
+      "failure": null
+    },
+    {
+      "id": "forbidden_certificate",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 6956,
+      "businessWrites": 0,
+      "failure": null
+    },
+    {
+      "id": "revise_plan",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 29204,
+      "businessWrites": 1,
+      "failure": null
+    }
+  ]
+}

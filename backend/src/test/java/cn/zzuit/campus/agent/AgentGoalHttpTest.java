@@ -129,6 +129,56 @@ class AgentGoalHttpTest {
   decisions.add(call("prepare_task",Map.of("taskKey","certificate")));goal=act(user,s,goal,action(goal,"CONTINUE"));
   assertThat(goal.path("tasks").get(0).path("mission").path("id").asLong()).isEqualTo(child);assertThat(jdbc.sql("SELECT COUNT(*) FROM agent_mission WHERE session_id=:s").param("s",s).query(Long.class).single()).isEqualTo(1);
  }
+ @Test void parallelToolProposalsExecuteOnlyOneThenReplanFromTheActualResult()throws Exception{
+  var calls=new java.util.concurrent.atomic.AtomicInteger();
+  doAnswer(invocation->{
+   if(calls.getAndIncrement()==0)return new Plan(List.of(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of())))),call("read_guide",Map.of("kind","CERTIFICATE"))),20,5);
+   JsonNode context=invocation.getArgument(2);assertThat(context.path("observations").toString()).contains("set_plan","deferredTools","read_guide");
+   return new Plan(List.of(call("await_user",Map.of("question","请补充实际用途。"))),20,5);
+  }).when(model).nextGoalStep(anyString(),anyList(),any());
+  var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));
+  assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(goal.path("tasks").size()).isEqualTo(1);
+  assertThat(goal.path("events").size()).isEqualTo(2);assertThat(goal.path("events").get(0).path("tool").asText()).isEqualTo("set_plan");
+ }
+ @Test void existingFieldsAreVisibleAsNamesWhilePrivateValuesRemainLocal()throws Exception{
+  var observed=new java.util.concurrent.atomic.AtomicReference<JsonNode>();certificatePlan();
+  decisions.add(call("set_task_fields",Map.of("taskKey","certificate","fields",Map.of("purpose","LOCAL_PURPOSE_PRESENCE_ONLY"))));
+  var original=strategy;strategy=context->{if(context.path("observations").toString().contains("set_task_fields"))observed.set(context);return original.apply(context);};
+  var user=login("20260001");ok(user.post(path(session(user)),input()));
+  assertThat(observed.get().path("tasks").get(0).path("providedFields").toString()).contains("purpose");
+  assertThat(observed.get().toString()).doesNotContain("LOCAL_PURPOSE_PRESENCE_ONLY");
+ }
+ @Test void readingAnUnchangedGuideRemovesItsDuplicateAffordanceUntilVersionChanges()throws Exception{
+  var choices=new ArrayList<String>();var calls=new java.util.concurrent.atomic.AtomicInteger();
+  doAnswer(invocation->{
+   if(calls.getAndIncrement()==0)return new Plan(List.of(call("read_guide",Map.of("kind","CERTIFICATE"))),20,5);
+   JsonNode schemas=JSON.valueToTree(invocation.getArgument(1));for(var schema:schemas)if(schema.path("function").path("name").asText().equals("read_guide"))for(var kind:schema.path("function").path("parameters").path("properties").path("kind").path("enum"))choices.add(kind.asText());
+   return new Plan(List.of(call("await_user",Map.of("question","请补充实际目标。"))),20,5);
+  }).when(model).nextGoalStep(anyString(),anyList(),any());
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));
+  assertThat(choices).doesNotContain("CERTIFICATE").contains("LEAVE");
+  choices.clear();jdbc.sql("UPDATE agent_guide SET version=version+1 WHERE slug='certificate'").update();
+  try{act(user,s,goal,action(goal,"CONTINUE"));assertThat(choices).contains("CERTIFICATE");}
+  finally{jdbc.sql("UPDATE agent_guide SET version=version-1 WHERE slug='certificate'").update();}
+ }
+ @Test void unchangedPlansDoNotCountAsProgressButCancelledHistoryCanBeOmitted()throws Exception{
+  certificatePlan();decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of())))));
+  var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));assertThat(goal.path("events").toString()).contains("GOAL_PLAN_UNCHANGED");
+ }
+ @Test void cancelledPlanItemsRemainHistoricalWhenThePlannerProvidesOnlyActiveTasks()throws Exception{
+  decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of()),task("leave","LEAVE",List.of())))));
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));
+  decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of())))));
+  var cancel=action(goal,"CANCEL_TASK");cancel.put("taskKey","leave");cancel.put("confirmed",true);goal=act(user,s,goal,cancel);
+  assertThat(goal.path("tasks").size()).isEqualTo(2);assertThat(goal.path("tasks").get(1).path("cancelled").asBoolean()).isTrue();
+  assertThat(goal.path("events").toString()).doesNotContain("GOAL_PLAN_INVALID");assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");
+ }
+ @Test void stepBudgetEndsInAnExplicitTerminalFailureRatherThanAnUnresumablePause()throws Exception{
+  prepareCertificate();var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));
+  strategy=context->call("refresh_task",Map.of("taskKey","certificate"));
+  for(int attempts=0;attempts<12&&goal.path("canContinue").asBoolean();attempts++)goal=act(user,s,goal,action(goal,"CONTINUE"));
+  assertThat(goal.path("stage").asText()).isEqualTo("FAILED");assertThat(goal.path("events").size()).isEqualTo(80);
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

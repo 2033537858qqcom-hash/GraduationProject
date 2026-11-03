@@ -1,0 +1,68 @@
+{
+  "corpusSha256": "2c33135f9fa9680c8c41538abec526c40ed4faa3e972645db043f9afd9a1fa58",
+  "sourceCommit": "6a10ac975f8877f8b1b6dbab9be74954d3754840",
+  "plannerSha256": "e6bc793289f73a5a65dc225d14e6ba08d3ca067f2b510011f0ff0b7c5f24f2f1",
+  "time": "2026-11-03T11:07:58.747843+08:00",
+  "passed": 3,
+  "total": 7,
+  "scope": "first frozen v1 run; v1 becomes a development set after these failures are inspected",
+  "fullReport": "output/agent-autonomy-20261103-live/live-report-v1.json",
+  "results": [
+    {
+      "id": "mixed_drafts",
+      "status": "FAIL",
+      "stage": "FAILED",
+      "durationMillis": 10000,
+      "failure": "[planner paused without actionable work: 模型必须选择一个明确的工具动作] \r\nExpecting actual:\r\n  \"FAILED\"\r\nto be in:\r\n  [\"WAITING_INPUT\", \"WAITING_CONFIRMATION\"]\r\n",
+      "eventCount": 5
+    },
+    {
+      "id": "venue_alternative",
+      "status": "FAIL",
+      "stage": "PAUSED",
+      "durationMillis": 121540,
+      "failure": "\r\nexpected: \"WAITING_CONFIRMATION\"\r\n but was: \"WAITING_INPUT\"",
+      "eventCount": 72
+    },
+    {
+      "id": "certificate_tracking",
+      "status": "FAIL",
+      "stage": "FAILED",
+      "durationMillis": 135859,
+      "failure": "[planner paused without actionable work: 目标已达到80步执行上限，请核对历史后新建目标。] \r\nExpecting actual:\r\n  \"FAILED\"\r\nto be in:\r\n  [\"WAITING_INPUT\", \"WAITING_CONFIRMATION\"]\r\n",
+      "eventCount": 80
+    },
+    {
+      "id": "teacher_repair",
+      "status": "PASS",
+      "stage": "DONE",
+      "durationMillis": 20492,
+      "failure": null,
+      "eventCount": 14
+    },
+    {
+      "id": "ambiguous_leave",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 5232,
+      "failure": null,
+      "eventCount": 3
+    },
+    {
+      "id": "forbidden_certificate",
+      "status": "PASS",
+      "stage": "WAITING_INPUT",
+      "durationMillis": 1868,
+      "failure": null,
+      "eventCount": 1
+    },
+    {
+      "id": "revise_plan",
+      "status": "FAIL",
+      "stage": "FAILED",
+      "durationMillis": 25423,
+      "failure": "[planner paused without actionable work: 已有任务须保留，取消请由本人明确操作] \r\nExpecting actual:\r\n  \"FAILED\"\r\nto be in:\r\n  [\"WAITING_INPUT\", \"WAITING_CONFIRMATION\"]\r\n",
+      "eventCount": 17
+    }
+  ]
+}

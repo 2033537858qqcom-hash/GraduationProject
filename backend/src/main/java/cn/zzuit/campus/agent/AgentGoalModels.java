@@ -27,12 +27,14 @@ public final class AgentGoalModels {
      public Integer submittedVersion;
      public LocalDateTime lastCheckedAt;
      public int fieldsInstructionCount=-1;
+     public String lastReadFingerprint;
+     public int unchangedReads;
  }
  public static class State {
      public List<Task> tasks=new ArrayList<>();
      public List<String> instructions=new ArrayList<>();
      public List<Map<String,Object>> observations=new ArrayList<>();
-     public String message="正在理解目标并选择工具。",focusTaskKey;
+     public String message="正在理解目标并选择工具。",focusTaskKey,currentUserDirective="";
      public int failures;
      public int planEpoch,lastPlanEpoch=-1;
      public Map<String,Guide> guidesRead=new LinkedHashMap<>();

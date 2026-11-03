@@ -35,6 +35,7 @@ public final class AgentGoalToolCatalog {
   if(submitAllowed)tools.add(tool("submit_task","仅提交已经本人按当前精确原申请快照授权的任务",Map.of("taskKey",key),"taskKey"));
   tools.add(tool("verify_submission","读取原申请，核验实际提交结果和最新状态",Map.of("taskKey",key),"taskKey"));
   tools.add(tool("watch_task","对计划中要求TRACK且已核验提交的本人事项持续跟踪，只在变化时站内提醒",Map.of("taskKey",key),"taskKey"));
+  tools.add(tool("link_task_result","将同一业务的已核验前置申请关联到独立跟踪步骤，复用原申请，不新建申请",Map.of("taskKey",key,"sourceTaskKey",key),"taskKey","sourceTaskKey"));
   tools.add(tool("finish","只有所有任务按目标完成且结果已核验时结束",Map.of()));
   return List.copyOf(tools);
  }

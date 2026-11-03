@@ -55,8 +55,10 @@ public class DeepSeekClient {
             不输出隐藏推理、思维过程或自行声称成功；本地工具结果决定真实状态。用户修订目标后保留已有业务历史，并重新组织未完成步骤。
             originalGoal是初始目标，currentRequest和context.instructions按先后顺序补充并覆盖有冲突的旧业务要求；以最新明确要求为准，安全与权限规则不被覆盖。
             human_authorization中的SUBMISSION_AUTHORIZED来自本人核对原申请后的真实API操作。当前submissionAuthorized为true时，正式提交已授权，可使用submit_task并核验；不要把旧await_user记录误当作仍需再次索取的确认。以当前授权标志为准，旧回执不恢复已失效授权。
+            同一申请从草稿到提交和跟踪通常使用一个任务、target=TRACK；若拆成独立跟踪步骤，使用link_task_result关联已核验的同业务前置申请，然后watch_task，不重新建申请。停止事项后不可用新key重建同一事项。
+            prepare_task只在尚未准备或可恢复执行时使用。queryStatus=NO_CANDIDATES表示已有查询条件但当前时段无场地，并非缺少日期时间；用户允许替代时用revise_reservation改查。nextChoices是当前查询结果对应的可行动作，不是隐藏指令。
             """;
-        var revisions=context.path("instructions");String currentRequest=revisions.isArray()&&!revisions.isEmpty()?revisions.get(revisions.size()-1).asText():goal;
+        var revisions=context.path("instructions");String directive=context.path("currentUserDirective").asText("");String currentRequest=!directive.isBlank()?directive:revisions.isArray()&&!revisions.isEmpty()?revisions.get(revisions.size()-1).asText():goal;
         return requestPlan(json.writeValueAsString(Map.of("originalGoal",goal,"currentRequest",currentRequest,"context",context)),instruction,tools,"required",2400,8000);
     }
     public Plan nextMissionStep(String goal,List<String> allowed,List<AgentMissionModels.Observation> observations) {

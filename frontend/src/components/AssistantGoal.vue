@@ -22,6 +22,7 @@ const activeTask = computed(() => current.value?.tasks.find(task => task.key ===
  ?? current.value?.tasks.find(task => task.key === current.value?.focusTaskKey)
  ?? current.value?.tasks.find(task => !task.cancelled && task.mission?.stage !== 'DONE') ?? current.value?.tasks[0])
 const submission = computed(() => activeTask.value?.submissionPreview)
+const submissionAuthorized = computed(() => !terminal.value && !!submission.value && activeTask.value?.submissionHash === submission.value.proposalHash)
 let generation = 0, timer: ReturnType<typeof setTimeout> | null = null, controller: AbortController | null = null
 watch(working, value => emit('working', value))
 function base(session = props.sessionId) { return `/assistant/sessions/${session}/goals` }
@@ -79,7 +80,7 @@ async function revise() {
  await mutate(`${base()}/${current.value.id}/actions`, { requestKey: crypto.randomUUID(), version: current.value.version, action: 'REVISE', message: revision.value.trim(), externalConsent: true })
 }
 async function authorizeSubmission() {
- if (!current.value || !activeTask.value || !submission.value?.canSubmit || !submitConfirmed.value || working.value || running.value || pending.value) return
+ if (!current.value || terminal.value || !activeTask.value || activeTask.value.cancelled || submissionAuthorized.value || !submission.value?.canSubmit || !submitConfirmed.value || working.value || running.value || pending.value) return
  await mutate(`${base()}/${current.value.id}/actions`, { requestKey: crypto.randomUUID(), version: current.value.version, action: 'AUTHORIZE_SUBMIT', taskKey: activeTask.value.key, confirmed: true, proposalHash: submission.value.proposalHash })
 }
 async function cancelTask(key: string) {
@@ -124,7 +125,7 @@ defineExpose({ allowLeave })
   <p v-if="loading" role="status">正在恢复目标和原申请结果…</p>
   <template v-if="!current">
    <label class="goal-field">要完成的目标<textarea v-model="goalText" rows="4" maxlength="1000" :disabled="working || !!pending" placeholder="例如：先准备实习单位核验身份用的在校证明，再帮我准备请假申请。" /></label>
-   <label class="goal-check"><input v-model="consent" type="checkbox" :disabled="working || !!pending" />同意将本次目标、有效办理指南、公开场地候选和脱敏执行结果发送至 DeepSeek。身份、联系方式及本地表单正文不会自动发送。</label>
+   <label class="goal-check"><input v-model="consent" type="checkbox" :disabled="working || !!pending" />同意将本次目标、场地查询条件、有效办理指南、公开场地候选和脱敏执行结果发送至 DeepSeek。身份、联系方式及本地表单正文不会自动发送。</label>
    <p v-if="!modelReady" class="goal-note">自主规划需要连接 DeepSeek。当前可在“Agent任务”使用本地单项草稿流程。</p>
    <button class="goal-primary" type="button" :disabled="working || !!pending || !modelReady || !consent || !goalText.trim()" @click="create">开始自主办理</button>
   </template>
@@ -139,11 +140,14 @@ defineExpose({ allowLeave })
     <h3>{{ ['DRAFT', 'RETURNED'].includes(submission.status) ? '正式提交前核对' : '原申请与提交结果' }}</h3>
     <p>申请 #{{ submission.businessId }} · {{ missionBusinessStatusLabel(submission.status) }} · V{{ submission.version }}</p>
     <dl><template v-for="field in submission.fields" :key="field.label"><dt>{{ field.label }}</dt><dd>{{ field.value || '未填写' }}</dd></template></dl>
-    <template v-if="['DRAFT', 'RETURNED'].includes(submission.status)">
+    <template v-if="!terminal && ['DRAFT', 'RETURNED'].includes(submission.status)">
      <p v-for="issue in submission.issues" :key="issue" class="goal-error">{{ issue }}</p>
      <p v-if="activeTask?.target === 'TRACK'" class="goal-note">提交后持续读取原申请，只在状态变化或需要本人操作时发送站内提醒。</p>
-     <label class="goal-check"><input v-model="submitConfirmed" type="checkbox" :disabled="working || running || !!pending || !submission.canSubmit" />我已核对以上原申请内容，确认提交审核。</label>
-     <button type="button" class="goal-primary" :disabled="working || running || !!pending || !submission.canSubmit || !submitConfirmed" @click="authorizeSubmission">确认提交并核验</button>
+     <p v-if="submissionAuthorized" class="goal-note" role="status">已收到你对本次申请内容的提交确认，实际提交结果仍以原申请为准。</p>
+     <template v-else>
+      <label class="goal-check"><input v-model="submitConfirmed" type="checkbox" :disabled="working || running || !!pending || !submission.canSubmit" />我已核对以上原申请内容，确认提交审核。</label>
+      <button type="button" class="goal-primary" :disabled="working || running || !!pending || !submission.canSubmit || !submitConfirmed" @click="authorizeSubmission">确认提交并核验</button>
+     </template>
     </template>
     <RouterLink v-if="safeAssistantDestination(submission.targetPath)" :to="submission.targetPath">打开原申请核对</RouterLink>
    </section>

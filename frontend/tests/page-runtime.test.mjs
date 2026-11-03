@@ -148,6 +148,30 @@ test('goal submission requires checking the exact current business snapshot',asy
  }finally{globalThis.fetch=oldFetch}
 })
 
+test('a cancelled goal cannot expose or invoke an apparently valid stale submission',async()=>{
+ const oldFetch=globalThis.fetch,commands=[]
+ globalThis.fetch=async(path,options={})=>{if(options.method==='POST')commands.push(options.body);return Response.json([])}
+ try{
+  const errors=await checkPageSetup('/assistant-goal-test',undefined,async state=>{
+   state.current.value={id:8,sessionId:1,goal:'提交证明',stage:'CANCELLED',version:5,instructions:[],tasks:[{key:'proof',kind:'CERTIFICATE',label:'证明',target:'SUBMIT',dependsOn:[],cancelled:false,mission:null,submissionPreview:{proposalHash:'b'.repeat(64),canSubmit:true,fields:[],issues:[],status:'DRAFT',version:0}}],focusTaskKey:'proof',events:[],canContinue:false}
+   state.submitConfirmed.value=true;await state.authorizeSubmission();assert.equal(commands.length,0)
+  },{sessionId:1,active:false,modelReady:true})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
+test('an already acknowledged submission does not ask the user to authorize the same snapshot again',async()=>{
+ const oldFetch=globalThis.fetch,commands=[]
+ globalThis.fetch=async(path,options={})=>{if(options.method==='POST')commands.push(options.body);return Response.json([])}
+ try{
+  const errors=await checkPageSetup('/assistant-goal-test',undefined,async state=>{
+   state.current.value={id:8,sessionId:1,goal:'提交证明',stage:'WAITING_CONFIRMATION',version:5,instructions:[],tasks:[{key:'proof',kind:'CERTIFICATE',label:'证明',target:'SUBMIT',dependsOn:[],cancelled:false,mission:null,submissionHash:'b'.repeat(64),submissionPreview:{proposalHash:'b'.repeat(64),canSubmit:true,fields:[],issues:[],status:'DRAFT',version:0}}],focusTaskKey:'proof',events:[],canContinue:true}
+   state.submitConfirmed.value=true;await state.authorizeSubmission();assert.equal(commands.length,0)
+  },{sessionId:1,active:false,modelReady:true})
+  assert.ifError(errors[0])
+ }finally{globalThis.fetch=oldFetch}
+})
+
 test('stopping one goal task requires a local decision and preserves the other planned task',async()=>{
  const oldFetch=globalThis.fetch,oldConfirm=globalThis.window.confirm,commands=[]
  const view={id:8,sessionId:1,goal:'准备证明和请假',stage:'WAITING_INPUT',version:5,instructions:[],tasks:[{key:'proof',kind:'CERTIFICATE',label:'准备证明',target:'DRAFT',dependsOn:[],cancelled:false,mission:null},{key:'leave',kind:'LEAVE',label:'准备请假',target:'DRAFT',dependsOn:[],cancelled:false,mission:null}],message:'请补充',focusTaskKey:'proof',events:[],canContinue:true}

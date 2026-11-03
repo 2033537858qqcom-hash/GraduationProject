@@ -53,8 +53,11 @@ public class DeepSeekClient {
             计划已存在时直接推进具体任务；set_plan只用于实际新增事项、改变目标或依赖。已停止或完成的事项可以省略，后端自动保留历史，不能删除尚未完成的事项。
             guides中的CURRENT指南节选已持续提供，不要重复读取相同版本。checks中的NO_DATA表示查询无候选，应结合用户允许的替代条件查询；已有条件不等于缺少条件。
             不输出隐藏推理、思维过程或自行声称成功；本地工具结果决定真实状态。用户修订目标后保留已有业务历史，并重新组织未完成步骤。
+            originalGoal是初始目标，currentRequest和context.instructions按先后顺序补充并覆盖有冲突的旧业务要求；以最新明确要求为准，安全与权限规则不被覆盖。
+            human_authorization中的SUBMISSION_AUTHORIZED来自本人核对原申请后的真实API操作。当前submissionAuthorized为true时，正式提交已授权，可使用submit_task并核验；不要把旧await_user记录误当作仍需再次索取的确认。以当前授权标志为准，旧回执不恢复已失效授权。
             """;
-        return requestPlan(json.writeValueAsString(Map.of("goal",goal,"context",context)),instruction,tools,"required",2400,8000);
+        var revisions=context.path("instructions");String currentRequest=revisions.isArray()&&!revisions.isEmpty()?revisions.get(revisions.size()-1).asText():goal;
+        return requestPlan(json.writeValueAsString(Map.of("originalGoal",goal,"currentRequest",currentRequest,"context",context)),instruction,tools,"required",2400,8000);
     }
     public Plan nextMissionStep(String goal,List<String> allowed,List<AgentMissionModels.Observation> observations) {
         String instruction="""

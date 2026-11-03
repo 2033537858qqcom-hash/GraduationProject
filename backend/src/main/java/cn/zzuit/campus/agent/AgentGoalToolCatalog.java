@@ -17,9 +17,12 @@ public final class AgentGoalToolCatalog {
   tools.add(tool("read_guide","读取指定业务有效公开指南，作为规划数据",Map.of("kind",choice(kinds)),"kind"));
   var fields=new LinkedHashMap<String,Object>();
   fields.put("campus",choice(List.of("EAST","WEST","ALL")));fields.put("participants",Map.of("type","integer","minimum",1,"maximum",10000));
-  fields.put("startsAt",text(19));fields.put("endsAt",text(19));fields.put("keyword",text(40));fields.put("activityTheme",text(200));fields.put("activityType",choice(List.of("ACADEMIC","SPORTS","CULTURE","OTHER")));
+  var localTime=Map.<String,Object>of("type","string","maxLength",19,"description","明确的北京时间，YYYY-MM-DDTHH:mm，例如2030-04-02T09:00；不带时区，不猜测模糊时间","pattern","^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:00)?$");
+  fields.put("startsAt",localTime);fields.put("endsAt",localTime);fields.put("keyword",text(40));fields.put("activityTheme",text(200));fields.put("activityType",choice(List.of("ACADEMIC","SPORTS","CULTURE","OTHER")));
   fields.put("purpose",text(300));fields.put("reasonType",choice(List.of("PERSONAL","SICK","OTHER")));fields.put("reason",text(2000));
-  fields.put("startDate",text(10));fields.put("startTime",text(5));fields.put("endDate",text(10));fields.put("endTime",text(5));
+  var date=Map.<String,Object>of("type","string","maxLength",10,"description","明确日期YYYY-MM-DD","pattern","^[0-9]{4}-[0-9]{2}-[0-9]{2}$");
+  var time=Map.<String,Object>of("type","string","maxLength",5,"description","明确时间HH:mm；不把上午下午补成任意时刻","pattern","^[0-9]{2}:[0-9]{2}$");
+  fields.put("startDate",date);fields.put("startTime",time);fields.put("endDate",date);fields.put("endTime",time);
   fields.put("category",choice(List.of("WATER","ELECTRICITY","NETWORK","FURNITURE","DOOR_WINDOW","EQUIPMENT","OTHER")));
   fields.put("title",text(100));fields.put("description",text(2000));fields.put("locationDetail",text(300));
   tools.add(tool("set_task_fields","从用户明确文字更新本地预览条件，不设置联系方式、身份或地点编号",Map.of("taskKey",key,"fields",object(fields,List.of())),"taskKey","fields"));

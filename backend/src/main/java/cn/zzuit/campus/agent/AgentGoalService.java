@@ -72,16 +72,17 @@ public class AgentGoalService {
    var row=load(user,session,id);String hash=hashes.hash(input);
    if(input.requestKey().equals(row.lastKey)){if(!hash.equals(row.lastHash))throw changed("重复操作请求与原内容不同");return new Claim(row,false);}
    if(input.action().equals("CANCEL")){
-    if(Set.of("DONE","CANCELLED").contains(row.stage))return new Claim(row,false);row.state.message="已取消目标后续执行；已保存的原业务申请保留。";for(var task:row.state.tasks)task.watching=false;
+    if(Set.of("DONE","CANCELLED").contains(row.stage))return new Claim(row,false);row.state.message="已取消目标后续执行；已保存的原业务申请保留。";for(var task:row.state.tasks){task.watching=false;task.submissionHash=null;}
+    jdbc.sql("UPDATE agent_goal_event SET status='CANCELLED',message='本人已取消后续执行；本步返回的模型建议不会继续执行' WHERE goal_id=:id AND status='RUNNING'").param("id",id).update();
     remember(row,input,hash);return new Claim(persist(row,row.state,"CANCELLED",null),false);
    }
    if(input.version()!=row.version)throw changed("目标版本已变化，请刷新后核对");if(running(row))throw changed("目标正在执行，请等待或取消");
    if(row.stage.equals("CANCELLED")||row.stage.equals("DONE")&&!input.action().equals("REVISE"))throw changed("目标已结束，请查看原记录或新建目标");
    switch(input.action()){
     case "CONTINUE"->{}
-    case "REVISE"->{consent(Boolean.TRUE.equals(input.externalConsent()));if(input.message()==null||input.message().isBlank())throw error(HttpStatus.BAD_REQUEST,"GOAL_MESSAGE_REQUIRED","请明确说明目标如何调整");if(row.state.instructions.size()>=8)throw changed("本目标已有8次补充，请新建目标以保持要求清晰");row.state.instructions.add(input.message().trim());row.state.planEpoch++;for(var task:row.state.tasks)task.submissionHash=null;row.state.failures=0;}
-    case "AUTHORIZE_SUBMIT"->{tools.authorize(user,session,row.state,input.taskKey(),input.proposalHash(),input.confirmed());}
-    case "CANCEL_TASK"->{if(!Boolean.TRUE.equals(input.confirmed()))throw error(HttpStatus.BAD_REQUEST,"GOAL_CANCEL_CONFIRM_REQUIRED","请明确确认停止这个事项的后续执行，原申请仍保留");var task=tools.task(row.state,input.taskKey());task.cancelled=true;task.watching=false;task.submissionHash=null;row.state.planEpoch++;row.state.focusTaskKey=row.state.tasks.stream().filter(item->!item.cancelled).map(item->item.key).findFirst().orElse(null);}
+    case "REVISE"->{consent(Boolean.TRUE.equals(input.externalConsent()));if(input.message()==null||input.message().isBlank())throw error(HttpStatus.BAD_REQUEST,"GOAL_MESSAGE_REQUIRED","请明确说明目标如何调整");if(row.state.instructions.size()>=8)throw changed("本目标已有8次补充，请新建目标以保持要求清晰");row.state.instructions.add(input.message().trim());row.state.planEpoch++;for(var task:row.state.tasks)task.submissionHash=null;row.state.failures=0;observe(row.state,Map.of("tool","user_revision","status","USER_REQUIREMENTS_UPDATED","instructionIndex",row.state.instructions.size()));}
+    case "AUTHORIZE_SUBMIT"->{tools.authorize(user,session,row.state,input.taskKey(),input.proposalHash(),input.confirmed());observe(row.state,Map.of("tool","human_authorization","status","SUBMISSION_AUTHORIZED","taskKey",input.taskKey(),"target",tools.task(row.state,input.taskKey()).target));}
+    case "CANCEL_TASK"->{if(!Boolean.TRUE.equals(input.confirmed()))throw error(HttpStatus.BAD_REQUEST,"GOAL_CANCEL_CONFIRM_REQUIRED","请明确确认停止这个事项的后续执行，原申请仍保留");var task=tools.task(row.state,input.taskKey());task.cancelled=true;task.watching=false;task.submissionHash=null;row.state.planEpoch++;row.state.focusTaskKey=row.state.tasks.stream().filter(item->!item.cancelled).map(item->item.key).findFirst().orElse(null);observe(row.state,Map.of("tool","human_cancellation","taskKey",task.key,"status","TASK_CANCELLED"));}
     default->throw error(HttpStatus.BAD_REQUEST,"GOAL_ACTION_INVALID","当前目标不支持该操作");
    }
    if(input.action().equals("CANCEL_TASK")&&(row.state.tasks.stream().allMatch(task->task.cancelled)||!model.ready())){remember(row,input,hash);boolean all=row.state.tasks.stream().allMatch(task->task.cancelled);row.state.message=all?"所有计划事项已停止后续执行，原业务记录保留。":"这个事项已停止后续执行，其他计划保留；模型连接后可继续。";return new Claim(persist(row,row.state,all?"CANCELLED":"PAUSED",null),false);}

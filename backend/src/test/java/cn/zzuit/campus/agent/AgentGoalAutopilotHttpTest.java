@@ -37,6 +37,9 @@ class AgentGoalAutopilotHttpTest {
   decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE","TRACK")))));
   decisions.add(call("set_task_fields",Map.of("taskKey","certificate","fields",Map.of("purpose","实习单位核验在校身份"))));
   decisions.add(call("prepare_task",Map.of("taskKey","certificate")));
+  decisions.add(call("submit_task",Map.of("taskKey","certificate")));
+  decisions.add(call("verify_submission",Map.of("taskKey","certificate")));
+  decisions.add(call("watch_task",Map.of("taskKey","certificate")));
   var user=login("20260001");long before=count();var goal=ok(user.post(path(session(user)),Map.of("requestKey",UUID.randomUUID().toString(),"goal","帮我办在校证明，用途是实习单位核验在校身份，直接提交并跟踪。","externalConsent",true)));
   assertThat(count()).isEqualTo(before+1);
   assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("SUBMITTED");

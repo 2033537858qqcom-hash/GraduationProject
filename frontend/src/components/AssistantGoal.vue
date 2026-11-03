@@ -120,7 +120,7 @@ defineExpose({ allowLeave })
 
 <template>
  <section class="goal" aria-label="自主目标Agent">
-  <div class="goal-heading"><div><h2>自主目标 Agent</h2><p>说明要办成什么，Agent 会组织任务、选择工具，并根据结果调整方案。</p></div><button type="button" :disabled="working || running || !!pending" @click="newGoal">新目标</button></div>
+  <div class="goal-heading"><div><h2>自主目标 Agent</h2><p>说明要办成什么。资料齐全时按你的办理授权自动保存或提交，缺关键条件才会追问。</p></div><button type="button" :disabled="working || running || !!pending" @click="newGoal">新目标</button></div>
   <label v-if="summaries.length" class="goal-field">恢复本次对话的目标<select :value="current?.id ?? ''" :disabled="working" @change="selectGoal(Number(($event.target as HTMLSelectElement).value))"><option value="" disabled>选择目标</option><option v-for="item in summaries" :key="item.id" :value="item.id">#{{ item.id }} · {{ goalStageLabels[item.stage] ?? item.stage }} · {{ item.goal.slice(0, 22) }}</option></select></label>
   <p v-if="loading" role="status">正在恢复目标和原申请结果…</p>
   <template v-if="!current">

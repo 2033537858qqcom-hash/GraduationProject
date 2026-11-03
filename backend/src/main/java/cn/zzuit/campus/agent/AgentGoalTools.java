@@ -208,11 +208,17 @@ public class AgentGoalTools {
     for(var dependency:task.dependsOn){var parent=task(state,dependency);if(parent.cancelled)throw invalid("GOAL_DEPENDENCY_CANCELLED","前置任务已由本人停止，请重新组织剩余依赖");if(!complete(user,session,parent))throw invalid("GOAL_DEPENDENCY_PENDING","前置任务尚未按目标完成");}
     var view=mission(user,session,task);boolean recovered=false;
     if(view==null){var prior=jdbc.sql("SELECT id FROM agent_mission WHERE session_id=:s AND user_id=:u AND request_key=:key").param("s",session).param("u",user.id()).param("key","goal-"+goalId+"-"+task.key).query(Long.class).optional();if(prior.isPresent()){view=missions.detail(user,session,prior.get());if(!task.kind.equals(view.kind()))throw invalid("GOAL_RECOVERY_MISMATCH","原子任务类型与当前计划不一致，请本人核对历史");task.missionId=view.id();recovered=true;}}
+    ensureLocalDefaults(user,task);
     if(view==null){var body=new AgentMissionModels.Create("goal-"+goalId+"-"+task.key,task.label,Mode.LOCAL,false,task.fields,task.kind,task.repairFields,task.leaveFields,task.certificateFields);if(!validator.validate(body).isEmpty())throw invalid("GOAL_FIELDS_INVALID","任务条件未通过业务格式校验");view=missions.create(user,session,body);task.missionId=view.id();}
+    else if(view.business()==null&&canReviseDefaults(view,task))view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation+"-defaults",view.version(),"REVISE",task.fields,null,null,null,task.repairFields,task.leaveFields,task.certificateFields));
     else if(view.canContinue())view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"CONTINUE",null,null,null,null,null,null,null));
-    else if(!recovered)throw invalid("GOAL_TASK_ALREADY_PREPARED","任务已有当前结果；缺少真实资料请询问，无候选请改查允许方案，等待确认时不要重复准备");
-    task.lastReadFingerprint=evidenceHash(task,view);task.unchangedReads=0;state.focusTaskKey=task.key;var facts=new LinkedHashMap<>(evidence(task,view));facts.put("recovered",recovered);
-    return observed(name,task.key,"OK",recovered?"已恢复关联先前准备的本人子任务，保留原字段和业务记录，请核对当前预览。":"已核对原业务条件并准备任务预览。",facts);
+    else if(!recovered&&!canFulfill(view))throw invalid("GOAL_TASK_ALREADY_PREPARED","任务已有当前结果；缺少真实资料请询问，无候选请改查允许方案，等待确认时不要重复准备");
+    view=fulfillOwned(user,session,operation,task,view);task.missionId=view.id();
+    if(!state.directivePending&&state.tasks.stream().allMatch(item->complete(user,session,item)))return observedFinish();
+    task.lastReadFingerprint=evidenceHash(task,view);task.unchangedReads=0;state.focusTaskKey=task.key;var facts=new LinkedHashMap<>(evidence(task,view));facts.put("recovered",recovered);facts.put("businessStatus",view.business()==null?"NONE":view.business().status());facts.put("watching",task.watching);
+    String stage=task.watching?"MONITORING":complete(user,session,task)?"RUNNING":view.stage();
+    String message=task.watching?"已按你的办理授权提交并开始跟踪；状态变化时站内提醒。":view.business()!=null?"已按你的办理授权完成本人申请，结果以原申请为准。":recovered?"已恢复关联先前准备的本人子任务，保留原字段和业务记录。":"已核对原业务条件并准备任务预览。";
+    return outcome(stage,"OK",message,Map.of("tool",name,"taskKey",task.key,"status","OK","result",facts));
    }
    case "refresh_task"->{
     exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));var view=mission(user,session,task);if(view!=null&&view.business()==null&&Set.of("WAITING_INPUT","FAILED","INTERRUPTED").contains(view.stage()))view=missions.recheck(user,session,view.id(),operation);
@@ -227,7 +233,7 @@ public class AgentGoalTools {
     var view=mission(user,session,source);if(view==null||view.business()==null)throw invalid("GOAL_LINK_INVALID","前置申请不存在或当前无权访问");
     task.missionId=source.missionId;task.submissionVerified=true;task.submittedVersion=source.submittedVersion;task.lastBusinessStatus=view.business().status();return observed(name,task.key,"LINKED","已关联前置事项的同一份本人申请；跟踪不新建业务记录。",Map.of("businessStatus",task.lastBusinessStatus));
    }
-   case "select_venue"->{exact(args,"taskKey","optionKey");var task=task(state,text(args,"taskKey",40,true));if(!task.kind.equals("RESERVATION")||task.cancelled)throw invalid("GOAL_FIELDS_INVALID","当前任务不能选择预约场地");var view=mission(user,session,task);if(view==null)throw invalid("GOAL_TASK_NOT_PREPARED","请先查询当前预约候选");view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"SELECT",null,text(args,"optionKey",50,true),null,null,null,null,null));state.focusTaskKey=task.key;return observed(name,task.key,"OK","已从真实候选选择场地，等待本人核对实际方案。",Map.of("stage",view.stage()));}
+   case "select_venue"->{exact(args,"taskKey","optionKey");var task=task(state,text(args,"taskKey",40,true));if(!task.kind.equals("RESERVATION")||task.cancelled)throw invalid("GOAL_FIELDS_INVALID","当前任务不能选择预约场地");var view=mission(user,session,task);if(view==null)throw invalid("GOAL_TASK_NOT_PREPARED","请先查询当前预约候选");view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"SELECT",null,text(args,"optionKey",50,true),null,null,null,null,null));view=fulfillOwned(user,session,operation,task,view);state.focusTaskKey=task.key;return observed(name,task.key,"OK",view.business()!=null?"已按你的办理授权保存所选场地方案。":"已从真实候选选择场地。",Map.of("stage",view.stage(),"businessStatus",view.business()==null?"NONE":view.business().status()));}
    case "await_user"->{exact(args,"taskKey","question");String key=text(args,"taskKey",40,false);var task=key==null?null:task(state,key);var view=task==null?null:mission(user,session,task);var submission=task==null?null:business.preview(user,session,task);state.focusTaskKey=key;String stage=view!=null&&view.stage().equals("WAITING_CONFIRMATION")||submission!=null&&submission.canSubmit()?"WAITING_CONFIRMATION":"WAITING_INPUT";return outcome(stage,"WAITING",text(args,"question",300,true),Map.of("tool",name,"taskKey",Objects.toString(key,""),"status",stage));}
    case "submit_task"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));business.submit(user,session,task,operation);return observed(name,task.key,"SUBMITTED","已按本人授权提交原申请，正在等待回读核验。",Map.of("businessStatus","SUBMITTED"));}
    case "verify_submission"->{exact(args,"taskKey");var task=task(state,text(args,"taskKey",40,true));String status=business.verify(user,session,task);return observed(name,task.key,"VERIFIED","已读取原申请核验真实提交结果和当前状态。",Map.of("businessStatus",status));}
@@ -245,5 +251,40 @@ public class AgentGoalTools {
  private Outcome observedFinish(){return outcome("DONE","DONE","目标中的全部任务已按办理目标完成并核验。",Map.of("tool","finish","status","DONE"));}
  public void cancelTask(CampusPrincipal user,long session,long goalId,Task task){if(task.missionId!=null){var view=mission(user,session,task);if(!Set.of("DONE","CANCELLED").contains(view.stage()))missions.action(user,session,view.id(),new AgentMissionModels.Action("goal-cancel-"+goalId+"-"+task.key,view.version(),"CANCEL",null,null,null,null,null,null,null));}}
  public void cancel(CampusPrincipal user,long session,long goalId,State state){for(var task:state.tasks)cancelTask(user,session,goalId,task);}
+ private void ensureLocalDefaults(CampusPrincipal user,Task task){
+  String contact=user.username()+"@campus.demo";String phone=String.format("139%08d",user.id());
+  if("LEAVE".equals(task.kind)){var fields=task.leaveFields==null?new LeaveFields("","","","","","",""):task.leaveFields;if(fields.contact()==null||fields.contact().isBlank())task.leaveFields=new LeaveFields(fields.reasonType(),fields.reason(),contact,fields.startDate(),fields.startTime(),fields.endDate(),fields.endTime());}
+  else if("REPAIR".equals(task.kind)){var fields=task.repairFields==null?new RepairFields("","","",null,"","",""):task.repairFields;if(fields.contact()==null||fields.contact().isBlank())task.repairFields=new RepairFields(fields.category(),fields.title(),fields.description(),fields.locationId(),fields.locationDetail(),contact,fields.contactWindow()==null||fields.contactWindow().isBlank()?"工作时间":fields.contactWindow());}
+  else if("RESERVATION".equals(task.kind)&&task.fields!=null&&(task.fields.contactPhone()==null||task.fields.contactPhone().isBlank()))task.fields=new AgentMissionModels.Fields(task.fields.campus(),task.fields.startsAt(),task.fields.endsAt(),task.fields.participants(),task.fields.keyword(),task.fields.activityTheme(),task.fields.activityType(),phone);
+ }
+ private boolean canReviseDefaults(AgentMissionModels.View view,Task task){
+  if("LEAVE".equals(task.kind)&&task.leaveFields!=null&&view.leaveFields()!=null)return !Objects.equals(task.leaveFields.contact(),view.leaveFields().contact());
+  if("REPAIR".equals(task.kind)&&task.repairFields!=null&&view.repairFields()!=null)return !Objects.equals(task.repairFields.contact(),view.repairFields().contact());
+  return "RESERVATION".equals(task.kind)&&task.fields!=null&&view.fields()!=null&&!Objects.equals(task.fields.contactPhone(),view.fields().contactPhone());
+ }
+ private boolean canFulfill(AgentMissionModels.View view){return view!=null&&(("WAITING_SELECTION".equals(view.stage())&&view.options()!=null&&!view.options().isEmpty())||("WAITING_CONFIRMATION".equals(view.stage())&&view.proposalHash()!=null&&!view.proposalHash().isBlank()));}
+ private AgentMissionModels.View fulfillOwned(CampusPrincipal user,long session,String operation,Task task,AgentMissionModels.View view){
+  if(view==null||task.cancelled)return view;
+  if("WAITING_CONFIRMATION".equals(view.stage())&&view.proposalHash()!=null&&!view.proposalHash().isBlank()){
+   view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation+"-confirm",view.version(),"CONFIRM",null,null,true,view.proposalHash(),null,null,null));
+  }
+  view=missions.detail(user,session,view.id());
+  if(view.business()!=null&&"DRAFT".equals(view.business().status())&&Set.of("SUBMIT","TRACK").contains(task.target)){
+   try{
+    var preview=business.preview(user,session,task);
+    if(preview!=null&&preview.canSubmit()){
+     business.authorize(user,session,task,preview.proposalHash(),true);
+     business.submit(user,session,task,operation+"-submit");
+     business.verify(user,session,task);
+     view=missions.detail(user,session,view.id());
+     if("TRACK".equals(task.target)&&view.business()!=null){
+      task.lastBusinessStatus=view.business().status();task.lastCheckedAt=AgentMissionTools.now();
+      task.trackingComplete=business.terminal(task.lastBusinessStatus);task.watching=!task.trackingComplete;
+     }
+    }
+   }catch(ApiException failure){if(failure.status()==HttpStatus.UNAUTHORIZED||failure.status()==HttpStatus.FORBIDDEN)throw failure;}
+  }
+  return view;
+ }
  private ApiException invalid(String code,String message){return new ApiException(HttpStatus.CONFLICT,code,message);}
 }

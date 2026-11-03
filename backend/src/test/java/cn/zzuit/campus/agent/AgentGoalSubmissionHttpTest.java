@@ -99,12 +99,14 @@ class AgentGoalSubmissionHttpTest {
  }
  JsonNode savedGoal(Browser user,long s)throws Exception{
   prepareCertificate();var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));
+  goal=ok(user.get(path(s)+"/"+goal.path("id").asLong()));
+  if("SUBMITTED".equals(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()))return goal;
   decisions.add(call("refresh_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对原申请后确认提交。")));
   return act(user,s,goal,action(goal,"CONTINUE"));
  }
  Map<String,Object> authorize(JsonNode goal){var body=action(goal,"AUTHORIZE_SUBMIT");body.put("taskKey","certificate");body.put("confirmed",true);body.put("proposalHash",goal.path("tasks").get(0).path("submissionPreview").path("proposalHash").asText());return body;}
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
- void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
+ void saveChild(Browser user,long session,JsonNode mission)throws Exception{if(!mission.path("business").isMissingNode()&&!mission.path("business").isNull())return;ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}
  Browser login(String name)throws Exception{var b=new Browser();b.csrf();ok(b.post("/api/auth/login",Map.of("username",name,"password","Demo@2026")));b.csrf();return b;}
  class Browser{

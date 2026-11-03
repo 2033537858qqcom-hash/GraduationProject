@@ -88,7 +88,9 @@ class AgentGoalMonitorHttpTest {
   assertThat(goal.path("stage").asText()).isEqualTo("MONITORING");assertThat(goal.path("tasks").get(1).path("mission").path("business").path("id")).isEqualTo(goal.path("tasks").get(0).path("mission").path("business").path("id"));assertThat(count()).isEqualTo(before+1);
  }
  JsonNode watchingGoal(Browser user,long s)throws Exception{
-  desiredTarget="TRACK";var goal=savedGoal(user,s);decisions.add(call("submit_task",Map.of("taskKey","certificate")));decisions.add(call("verify_submission",Map.of("taskKey","certificate")));decisions.add(call("watch_task",Map.of("taskKey","certificate")));
+  desiredTarget="TRACK";var goal=savedGoal(user,s);
+  if("MONITORING".equals(goal.path("stage").asText())||goal.path("tasks").get(0).path("submissionVerified").asBoolean())return goal;
+  decisions.add(call("submit_task",Map.of("taskKey","certificate")));decisions.add(call("verify_submission",Map.of("taskKey","certificate")));decisions.add(call("watch_task",Map.of("taskKey","certificate")));
   goal=act(user,s,goal,authorize(goal));assertThat(goal.path("stage").asText()).isEqualTo("MONITORING");return goal;
  }
  long businessId(JsonNode goal){return goal.path("tasks").get(0).path("mission").path("business").path("id").asLong();}
@@ -102,7 +104,7 @@ class AgentGoalMonitorHttpTest {
  }
  Map<String,Object> authorize(JsonNode goal){var body=action(goal,"AUTHORIZE_SUBMIT");body.put("taskKey","certificate");body.put("confirmed",true);body.put("proposalHash",goal.path("tasks").get(0).path("submissionPreview").path("proposalHash").asText());return body;}
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
- void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
+ void saveChild(Browser user,long session,JsonNode mission)throws Exception{if(!mission.path("business").isMissingNode()&&!mission.path("business").isNull())return;ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}
  Browser login(String name)throws Exception{var b=new Browser();b.csrf();ok(b.post("/api/auth/login",Map.of("username",name,"password","Demo@2026")));b.csrf();return b;}
  class Browser{

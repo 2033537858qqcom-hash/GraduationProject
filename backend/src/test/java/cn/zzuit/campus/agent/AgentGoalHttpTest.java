@@ -174,7 +174,10 @@ class AgentGoalHttpTest {
   assertThat(goal.path("events").toString()).doesNotContain("GOAL_PLAN_INVALID");assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");
  }
  @Test void stepBudgetEndsInAnExplicitTerminalFailureRatherThanAnUnresumablePause()throws Exception{
-  prepareCertificate();var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));
+  certificatePlan();certificateFields();decisions.add(call("prepare_task",Map.of("taskKey","certificate")));
+  for(int n=0;n<4;n++)decisions.add(call("refresh_task",Map.of("taskKey","certificate")));
+  decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对当前预览。")));
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));assertThat(goal.path("events").size()).isEqualTo(8);
   strategy=context->call("refresh_task",Map.of("taskKey","certificate"));
   for(int attempts=0;attempts<12&&goal.path("canContinue").asBoolean();attempts++)goal=act(user,s,goal,action(goal,"CONTINUE"));
   assertThat(goal.path("stage").asText()).isEqualTo("FAILED");assertThat(goal.path("events").size()).isEqualTo(80);

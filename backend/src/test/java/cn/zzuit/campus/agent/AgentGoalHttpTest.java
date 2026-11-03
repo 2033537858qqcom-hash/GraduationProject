@@ -175,10 +175,10 @@ class AgentGoalHttpTest {
  }
  @Test void stepBudgetEndsInAnExplicitTerminalFailureRatherThanAnUnresumablePause()throws Exception{
   certificatePlan();certificateFields();decisions.add(call("prepare_task",Map.of("taskKey","certificate")));
-  for(int n=0;n<4;n++)decisions.add(call("refresh_task",Map.of("taskKey","certificate")));
+  for(int n=0;n<4;n++){var item=new HashMap<String,Object>(task("certificate","CERTIFICATE",List.of()));item.put("target",n%2==0?"SUBMIT":"DRAFT");decisions.add(call("set_plan",Map.of("tasks",List.of(item))));}
   decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对当前预览。")));
   var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));assertThat(goal.path("events").size()).isEqualTo(8);
-  strategy=context->call("refresh_task",Map.of("taskKey","certificate"));
+  strategy=context->{var item=new HashMap<String,Object>(task("certificate","CERTIFICATE",List.of()));item.put("target",context.path("tasks").get(0).path("target").asText().equals("DRAFT")?"SUBMIT":"DRAFT");return call("set_plan",Map.of("tasks",List.of(item)));};
   for(int attempts=0;attempts<12&&goal.path("canContinue").asBoolean();attempts++)goal=act(user,s,goal,action(goal,"CONTINUE"));
   assertThat(goal.path("stage").asText()).isEqualTo("FAILED");assertThat(goal.path("events").size()).isEqualTo(80);
  }
@@ -199,6 +199,18 @@ class AgentGoalHttpTest {
   try{assertThat(entered.await(5,java.util.concurrent.TimeUnit.SECONDS)).isTrue();var listed=ok(user.get(path(s)));var goal=ok(user.get(path(s)+"/"+listed.get(0).path("id").asLong()));goal=act(user,s,goal,action(goal,"CANCEL"));assertThat(goal.path("events").get(0).path("status").asText()).isEqualTo("CANCELLED");}
   finally{release.countDown();response.get(15,java.util.concurrent.TimeUnit.SECONDS);}
   var listed=ok(user.get(path(s)));var goal=ok(user.get(path(s)+"/"+listed.get(0).path("id").asLong()));assertThat(goal.path("stage").asText()).isEqualTo("CANCELLED");assertThat(goal.path("tasks").size()).isZero();
+ }
+ @Test void localTaskCancellationIsTheLatestBusinessDirectiveRatherThanARequestToRetryIt()throws Exception{
+  decisions.add(call("set_plan",Map.of("tasks",List.of(task("certificate","CERTIFICATE",List.of()),task("room","RESERVATION",List.of())))));
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));var captured=new java.util.concurrent.atomic.AtomicReference<JsonNode>();
+  strategy=context->{captured.set(context);return call("await_user",Map.of("question","继续其余事项。"));};
+  var cancel=action(goal,"CANCEL_TASK");cancel.put("taskKey","room");cancel.put("confirmed",true);act(user,s,goal,cancel);
+  assertThat(captured.get().path("currentUserDirective").asText()).contains("停止","场地预约");
+ }
+ @Test void savedBusinessOnlyOffersApplicableMutationAndPreparationTools()throws Exception{
+  prepareCertificate();var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));var offered=new java.util.concurrent.atomic.AtomicReference<String>();
+  doAnswer(invocation->{offered.set(JSON.writeValueAsString(invocation.getArgument(1)));return new Plan(List.of(call("finish",Map.of())),20,5);}).when(model).nextGoalStep(anyString(),anyList(),any());act(user,s,goal,action(goal,"CONTINUE"));
+  assertThat(offered.get()).doesNotContain("\"name\":\"prepare_task\"","\"name\":\"set_task_fields\"","\"name\":\"watch_task\"");
  }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}

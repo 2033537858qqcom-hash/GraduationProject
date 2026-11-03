@@ -85,6 +85,17 @@ class AgentGoalRecoveryHttpTest {
   var fields=new HashMap<String,Object>(bookingFields(19));fields.put("startsAt","明天下午");reservationPlan();decisions.add(call("set_task_fields",Map.of("taskKey","room","fields",fields)));
   var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));assertThat(goal.path("events").toString()).contains("GOAL_TIME_FORMAT");assertThat(goal.path("tasks").get(0).path("mission").isNull()).isTrue();
  }
+ @Test void anAlreadyPreparedBlockedTaskDoesNotPretendToPrepareAgain()throws Exception{
+  var fields=bookingFields(22);for(long venue:venues)block("20260002",venue,fields);
+  decisions.add(call("set_plan",Map.of("tasks",List.of(task("room","RESERVATION",List.of()),task("proof","CERTIFICATE",List.of())))));decisions.add(call("set_task_fields",Map.of("taskKey","room","fields",fields)));decisions.add(call("prepare_task",Map.of("taskKey","room")));decisions.add(call("prepare_task",Map.of("taskKey","room")));
+  var user=login("20260001");var goal=ok(user.post(path(session(user)),input()));assertThat(goal.path("events").toString()).contains("GOAL_TASK_ALREADY_PREPARED");
+ }
+ @Test void noCandidateFactsRemainExplicitAndRepeatedUnchangedReadsPauseForInput()throws Exception{
+  var fields=bookingFields(23);for(long venue:venues)block("20260002",venue,fields);reservationPlan();decisions.add(call("set_task_fields",Map.of("taskKey","room","fields",fields)));decisions.add(call("prepare_task",Map.of("taskKey","room")));decisions.add(call("await_user",Map.of("taskKey","room","question","当前没有候选。")));
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));var captured=new java.util.concurrent.atomic.AtomicReference<JsonNode>();strategy=context->{captured.set(context);return call("refresh_task",Map.of("taskKey","room"));};goal=act(user,s,goal,action(goal,"CONTINUE"));
+  assertThat(captured.get().path("tasks").get(0).path("queryStatus").asText()).isEqualTo("NO_CANDIDATES");assertThat(captured.get().path("tasks").get(0).path("missing").size()).isZero();
+  assertThat(goal.path("stage").asText()).isEqualTo("WAITING_INPUT");assertThat(goal.path("events").toString()).contains("NO_CHANGE");
+ }
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}
  JsonNode ok(HttpResponse<String> response){assertThat(response.statusCode()).as(response.body()).isEqualTo(200);return JSON.readTree(response.body());}

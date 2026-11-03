@@ -80,6 +80,13 @@ class AgentGoalMonitorHttpTest {
   try{due(goal);monitor.check();assertThat(jdbc.sql("SELECT stage FROM agent_goal WHERE id=:id").param("id",goal.path("id").asLong()).query(String.class).single()).isEqualTo("PAUSED");assertThat(notices(id)).isEqualTo(before);}
   finally{jdbc.sql("INSERT INTO role_permission(role_code,permission_code) VALUES('STUDENT','certificate:apply')").update();}
  }
+ @Test void aFollowupTaskLinksTheOwnedSubmittedPredecessorInsteadOfCreatingAnotherRequest()throws Exception{
+  var submit=new HashMap<String,Object>(task("certificate","CERTIFICATE",List.of()));submit.put("target","SUBMIT");var follow=new HashMap<String,Object>(task("follow","CERTIFICATE",List.of("certificate")));follow.put("target","TRACK");long before=count();
+  decisions.add(call("set_plan",Map.of("tasks",List.of(submit,follow))));certificateFields();decisions.add(call("prepare_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对原申请。")));
+  var user=login("20260001");long s=session(user);var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));decisions.add(call("refresh_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请确认提交。")));goal=act(user,s,goal,action(goal,"CONTINUE"));
+  decisions.add(call("submit_task",Map.of("taskKey","certificate")));decisions.add(call("verify_submission",Map.of("taskKey","certificate")));decisions.add(call("link_task_result",Map.of("taskKey","follow","sourceTaskKey","certificate")));decisions.add(call("watch_task",Map.of("taskKey","follow")));goal=act(user,s,goal,authorize(goal));
+  assertThat(goal.path("stage").asText()).isEqualTo("MONITORING");assertThat(goal.path("tasks").get(1).path("mission").path("business").path("id")).isEqualTo(goal.path("tasks").get(0).path("mission").path("business").path("id"));assertThat(count()).isEqualTo(before+1);
+ }
  JsonNode watchingGoal(Browser user,long s)throws Exception{
   desiredTarget="TRACK";var goal=savedGoal(user,s);decisions.add(call("submit_task",Map.of("taskKey","certificate")));decisions.add(call("verify_submission",Map.of("taskKey","certificate")));decisions.add(call("watch_task",Map.of("taskKey","certificate")));
   goal=act(user,s,goal,authorize(goal));assertThat(goal.path("stage").asText()).isEqualTo("MONITORING");return goal;

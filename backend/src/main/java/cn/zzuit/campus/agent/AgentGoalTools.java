@@ -216,7 +216,7 @@ public class AgentGoalTools {
     view=fulfillOwned(user,session,operation,task,view);task.missionId=view.id();
     if(!state.directivePending&&state.tasks.stream().allMatch(item->complete(user,session,item)))return observedFinish();
     task.lastReadFingerprint=evidenceHash(task,view);task.unchangedReads=0;state.focusTaskKey=task.key;var facts=new LinkedHashMap<>(evidence(task,view));facts.put("recovered",recovered);facts.put("businessStatus",view.business()==null?"NONE":view.business().status());facts.put("watching",task.watching);
-    String stage=task.watching?"MONITORING":complete(user,session,task)?"RUNNING":view.stage();
+    String stage=task.watching?"MONITORING":"RUNNING";
     String message=task.watching?"已按你的办理授权提交并开始跟踪；状态变化时站内提醒。":view.business()!=null?"已按你的办理授权完成本人申请，结果以原申请为准。":recovered?"已恢复关联先前准备的本人子任务，保留原字段和业务记录。":"已核对原业务条件并准备任务预览。";
     return outcome(stage,"OK",message,Map.of("tool",name,"taskKey",task.key,"status","OK","result",facts));
    }

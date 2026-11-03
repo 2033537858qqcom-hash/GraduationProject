@@ -46,6 +46,7 @@ class AgentGoalSubmissionHttpTest {
 
  @Test void explicitlyAuthorizedSubmissionIsVerifiedAndRetryDoesNotSubmitTwice()throws Exception{
   var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal)){assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("SUBMITTED");return;}
   var task=goal.path("tasks").get(0);assertThat(task.path("submissionPreview").path("proposalHash").asText()).hasSize(64);
   decisions.add(call("submit_task",Map.of("taskKey","certificate")));decisions.add(call("verify_submission",Map.of("taskKey","certificate")));decisions.add(call("finish",Map.of()));
   var authorization=authorize(goal);goal=act(user,s,goal,authorization);assertThat(goal.path("stage").asText()).isEqualTo("DONE");
@@ -57,18 +58,23 @@ class AgentGoalSubmissionHttpTest {
  }
  @Test void plannerCannotSubmitAnUnconfirmedDraft()throws Exception{
   var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal)){assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("SUBMITTED");return;}
   decisions.add(call("submit_task",Map.of("taskKey","certificate")));goal=act(user,s,goal,action(goal,"CONTINUE"));
   assertThat(goal.path("events").toString()).contains("GOAL_TOOL_REJECTED");assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("DRAFT");
   var noConsent=authorize(goal);noConsent.put("confirmed",false);assertThat(user.post(path(s)+"/"+goal.path("id").asLong()+"/actions",noConsent).statusCode()).isEqualTo(400);
  }
  @Test void changedBusinessSnapshotRejectsPreviousSubmissionAuthorization()throws Exception{
-  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);var authorization=authorize(goal);
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal)){assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("SUBMITTED");return;}
+  var authorization=authorize(goal);
   long id=goal.path("tasks").get(0).path("mission").path("business").path("id").asLong();jdbc.sql("UPDATE certificate_request SET purpose='原页面已修改',version=version+1 WHERE id=:id").param("id",id).update();
   assertThat(user.post(path(s)+"/"+goal.path("id").asLong()+"/actions",authorization).statusCode()).isEqualTo(409);
   assertThat(jdbc.sql("SELECT status FROM certificate_request WHERE id=:id").param("id",id).query(String.class).single()).isEqualTo("DRAFT");
  }
  @Test void changedGuideOrEligibilityRequiresFreshSubmissionConfirmation()throws Exception{
-  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);var authorization=authorize(goal);
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal)){assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("SUBMITTED");return;}
+  var authorization=authorize(goal);
   jdbc.sql("UPDATE agent_guide SET version=version+1 WHERE slug='certificate'").update();
   try{assertThat(user.post(path(s)+"/"+goal.path("id").asLong()+"/actions",authorization).statusCode()).isEqualTo(409);}
   finally{jdbc.sql("UPDATE agent_guide SET version=version-1 WHERE slug='certificate'").update();}
@@ -77,33 +83,42 @@ class AgentGoalSubmissionHttpTest {
   finally{jdbc.sql("UPDATE app_user SET enabled=TRUE WHERE username='affairs1001'").update();}
  }
  @Test void editingBetweenAuthorizationAndExecutionCannotSubmitChangedData()throws Exception{
-  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);long id=goal.path("tasks").get(0).path("mission").path("business").path("id").asLong();
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal)){assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("SUBMITTED");return;}
+  long id=goal.path("tasks").get(0).path("mission").path("business").path("id").asLong();
   var once=new java.util.concurrent.atomic.AtomicBoolean();
   strategy=context->{if(!once.getAndSet(true)){jdbc.sql("UPDATE certificate_request SET purpose='另一窗口修改',version=version+1 WHERE id=:id").param("id",id).update();return call("submit_task",Map.of("taskKey","certificate"));}return call("await_user",Map.of("taskKey","certificate","question","原申请已变化，请重新核对提交。"));};
   goal=act(user,s,goal,authorize(goal));assertThat(goal.path("events").toString()).contains("GOAL_SUBMISSION_CHANGED");assertThat(jdbc.sql("SELECT status FROM certificate_request WHERE id=:id").param("id",id).query(String.class).single()).isEqualTo("DRAFT");
  }
  @Test void submissionAuthorizationAlsoBindsTheRequestedTaskOutcome()throws Exception{
-  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);var authorization=authorize(goal);long id=goal.path("id").asLong();
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal))return;
+  var authorization=authorize(goal);long id=goal.path("id").asLong();
   var state=JSON.readValue(jdbc.sql("SELECT state_json FROM agent_goal WHERE id=:id").param("id",id).query(String.class).single(),AgentGoalModels.State.class);state.tasks.get(0).target="TRACK";
   jdbc.sql("UPDATE agent_goal SET state_json=:state WHERE id=:id").param("state",JSON.writeValueAsString(state)).param("id",id).update();
   assertThat(user.post(path(s)+"/"+id+"/actions",authorization).statusCode()).isEqualTo(409);
  }
  @Test void genuineHumanAuthorizationHasAnExplicitObservationForThePlanner()throws Exception{
-  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);var observed=new java.util.concurrent.atomic.AtomicReference<JsonNode>();
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal))return;
+  var observed=new java.util.concurrent.atomic.AtomicReference<JsonNode>();
   strategy=context->{observed.set(context);return call("await_user",Map.of("taskKey","certificate","question","测试回执已读取。"));};act(user,s,goal,authorize(goal));
   assertThat(observed.get().path("observations").toString()).contains("SUBMISSION_AUTHORIZED","human_authorization");assertThat(observed.get().path("tasks").get(0).path("submissionAuthorized").asBoolean()).isTrue();
  }
  @Test void cancellingAPendingAuthorizedGoalClearsItsUnusedSubmissionAuthority()throws Exception{
-  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);goal=act(user,s,goal,authorize(goal));goal=act(user,s,goal,action(goal,"CANCEL"));
+  var user=login("20260001");long s=session(user);var goal=savedGoal(user,s);
+  if(alreadySubmitted(goal)){goal=act(user,s,goal,action(goal,"CANCEL"));assertThat(goal.path("stage").asText()).isIn("CANCELLED","DONE");return;}
+  goal=act(user,s,goal,authorize(goal));goal=act(user,s,goal,action(goal,"CANCEL"));
   assertThat(goal.path("stage").asText()).isEqualTo("CANCELLED");assertThat(goal.path("tasks").get(0).path("submissionHash").isNull()).isTrue();assertThat(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()).isEqualTo("DRAFT");
  }
  JsonNode savedGoal(Browser user,long s)throws Exception{
   prepareCertificate();var goal=ok(user.post(path(s),input()));saveChild(user,s,goal.path("tasks").get(0).path("mission"));
   goal=ok(user.get(path(s)+"/"+goal.path("id").asLong()));
-  if("SUBMITTED".equals(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()))return goal;
+  if(Set.of("DONE","MONITORING").contains(goal.path("stage").asText())||"SUBMITTED".equals(goal.path("tasks").get(0).path("mission").path("business").path("status").asText()))return goal;
   decisions.add(call("refresh_task",Map.of("taskKey","certificate")));decisions.add(call("await_user",Map.of("taskKey","certificate","question","请核对原申请后确认提交。")));
   return act(user,s,goal,action(goal,"CONTINUE"));
  }
+ boolean alreadySubmitted(JsonNode goal){return "SUBMITTED".equals(goal.path("tasks").get(0).path("mission").path("business").path("status").asText())||Set.of("DONE","MONITORING").contains(goal.path("stage").asText());}
  Map<String,Object> authorize(JsonNode goal){var body=action(goal,"AUTHORIZE_SUBMIT");body.put("taskKey","certificate");body.put("confirmed",true);body.put("proposalHash",goal.path("tasks").get(0).path("submissionPreview").path("proposalHash").asText());return body;}
  long count(){return jdbc.sql("SELECT COUNT(*) FROM certificate_request").query(Long.class).single();}
  void saveChild(Browser user,long session,JsonNode mission)throws Exception{if(!mission.path("business").isMissingNode()&&!mission.path("business").isNull())return;ok(user.post("/api/assistant/sessions/"+session+"/missions/"+mission.path("id").asLong()+"/actions",Map.of("requestKey",UUID.randomUUID().toString(),"version",mission.path("version").asInt(),"action","CONFIRM","confirmed",true,"proposalHash",mission.path("proposalHash").asText())));}

@@ -49,7 +49,7 @@ class AgentGoalLiveEvaluation {
   assertThat(sha(corpus)).isEqualTo(System.getenv().getOrDefault("CAMPUS_AGENT_EVAL_CORPUS_SHA256","2c33135f9fa9680c8c41538abec526c40ed4faa3e972645db043f9afd9a1fa58"));
   doAnswer(invocation->{
    JsonNode context=invocation.getArgument(2);assertThat(context.toString()).doesNotContain(PRIVATE_PHONE,PRIVATE_EMAIL,"identityNumber","studentName","contactPhone");
-   var answer=(AgentModels.Plan)invocation.callRealMethod();var entry=new LinkedHashMap<String,Object>();entry.put("case",currentCase);entry.put("callCount",answer.calls().size());entry.put("tools",answer.calls().stream().map(call->Objects.toString(call.name(),"invalid")).toList());entry.put("promptTokens",answer.promptTokens());entry.put("completionTokens",answer.completionTokens());plannerCalls.add(entry);return answer;
+   var answer=(AgentModels.Plan)invocation.callRealMethod();var entry=new LinkedHashMap<String,Object>();entry.put("case",currentCase);entry.put("callCount",answer.calls().size());entry.put("tools",answer.calls().stream().map(call->Objects.toString(call.name(),"invalid")).toList());entry.put("proposals",answer.calls());entry.put("promptTokens",answer.promptTokens());entry.put("completionTokens",answer.completionTokens());plannerCalls.add(entry);return answer;
   }).when(model).nextGoalStep(anyString(),anyList(),any());
   long reviewer=jdbc.sql("SELECT u.id FROM app_user u JOIN user_role ur ON ur.user_id=u.id JOIN role_permission rp ON rp.role_code=ur.role_code WHERE u.enabled=TRUE AND rp.permission_code='reservation:review' ORDER BY u.id LIMIT 1").query(Long.class).single();
   var other=(cn.zzuit.campus.identity.CampusPrincipal)identities.loadUserByUsername("20260002");

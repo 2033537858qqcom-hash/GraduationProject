@@ -58,7 +58,9 @@
 #campus-assistant .assistant-icon:hover { background: #e6efda; }
 #campus-assistant .assistant-session-bar { padding: 12px 20px; color: #74846a; background: #f7f9f0; }
 #campus-assistant .assistant-session-bar button { color: #687f54; font-size: 10px; min-height: 28px; }
-#campus-assistant .assistant-tasks { flex-wrap: nowrap; overflow-x: auto; padding: 2px 20px 12px; gap: 7px; }
+#campus-assistant .assistant-tasks { flex-wrap: nowrap; overflow-x: auto; padding: 2px 20px 12px; gap: 7px; scrollbar-width: thin; scrollbar-color: #c5d8b0 transparent; }
+#campus-assistant .assistant-tasks::-webkit-scrollbar { height: 4px; }
+#campus-assistant .assistant-tasks::-webkit-scrollbar-thumb { background: #c5d8b0; border-radius: 4px; }
 #campus-assistant .assistant-tasks button { flex-shrink: 0; border-color: #e0e8d5; background: #f5f8ed; color: #91a47d; border-radius: 4px; font-size: 11px; min-height: 30px; }
 #campus-assistant .assistant-tasks button[aria-pressed='true'] { border-color: #c9dcb4; background: #eaf3de; color: #638849; }
 #campus-assistant .assistant-mode { border-color: #e2e9d8; padding-inline: 20px; color: #8ea47b; }

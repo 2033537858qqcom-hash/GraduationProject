@@ -34,13 +34,26 @@ export const sportsGrandstandRoofTop = 3.2
 
 // Schematic heights; no floor counts or real-world metres are inferred.
 export const buildingHeightMap: Record<string, number> = {
-  'east-library': 5.8, 'east-swimming': 4.6, 'east-gym': 3.8,
-  'east-shuhua': 4.2, 'east-zhiyuan': 4.2, 'east-jingyi': 4.2,
-  'east-jinxiu-dining': 4.2, 'east-wenhua': 4.2,
-  'east-xinke': 4, 'east-jiangong': 4, 'east-construction': 4, 'east-medical': 4,
-  'east-art': 3.8, 'east-h8': 3.8, 'east-jinxiu': 3.6, 'east-fenghua': 3.6,
-  'east-admin': 3.4, 'east-auditorium': 3.4,
-  'east-canteen-wenhua': 3.4, 'east-construction-training': 3.4,
+  'east-library': 5.8,
+  'east-swimming': 4.6,
+  'east-gym': 3.8,
+  'east-shuhua': 4.2,
+  'east-zhiyuan': 4.2,
+  'east-jingyi': 4.2,
+  'east-jinxiu-dining': 4.2,
+  'east-wenhua': 4.2,
+  'east-xinke': 4,
+  'east-jiangong': 4,
+  'east-construction': 4,
+  'east-medical': 4,
+  'east-art': 3.8,
+  'east-h8': 3.8,
+  'east-jinxiu': 3.6,
+  'east-fenghua': 3.6,
+  'east-admin': 3.4,
+  'east-auditorium': 3.4,
+  'east-canteen-wenhua': 3.4,
+  'east-construction-training': 3.4,
 }
 
 export function featureVerticalRange(feature: MapFeature): { base: number; height: number } {
@@ -55,20 +68,34 @@ export const campusPlaces: CampusPlace[] = campusPlaceDefinitions.map(entry => {
   const features = mapFeatures.filter(feature => feature.placeId === entry.id)
   if (!features.length) throw new Error(`Missing map geometry for ${entry.id}`)
   const points = features.flatMap(feature => feature.outline.map(mapToModel))
-  const xs = points.map(point => point[0]), zs = points.map(point => point[1])
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs)
+  const xs = points.map(point => point[0]),
+    zs = points.map(point => point[1])
+  const minX = Math.min(...xs),
+    maxX = Math.max(...xs),
+    minZ = Math.min(...zs),
+    maxZ = Math.max(...zs)
   const evidenceView = features.find(feature => feature.evidenceView)?.evidenceView
   return {
     ...entry,
     campusId: 'EAST',
-    x: (minX + maxX) / 2, z: (minZ + maxZ) / 2,
-    width: Math.max(3, maxX - minX), depth: Math.max(3, maxZ - minZ),
+    x: (minX + maxX) / 2,
+    z: (minZ + maxZ) / 2,
+    width: Math.max(3, maxX - minX),
+    depth: Math.max(3, maxZ - minZ),
     height: Math.max(
-      ...features.map(feature => { const range = featureVerticalRange(feature); return range.base + range.height }),
+      ...features.map(feature => {
+        const range = featureVerticalRange(feature)
+        return range.base + range.height
+      }),
       entry.id === 'east-sports' ? sportsGrandstandRoofTop : 0,
     ),
     sourceUrl: entry.locationSource === 'layout' ? campusEvidence.layoutReferenceUrl : campusEvidence.mapUrl,
-    sourceScreenshot: entry.locationSource === 'layout' ? campusEvidence.layoutReferenceFile : evidenceView ? detailViews[evidenceView].standard : campusEvidence.screenshot,
+    sourceScreenshot:
+      entry.locationSource === 'layout'
+        ? campusEvidence.layoutReferenceFile
+        : evidenceView
+          ? detailViews[evidenceView].standard
+          : campusEvidence.screenshot,
     locationType: features.every(feature => feature.kind === 'point') ? 'point' : 'outline',
     verification: entry.locationSource === 'layout' ? 'reference-located' : 'map-observed',
     heightStatus: 'display-only',
@@ -76,13 +103,33 @@ export const campusPlaces: CampusPlace[] = campusPlaceDefinitions.map(entry => {
 })
 
 export const campusCategories = [
-  { id: 'all', label: '全部' }, { id: 'learning', label: '楼宇' }, { id: 'housing', label: '住宿' },
-  { id: 'sports', label: '文体' }, { id: 'landscape', label: '景观' }, { id: 'services', label: '服务' },
+  { id: 'all', label: '全部' },
+  { id: 'learning', label: '楼宇' },
+  { id: 'housing', label: '住宿' },
+  { id: 'sports', label: '文体' },
+  { id: 'landscape', label: '景观' },
+  { id: 'services', label: '服务' },
 ] as const
 
 export const campusTour = [
-  'south-gate', 'east-construction', 'east-medical', 'east-admin', 'east-auditorium',
-  'east-canteen-wenhua', 'east-library', 'east-jinxiu-dining', 'east-jingyi',
-  'east-shuhua', 'east-zhiyuan', 'east-art', 'east-square', 'east-sports',
-  'east-gym', 'east-swimming', 'east-jinxiu', 'east-fenghua', 'east-water', 'east-gate',
+  'south-gate',
+  'east-construction',
+  'east-medical',
+  'east-admin',
+  'east-auditorium',
+  'east-canteen-wenhua',
+  'east-library',
+  'east-jinxiu-dining',
+  'east-jingyi',
+  'east-shuhua',
+  'east-zhiyuan',
+  'east-art',
+  'east-square',
+  'east-sports',
+  'east-gym',
+  'east-swimming',
+  'east-jinxiu',
+  'east-fenghua',
+  'east-water',
+  'east-gate',
 ]

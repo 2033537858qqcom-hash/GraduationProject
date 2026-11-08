@@ -1,36 +1,36 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue';
 
 const props = withDefaults(
   defineProps<{
-    src?: string | null
-    name?: string
-    size?: 'sm' | 'md' | 'lg' | 'xl'
+    src?: string | null;
+    name?: string;
+    size?: 'sm' | 'md' | 'lg' | 'xl';
   }>(),
   {
     src: null,
     name: '',
     size: 'md',
-  }
-)
+  },
+);
 
-const failed = ref(false)
+const failed = ref(false);
 
 watch(
   () => props.src,
   () => {
-    failed.value = false
-  }
-)
+    failed.value = false;
+  },
+);
 
 const initial = computed(() => {
-  const text = (props.name || '').trim()
-  if (!text) return '学'
+  const text = (props.name || '').trim();
+  if (!text) return '学';
   if (/^[\u4e00-\u9fa5]+$/.test(text)) {
-    return text.length >= 3 ? text.slice(-2) : text
+    return text.length >= 3 ? text.slice(-2) : text;
   }
-  return text.slice(0, 2).toUpperCase()
-})
+  return text.slice(0, 2).toUpperCase();
+});
 </script>
 
 <template>
@@ -59,10 +59,12 @@ const initial = computed(() => {
   user-select: none;
   background: linear-gradient(135deg, #183354 0%, #274b75 100%);
   color: #f7f9fc;
-  font-family: var(--site-serif, "Noto Serif SC", SimSun, serif);
+  font-family: var(--font-family-body);
   font-weight: 500;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(18, 38, 63, 0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+  box-shadow:
+    0 1px 3px rgb(18, 38, 63, 0.12),
+    inset 0 0 0 1px rgb(255, 255, 255, 0.2);
 }
 
 .avatar-img {
@@ -84,13 +86,13 @@ const initial = computed(() => {
 .avatar-sm {
   width: 26px;
   height: 26px;
-  font-size: 11px;
+  font-size: var(--text-meta);
 }
 
 .avatar-md {
   width: 40px;
   height: 40px;
-  font-size: 14px;
+  font-size: var(--text-body);
 }
 
 .avatar-lg {
@@ -103,6 +105,8 @@ const initial = computed(() => {
   width: 96px;
   height: 96px;
   font-size: 26px;
-  box-shadow: 0 4px 14px rgba(18, 38, 63, 0.16), 0 0 0 2px #ffffff;
+  box-shadow:
+    0 4px 14px rgb(18, 38, 63, 0.16),
+    0 0 0 2px var(--color-white);
 }
 </style>

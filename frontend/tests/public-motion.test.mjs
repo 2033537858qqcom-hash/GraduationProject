@@ -1,38 +1,69 @@
 import test, { beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { initializePublicMotion, setPublicMotionPreference, publicMotionPreference, publicReducedMotion, PUBLIC_MOTION_KEY } from '../src/lib/publicMotion.ts'
+import {
+  initializePublicMotion,
+  setPublicMotionPreference,
+  publicMotionPreference,
+  publicReducedMotion,
+  PUBLIC_MOTION_KEY,
+} from '../src/lib/publicMotion.ts'
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window')
 let env, releases
 beforeEach(() => {
   releases = []
-  const mediaListeners = new Set(), storageListeners = new Set()
+  const mediaListeners = new Set(),
+    storageListeners = new Set()
   env = {
-    stored: null, blocked: false, writes: 0, mediaListeners, storageListeners,
+    stored: null,
+    blocked: false,
+    writes: 0,
+    mediaListeners,
+    storageListeners,
     media: {
       matches: false,
       addEventListener: (_name, listener) => mediaListeners.add(listener),
       removeEventListener: (_name, listener) => mediaListeners.delete(listener),
     },
-    changeSystem(value) { this.media.matches = value; for (const listener of mediaListeners) listener() },
-    storageEvent(key, newValue) { for (const listener of storageListeners) listener({ key, newValue }) },
-  }
-  Object.defineProperty(globalThis, 'window', { configurable: true, value: {
-    localStorage: {
-      getItem() { if (env.blocked) throw new Error('Storage blocked'); return env.stored },
-      setItem(key, value) { assert.equal(key, PUBLIC_MOTION_KEY); if (env.blocked) throw new Error('Storage blocked'); env.stored = value; env.writes++ },
+    changeSystem(value) {
+      this.media.matches = value
+      for (const listener of mediaListeners) listener()
     },
-    matchMedia: () => env.media,
-    addEventListener: (_name, listener) => storageListeners.add(listener),
-    removeEventListener: (_name, listener) => storageListeners.delete(listener),
-  } })
+    storageEvent(key, newValue) {
+      for (const listener of storageListeners) listener({ key, newValue })
+    },
+  }
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      localStorage: {
+        getItem() {
+          if (env.blocked) throw new Error('Storage blocked')
+          return env.stored
+        },
+        setItem(key, value) {
+          assert.equal(key, PUBLIC_MOTION_KEY)
+          if (env.blocked) throw new Error('Storage blocked')
+          env.stored = value
+          env.writes++
+        },
+      },
+      matchMedia: () => env.media,
+      addEventListener: (_name, listener) => storageListeners.add(listener),
+      removeEventListener: (_name, listener) => storageListeners.delete(listener),
+    },
+  })
 })
 afterEach(() => {
   for (const release of releases.reverse()) release()
   if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow)
   else delete globalThis.window
 })
-function start() { const release = initializePublicMotion(); releases.push(release); return release }
+function start() {
+  const release = initializePublicMotion()
+  releases.push(release)
+  return release
+}
 
 test('public motion follows system changes without overriding the system preference', () => {
   start()
@@ -78,7 +109,8 @@ test('an unknown stored preference falls back to the system setting', () => {
   assert.equal(publicReducedMotion.value, true)
 })
 test('shared consumers keep one subscription and remove it after the last unmount', () => {
-  const first = start(), second = start()
+  const first = start(),
+    second = start()
   assert.equal(env.mediaListeners.size, 1)
   assert.equal(env.storageListeners.size, 1)
   first()

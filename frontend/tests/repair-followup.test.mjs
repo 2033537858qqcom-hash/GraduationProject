@@ -25,11 +25,20 @@ test('inclusive date input becomes an exclusive boundary across month and year e
   assert.deepEqual(repairStatisticsRange('2028-02-28', '2028-02-29'), { from: '2028-02-28', to: '2028-03-01' })
 })
 test('invalid, reversed, and excessive date ranges are rejected', () => {
-  for (const values of [['2026-02-30', '2026-03-01'], ['2026-10-13', '2026-10-12'], ['2025-01-01', '2026-12-31'], ['', '2026-10-12']]) assert.throws(() => repairStatisticsRange(...values))
+  for (const values of [
+    ['2026-02-30', '2026-03-01'],
+    ['2026-10-13', '2026-10-12'],
+    ['2025-01-01', '2026-12-31'],
+    ['', '2026-10-12'],
+  ])
+    assert.throws(() => repairStatisticsRange(...values))
   assert.deepEqual(repairStatisticsRange('2028-01-01', '2028-12-31'), { from: '2028-01-01', to: '2029-01-01' })
 })
 test('statistics login uses a known route while message links remain request details', () => {
-  assert.equal(safeLoginDestination('/logistics/repairs/statistics?from=2026-01-01'), '/logistics/repairs/statistics?from=2026-01-01')
+  assert.equal(
+    safeLoginDestination('/logistics/repairs/statistics?from=2026-01-01'),
+    '/logistics/repairs/statistics?from=2026-01-01',
+  )
   assert.equal(safeAffairDestination('/logistics/repairs/statistics?id=1&tab=details'), null)
   assert.equal(safeLoginDestination('/logistics/repairs/unknown'), null)
 })

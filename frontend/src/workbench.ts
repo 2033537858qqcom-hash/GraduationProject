@@ -15,8 +15,18 @@ export interface AggregatedTask {
   createdAt: string
   urgency: string
 }
-export interface TaskSourceError { domain: string; label: string; message: string }
-export interface WorkspaceInfo { code: string; name: string; roleTitle: string; scopeNote: string; entryPaths: string[] }
+export interface TaskSourceError {
+  domain: string
+  label: string
+  message: string
+}
+export interface WorkspaceInfo {
+  code: string
+  name: string
+  roleTitle: string
+  scopeNote: string
+  entryPaths: string[]
+}
 export interface WorkbenchOverview {
   profile: Profile
   workspaces: WorkspaceInfo[]

@@ -3,9 +3,19 @@ import assert from 'node:assert/strict'
 import { landingPage } from '../src/lib/landing.ts'
 
 const profile = (permissions, extra = {}) => ({
-  id: 1, username: 'demo', fullName: '演示用户', identityNumber: '1001',
-  campusName: null, departmentName: null, className: null, avatarUrl: null,
-  demo: true, roles: [], permissions, passwordChangeRequired: false, ...extra,
+  id: 1,
+  username: 'demo',
+  fullName: '演示用户',
+  identityNumber: '1001',
+  campusName: null,
+  departmentName: null,
+  className: null,
+  avatarUrl: null,
+  demo: true,
+  roles: [],
+  permissions,
+  passwordChangeRequired: false,
+  ...extra,
 })
 
 test('各角色登录后的落点与既有约定一致', () => {
@@ -19,9 +29,15 @@ test('各角色登录后的落点与既有约定一致', () => {
   assert.equal(landingPage(profile(['workbench:read', 'content:edit'])), '/admin/content')
   assert.equal(landingPage(profile(['workbench:read', 'content:review'])), '/admin/content')
   // 财务双岗、教务、后勤、宿管等岗位 → 工作台
-  for (const permissions of [['workbench:read', 'payment:manage'], ['workbench:read', 'payment:review'],
-    ['workbench:read', 'payment:source'], ['workbench:read', 'academic:manage'], ['workbench:read', 'repair:dispatch'],
-    ['workbench:read', 'housing:assign'], ['workbench:read']]) {
+  for (const permissions of [
+    ['workbench:read', 'payment:manage'],
+    ['workbench:read', 'payment:review'],
+    ['workbench:read', 'payment:source'],
+    ['workbench:read', 'academic:manage'],
+    ['workbench:read', 'repair:dispatch'],
+    ['workbench:read', 'housing:assign'],
+    ['workbench:read'],
+  ]) {
     assert.equal(landingPage(profile(permissions)), '/workbench', permissions.join(','))
   }
   // 内容岗位即使同时持有 workbench:read 也直接进入内容页；学生门户优先于内容岗位

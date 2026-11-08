@@ -6,8 +6,17 @@ const codes = list => list.map(code => ({ code }))
 
 test('workspace priority keeps business posts before finance support and personal space', () => {
   assert.deepEqual(WORKSPACE_PRIORITY, [
-    'TEACHING', 'COUNSELOR', 'AFFAIRS', 'HOUSING', 'LOGISTICS', 'ACADEMIC', 'CONTENT', 'ADMIN',
-    'FINANCE', 'PAYMENT_SOURCE', 'PERSONAL',
+    'TEACHING',
+    'COUNSELOR',
+    'AFFAIRS',
+    'HOUSING',
+    'LOGISTICS',
+    'ACADEMIC',
+    'CONTENT',
+    'ADMIN',
+    'FINANCE',
+    'PAYMENT_SOURCE',
+    'PERSONAL',
   ])
   // 后端按 FINANCE/PAYMENT_SOURCE → 业务空间 → PERSONAL 返回时，默认仍落到业务岗位
   assert.equal(defaultWorkspaceCode(codes(['FINANCE', 'PAYMENT_SOURCE', 'ACADEMIC', 'PERSONAL'])), 'ACADEMIC')

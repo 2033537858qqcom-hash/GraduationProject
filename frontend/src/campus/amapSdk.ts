@@ -1,6 +1,9 @@
 export type LngLat = readonly [number, number]
 type Vector3 = [number, number, number]
-export interface MapClick { lnglat: { getLng(): number; getLat(): number }; pixel: { x: number; y: number } }
+export interface MapClick {
+  lnglat: { getLng(): number; getLat(): number }
+  pixel: { x: number; y: number }
+}
 export interface AMapInstance {
   on(event: string, handler: (event: MapClick) => void): void
   off(event: string, handler: (event: MapClick) => void): void
@@ -39,23 +42,44 @@ export interface AMapWeatherInstance {
 }
 export interface AMapSearchResult {
   info: string
-  poiList?: { count: number; pois: { id: string; name: string; address: string; type: string; location: { getLng(): number; getLat(): number } }[] }
+  poiList?: {
+    count: number
+    pois: {
+      id: string
+      name: string
+      address: string
+      type: string
+      location: { getLng(): number; getLat(): number }
+    }[]
+  }
 }
 export interface AMapPlaceSearchInstance {
-  searchNearBy(keyword: string, center: LngLat, radius: number, callback: (status: string, result: AMapSearchResult) => void): void
+  searchNearBy(
+    keyword: string,
+    center: LngLat,
+    radius: number,
+    callback: (status: string, result: AMapSearchResult) => void,
+  ): void
   getDetails(id: string, callback: (status: string, result: AMapSearchResult) => void): void
 }
 export interface AMapSdk {
   Map: new (host: HTMLElement, options: Record<string, unknown>) => AMapInstance
   TileLayer: { Satellite: new () => unknown; RoadNet: new () => unknown }
-  GLCustomLayer: new (options: { zIndex: number; init: (gl: WebGLRenderingContext | WebGL2RenderingContext) => void; render: () => void }) => unknown
+  GLCustomLayer: new (options: {
+    zIndex: number
+    init: (gl: WebGLRenderingContext | WebGL2RenderingContext) => void
+    render: () => void
+  }) => unknown
   Walking?: new (options: { map: unknown; hideMarkers?: boolean }) => AMapWalkingInstance
   Weather?: new () => AMapWeatherInstance
   PlaceSearch?: new (options: Record<string, unknown>) => AMapPlaceSearchInstance
   plugin?: (plugins: string[], callback: () => void) => void
 }
 declare global {
-  interface Window { AMap?: AMapSdk; _AMapSecurityConfig?: { serviceHost: string } }
+  interface Window {
+    AMap?: AMapSdk
+    _AMapSecurityConfig?: { serviceHost: string }
+  }
 }
 
 let pending: Promise<AMapSdk> | undefined
@@ -71,12 +95,19 @@ export function loadAMap(key: string): Promise<AMapSdk> {
     script.referrerPolicy = 'strict-origin-when-cross-origin'
     const timeout = window.setTimeout(() => finish(), 20000)
     function finish() {
-      window.clearTimeout(timeout); script.onload = null; script.onerror = null
-      if (window.AMap) { resolve(window.AMap); return }
-      script.remove(); pending = undefined
+      window.clearTimeout(timeout)
+      script.onload = null
+      script.onerror = null
+      if (window.AMap) {
+        resolve(window.AMap)
+        return
+      }
+      script.remove()
+      pending = undefined
       reject(new Error('高德地图未能加载，请检查网络或 Key 的域名配置，也可以使用校园沙盘。'))
     }
-    script.onload = finish; script.onerror = finish
+    script.onload = finish
+    script.onerror = finish
     document.head.appendChild(script)
   })
   return pending

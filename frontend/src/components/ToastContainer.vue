@@ -1,16 +1,20 @@
 <script setup lang="ts">
-import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from '@lucide/vue'
-import { useToast } from '../composables/useToast'
-import type { ToastType } from '../composables/useToast'
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from '@lucide/vue';
+import { useToast } from '../composables/useToast';
+import type { ToastType } from '../composables/useToast';
 
-const { toasts, remove } = useToast()
+const { toasts, remove } = useToast();
 
 function iconFor(type: ToastType) {
   switch (type) {
-    case 'success': return CheckCircle2
-    case 'error': return AlertCircle
-    case 'warning': return AlertTriangle
-    default: return Info
+    case 'success':
+      return CheckCircle2;
+    case 'error':
+      return AlertCircle;
+    case 'warning':
+      return AlertTriangle;
+    default:
+      return Info;
   }
 }
 </script>
@@ -18,20 +22,10 @@ function iconFor(type: ToastType) {
 <template>
   <div class="toast-hub" aria-live="polite" aria-atomic="true">
     <TransitionGroup name="toast-slide">
-      <div
-        v-for="item in toasts"
-        :key="item.id"
-        class="toast-pill"
-        :class="`type-${item.type}`"
-        role="alert"
-      >
+      <div v-for="item in toasts" :key="item.id" class="toast-pill" :class="`type-${item.type}`" role="alert">
         <component :is="iconFor(item.type)" :size="16" class="toast-icon" />
         <span class="toast-message">{{ item.message }}</span>
-        <button
-          class="toast-close"
-          aria-label="关闭提示"
-          @click="remove(item.id)"
-        >
+        <button class="toast-close" aria-label="关闭提示" @click="remove(item.id)">
           <X :size="13" />
         </button>
       </div>
@@ -59,14 +53,16 @@ function iconFor(type: ToastType) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgb(255, 255, 255, 0.94);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(220, 228, 238, 0.85);
-  box-shadow: 0 12px 32px rgba(18, 38, 63, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
-  border-radius: 9999px;
+  border: 1px solid rgb(220, 228, 238, 0.85);
+  box-shadow:
+    0 12px 32px rgb(18, 38, 63, 0.12),
+    0 2px 6px rgb(0, 0, 0, 0.04);
+  border-radius: var(--radius-pill);
   padding: 8px 16px 8px 14px;
-  font-size: 13px;
+  font-size: var(--text-supporting);
   font-weight: 500;
   color: #1f2937;
   max-width: 480px;
@@ -78,28 +74,28 @@ function iconFor(type: ToastType) {
 }
 
 .type-success {
-  border-color: rgba(52, 199, 89, 0.3);
+  border-color: rgb(52, 199, 89, 0.3);
 }
 .type-success .toast-icon {
   color: #2e7d32;
 }
 
 .type-error {
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgb(239, 68, 68, 0.3);
 }
 .type-error .toast-icon {
   color: #d32f2f;
 }
 
 .type-warning {
-  border-color: rgba(245, 158, 11, 0.3);
+  border-color: rgb(245, 158, 11, 0.3);
 }
 .type-warning .toast-icon {
   color: #ed6c02;
 }
 
 .type-info {
-  border-color: rgba(0, 113, 227, 0.3);
+  border-color: rgb(0, 113, 227, 0.3);
 }
 .type-info .toast-icon {
   color: #0071e3;
@@ -121,12 +117,14 @@ function iconFor(type: ToastType) {
   padding: 2px;
   border-radius: 50%;
   margin-left: 2px;
-  transition: color 0.15s, background-color 0.15s;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
 }
 
 .toast-close:hover {
   color: #4b5563;
-  background-color: rgba(0, 0, 0, 0.05);
+  background-color: rgb(0, 0, 0, 0.05);
 }
 
 /* Animations */

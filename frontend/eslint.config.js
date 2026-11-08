@@ -2,6 +2,7 @@ import js from '@eslint/js'
 import vue from 'eslint-plugin-vue'
 import ts from 'typescript-eslint'
 import globals from 'globals'
+import prettier from 'eslint-config-prettier'
 
 export default [
   { ignores: ['dist/**', 'node_modules/**'] },
@@ -24,4 +25,6 @@ export default [
       'vue/first-attribute-linebreak': 'off',
     },
   },
+  prettier,
 ]
+

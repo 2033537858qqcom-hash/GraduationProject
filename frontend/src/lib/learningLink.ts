@@ -1,4 +1,8 @@
-export function learningLinkSelection(terms: { id: number; startsOn: string; endsOn: string }[], term: unknown, week: unknown): { termId: number; date: string | null } | null {
+export function learningLinkSelection(
+  terms: { id: number; startsOn: string; endsOn: string }[],
+  term: unknown,
+  week: unknown,
+): { termId: number; date: string | null } | null {
   if (typeof term !== 'string' || !/^[1-9]\d{0,14}$/.test(term)) return null
   const selected = terms.find(t => t.id === Number(term))
   if (!selected) return null

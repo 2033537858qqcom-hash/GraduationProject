@@ -8,7 +8,7 @@ export interface SlidingIndicatorOptions {
 export function useSlidingIndicator(
   containerRef: Ref<HTMLElement | null>,
   triggerWatcher?: () => unknown,
-  options: SlidingIndicatorOptions = {}
+  options: SlidingIndicatorOptions = {},
 ) {
   const activeSelector = options.activeSelector ?? '.selected, .active, [aria-selected="true"]'
   let isInitialized = false
@@ -111,18 +111,26 @@ export function useSlidingIndicator(
   }
 
   // v-if can create a new tab bar while its selected value stays unchanged.
-  watch(containerRef, (container, previous) => {
-    observeContainer(container, previous)
-    hideIndicator()
-    scheduleUpdate()
-  }, { flush: 'post' })
+  watch(
+    containerRef,
+    (container, previous) => {
+      observeContainer(container, previous)
+      hideIndicator()
+      scheduleUpdate()
+    },
+    { flush: 'post' },
+  )
 
   if (triggerWatcher) {
     // flush: 'post' ensures the watcher executes AFTER the DOM has updated
     // with the new active/selected class, preventing 1-frame stale measurements
-    watch(triggerWatcher, () => {
-      scheduleUpdate()
-    }, { flush: 'post' })
+    watch(
+      triggerWatcher,
+      () => {
+        scheduleUpdate()
+      },
+      { flush: 'post' },
+    )
   }
 
   if (getCurrentInstance()) {

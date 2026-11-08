@@ -28,9 +28,10 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     return place.campusId === 'WEST' ? undefined : campusLngLat([place.x, place.z])
   }
 
-  const frame = () => currentCampus === 'WEST'
-    ? westCampusMapFrame(host.clientWidth, host.clientHeight)
-    : campusMapFrame(host.clientWidth, host.clientHeight)
+  const frame = () =>
+    currentCampus === 'WEST'
+      ? westCampusMapFrame(host.clientWidth, host.clientHeight)
+      : campusMapFrame(host.clientWidth, host.clientHeight)
 
   const defaultPitch = 38
   const initial = frame()
@@ -63,31 +64,65 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
   let overlayModelActive = false
 
   let overlay = addCampusOverlay(AMap, map, host, ready => options.onModelStatus?.(ready), currentCampus)
-  let disposed = false, current: string | null = null
-  let overviewActive = true, viewportWidth = host.clientWidth, viewportHeight = host.clientHeight
+  let disposed = false,
+    current: string | null = null
+  let overviewActive = true,
+    viewportWidth = host.clientWidth,
+    viewportHeight = host.clientHeight
   let labelFrame = 0
   let settleTimer: ReturnType<typeof setTimeout> | undefined
 
-  const eastImportant = new Set(['east-library', 'east-shuhua', 'east-jingyi', 'east-jinxiu-dining', 'east-wenhua', 'east-sports', 'south-gate', 'east-admin', 'east-gym'])
-  const westImportant = new Set(['west-incubator', 'west-teaching-1', 'west-teaching-2', 'west-lab-3', 'west-mingde', 'west-canteen', 'west-tech-center', 'west-dorm-4', 'west-dorm-7', 'west-dorm-5'])
-  const isImportant = (id: string) => currentCampus === 'WEST' ? westImportant.has(id) : eastImportant.has(id)
+  const eastImportant = new Set([
+    'east-library',
+    'east-shuhua',
+    'east-jingyi',
+    'east-jinxiu-dining',
+    'east-wenhua',
+    'east-sports',
+    'south-gate',
+    'east-admin',
+    'east-gym',
+  ])
+  const westImportant = new Set([
+    'west-incubator',
+    'west-teaching-1',
+    'west-teaching-2',
+    'west-lab-3',
+    'west-mingde',
+    'west-canteen',
+    'west-tech-center',
+    'west-dorm-4',
+    'west-dorm-7',
+    'west-dorm-5',
+  ])
+  const isImportant = (id: string) => (currentCampus === 'WEST' ? westImportant.has(id) : eastImportant.has(id))
 
   function labels() {
     labelFrame = 0
     if (disposed) return
     const placed: { x: number; y: number }[] = []
     const activePlaces = currentCampus === 'WEST' ? westCampusPlaces : campusPlaces
-    const points = [...activePlaces].sort((a, b) => Number(b.id === current) - Number(a.id === current)).map(place => {
-      const lnglat = getPlaceLngLat(place)
-      const pixel = lnglat ? map.lngLatToContainer(lnglat) : { x: -100, y: -100 }
-      const allowed = map.getZoom() >= 17.5 || isImportant(place.id) || current === place.id
-      const visible = allowed && pixel.x > 45 && pixel.x < host.clientWidth - 45 && pixel.y > 50 && pixel.y < host.clientHeight - 45 && !placed.some(p => Math.abs(p.x - pixel.x) < 100 && Math.abs(p.y - pixel.y) < 30)
-      if (visible) placed.push(pixel)
-      return { id: place.id, left: pixel.x, top: pixel.y, visible }
-    })
+    const points = [...activePlaces]
+      .sort((a, b) => Number(b.id === current) - Number(a.id === current))
+      .map(place => {
+        const lnglat = getPlaceLngLat(place)
+        const pixel = lnglat ? map.lngLatToContainer(lnglat) : { x: -100, y: -100 }
+        const allowed = map.getZoom() >= 17.5 || isImportant(place.id) || current === place.id
+        const visible =
+          allowed &&
+          pixel.x > 45 &&
+          pixel.x < host.clientWidth - 45 &&
+          pixel.y > 50 &&
+          pixel.y < host.clientHeight - 45 &&
+          !placed.some(p => Math.abs(p.x - pixel.x) < 100 && Math.abs(p.y - pixel.y) < 30)
+        if (visible) placed.push(pixel)
+        return { id: place.id, left: pixel.x, top: pixel.y, visible }
+      })
     callbacks.labels(points)
   }
-  function scheduleLabels() { if (!labelFrame) labelFrame = requestAnimationFrame(labels) }
+  function scheduleLabels() {
+    if (!labelFrame) labelFrame = requestAnimationFrame(labels)
+  }
   const click = (event: MapClick) => {
     options.onCalibration?.(`${event.lnglat.getLng().toFixed(7)}, ${event.lnglat.getLat().toFixed(7)}`)
     if (!options.onCalibration) {
@@ -97,10 +132,21 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
       }
     }
   }
-  const stopped = () => { clearTimeout(settleTimer); callbacks.moving(false); scheduleLabels() }
-  const moving = () => { callbacks.moving(true); scheduleLabels(); clearTimeout(settleTimer); settleTimer = setTimeout(stopped, 180) }
+  const stopped = () => {
+    clearTimeout(settleTimer)
+    callbacks.moving(false)
+    scheduleLabels()
+  }
+  const moving = () => {
+    callbacks.moving(true)
+    scheduleLabels()
+    clearTimeout(settleTimer)
+    settleTimer = setTimeout(stopped, 180)
+  }
   map.on('click', click)
-  const leaveOverview = () => { overviewActive = false }
+  const leaveOverview = () => {
+    overviewActive = false
+  }
   map.on('dragstart', leaveOverview)
   host.addEventListener('wheel', leaveOverview, { passive: true })
   host.addEventListener('touchstart', leaveOverview, { passive: true })
@@ -108,21 +154,33 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
   for (const name of ['moveend', 'zoomend', 'rotateend', 'pitchend', 'complete']) map.on(name, stopped)
   const resize = new ResizeObserver(() => {
     if (host.clientWidth !== viewportWidth || host.clientHeight !== viewportHeight) {
-      viewportWidth = host.clientWidth; viewportHeight = host.clientHeight
-      if (overviewActive) { const next = frame(); map.setZoomAndCenter(next.zoom, next.center, true) }
+      viewportWidth = host.clientWidth
+      viewportHeight = host.clientHeight
+      if (overviewActive) {
+        const next = frame()
+        map.setZoomAndCenter(next.zoom, next.center, true)
+      }
     }
     scheduleLabels()
   })
   resize.observe(host)
-  callbacks.view('overview'); scheduleLabels()
+  callbacks.view('overview')
+  scheduleLabels()
   let walking: import('./amapSdk').AMapWalkingInstance | undefined
 
   return {
     dispose() {
-      disposed = true; resize.disconnect(); cancelAnimationFrame(labelFrame); clearTimeout(settleTimer)
-      map.off('click', click); map.off('dragstart', leaveOverview)
-      host.removeEventListener('wheel', leaveOverview); host.removeEventListener('touchstart', leaveOverview)
-      walking?.clear(); overlay.dispose(); map.destroy()
+      disposed = true
+      resize.disconnect()
+      cancelAnimationFrame(labelFrame)
+      clearTimeout(settleTimer)
+      map.off('click', click)
+      map.off('dragstart', leaveOverview)
+      host.removeEventListener('wheel', leaveOverview)
+      host.removeEventListener('touchstart', leaveOverview)
+      walking?.clear()
+      overlay.dispose()
+      map.destroy()
     },
     switchCampus(campusId: 'EAST' | 'WEST') {
       if (campusId === currentCampus) return
@@ -160,7 +218,8 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
           map.setPitch(place ? 42 : defaultPitch, false, 500)
         }
       }
-      callbacks.view(place ? 'detail' : is25D ? 'overview' : 'top'); scheduleLabels()
+      callbacks.view(place ? 'detail' : is25D ? 'overview' : 'top')
+      scheduleLabels()
     },
     overview() {
       this.select(null)
@@ -186,7 +245,11 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
         map.setMapStyle(`amap://styles/${theme}`)
       }
     },
-    zoom(direction: 'in' | 'out') { overviewActive = false; map.setZoom(map.getZoom() + (direction === 'in' ? 0.5 : -0.5), publicReducedMotion.value); callbacks.view('free') },
+    zoom(direction: 'in' | 'out') {
+      overviewActive = false
+      map.setZoom(map.getZoom() + (direction === 'in' ? 0.5 : -0.5), publicReducedMotion.value)
+      callbacks.view('free')
+    },
     setEvening(evening: boolean) {
       if (evening !== night) {
         night = evening
@@ -238,11 +301,18 @@ export async function createAMapCampusScene(host: HTMLElement, callbacks: SceneC
     },
     getWeather(city = '新郑市'): Promise<{ weather: string; temperature: number; wind: string } | null> {
       return new Promise(resolve => {
-        if (!AMap.Weather) { resolve(null); return }
+        if (!AMap.Weather) {
+          resolve(null)
+          return
+        }
         const weather = new AMap.Weather()
         weather.getLive(city, (err, data) => {
           if (!err && data?.info === 'OK') {
-            resolve({ weather: data.weather, temperature: data.temperature, wind: `${data.windDirection}风${data.windPower}级` })
+            resolve({
+              weather: data.weather,
+              temperature: data.temperature,
+              wind: `${data.windDirection}风${data.windPower}级`,
+            })
           } else {
             resolve(null)
           }

@@ -1,0 +1,1 @@
+{ "name": "proposal-pptx", "private": true, "type": "module", "scripts": { "generate": "node generate-proposal-pptx.mjs" }, "devDependencies": { "pptxgenjs": "^4.0.1" } }

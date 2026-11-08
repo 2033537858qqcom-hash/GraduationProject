@@ -31,14 +31,17 @@ export async function restoreSession(refresh = false) {
           clearSession()
         } else throw error
       }
-    })().finally(() => { initialization = null })
+    })().finally(() => {
+      initialization = null
+    })
   }
   await initialization
 }
 
 export async function login(username: string, password: string) {
   currentUser.value = await api<Profile>('/auth/login', {
-    method: 'POST', body: JSON.stringify({ username, password }),
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
   })
   initialized = true
   resetCsrf()

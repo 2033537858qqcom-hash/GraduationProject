@@ -11,7 +11,8 @@ test('only an open vacant bed can be assigned', () => {
     { enabled: true, status: 'RESERVED', buildingEnabled: true, roomEnabled: true },
     { enabled: true, status: 'VACANT', buildingEnabled: false, roomEnabled: true },
     { enabled: true, status: 'VACANT', buildingEnabled: true, roomEnabled: false },
-  ]) assert.equal(bedCanAssign(bed), false)
+  ])
+    assert.equal(bedCanAssign(bed), false)
 })
 test('bed status and stay time stay readable', () => {
   assert.equal(housingBedStatus.OCCUPIED, '已入住')

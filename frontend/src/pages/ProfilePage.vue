@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { ArrowUpRight, Camera, Trash2, Upload } from '@lucide/vue'
-import { currentUser } from '../stores/auth'
-import { api, errorMessage } from '../lib/api'
-import { schoolMedia } from '../content/schoolMedia'
-import UserAvatar from '../components/UserAvatar.vue'
-import AccountPasswordForm from '../components/AccountPasswordForm.vue'
-import type { Profile } from '../types'
+import { ref } from 'vue';
+import { ArrowUpRight, Camera, Trash2, Upload } from '@lucide/vue';
+import { currentUser } from '../stores/auth';
+import { api, errorMessage } from '../lib/api';
+import { schoolMedia } from '../content/schoolMedia';
+import UserAvatar from '../components/UserAvatar.vue';
+import AccountPasswordForm from '../components/AccountPasswordForm.vue';
+import type { Profile } from '../types';
 
 const roleNames: Record<string, string> = {
   STUDENT: '学生',
@@ -23,62 +23,62 @@ const roleNames: Record<string, string> = {
   REPAIR_TECHNICIAN: '维修人员',
   CONTENT_EDITOR: '内容编辑',
   CONTENT_REVIEWER: '内容审核',
-}
+};
 
-const uploading = ref(false)
-const feedback = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
+const uploading = ref(false);
+const feedback = ref('');
+const fileInput = ref<HTMLInputElement | null>(null);
 
 async function handleAvatarChange(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file) return
+  const input = event.target as HTMLInputElement;
+  const file = input.files?.[0];
+  if (!file) return;
 
-  feedback.value = ''
+  feedback.value = '';
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    feedback.value = '仅支持 PNG、JPEG 或 WebP 格式的头像图片'
-    input.value = ''
-    return
+    feedback.value = '仅支持 PNG、JPEG 或 WebP 格式的头像图片';
+    input.value = '';
+    return;
   }
   if (file.size > 2 * 1024 * 1024) {
-    feedback.value = '头像图片不能超过 2 MB'
-    input.value = ''
-    return
+    feedback.value = '头像图片不能超过 2 MB';
+    input.value = '';
+    return;
   }
 
-  const formData = new FormData()
-  formData.append('file', file)
+  const formData = new FormData();
+  formData.append('file', file);
 
-  uploading.value = true
+  uploading.value = true;
   try {
     const updated = await api<Profile>('/me/avatar', {
       method: 'POST',
       body: formData,
-    })
-    currentUser.value = updated
-    feedback.value = ''
+    });
+    currentUser.value = updated;
+    feedback.value = '';
   } catch (cause) {
-    feedback.value = errorMessage(cause)
+    feedback.value = errorMessage(cause);
   } finally {
-    uploading.value = false
-    input.value = ''
+    uploading.value = false;
+    input.value = '';
   }
 }
 
 async function handleRemoveAvatar() {
-  if (!currentUser.value?.avatarUrl) return
-  uploading.value = true
-  feedback.value = ''
+  if (!currentUser.value?.avatarUrl) return;
+  uploading.value = true;
+  feedback.value = '';
   try {
     const updated = await api<Profile>('/me/avatar', {
       method: 'DELETE',
-    })
-    currentUser.value = updated
-    feedback.value = ''
+    });
+    currentUser.value = updated;
+    feedback.value = '';
   } catch (cause) {
-    feedback.value = errorMessage(cause)
+    feedback.value = errorMessage(cause);
   } finally {
-    uploading.value = false
+    uploading.value = false;
   }
 }
 </script>
@@ -111,12 +111,7 @@ async function handleRemoveAvatar() {
             <span class="role-pill">{{ currentUser?.roles.map(role => roleNames[role] ?? role).join(' · ') }}</span>
           </p>
           <div class="avatar-action-row">
-            <button
-              class="button avatar-btn upload"
-              type="button"
-              :disabled="uploading"
-              @click="fileInput?.click()"
-            >
+            <button class="button avatar-btn upload" type="button" :disabled="uploading" @click="fileInput?.click()">
               <Upload :size="14" aria-hidden="true" />
               <span>{{ uploading ? '正在上传…' : '更换头像' }}</span>
             </button>
@@ -138,13 +133,34 @@ async function handleRemoveAvatar() {
       </div>
 
       <dl v-if="currentUser" class="profile-list">
-        <div><dt>姓名</dt><dd>{{ currentUser.fullName }}</dd></div>
-        <div><dt>账号</dt><dd>{{ currentUser.username }}</dd></div>
-        <div><dt>学号 / 工号</dt><dd>{{ currentUser.identityNumber }}</dd></div>
-        <div><dt>所属校区</dt><dd>{{ currentUser.campusName ?? '未设置' }}</dd></div>
-        <div><dt>所属院系</dt><dd>{{ currentUser.departmentName ?? '未设置' }}</dd></div>
-        <div><dt>行政班</dt><dd>{{ currentUser.className ?? '不适用' }}</dd></div>
-        <div class="profile-full-item"><dt>身份角色</dt><dd>{{ currentUser.roles.map(role => roleNames[role] ?? role).join('、') }}</dd></div>
+        <div>
+          <dt>姓名</dt>
+          <dd>{{ currentUser.fullName }}</dd>
+        </div>
+        <div>
+          <dt>账号</dt>
+          <dd>{{ currentUser.username }}</dd>
+        </div>
+        <div>
+          <dt>学号 / 工号</dt>
+          <dd>{{ currentUser.identityNumber }}</dd>
+        </div>
+        <div>
+          <dt>所属校区</dt>
+          <dd>{{ currentUser.campusName ?? '未设置' }}</dd>
+        </div>
+        <div>
+          <dt>所属院系</dt>
+          <dd>{{ currentUser.departmentName ?? '未设置' }}</dd>
+        </div>
+        <div>
+          <dt>行政班</dt>
+          <dd>{{ currentUser.className ?? '不适用' }}</dd>
+        </div>
+        <div class="profile-full-item">
+          <dt>身份角色</dt>
+          <dd>{{ currentUser.roles.map(role => roleNames[role] ?? role).join('、') }}</dd>
+        </div>
       </dl>
       <p class="data-note">当前资料为毕业设计演示账号信息。</p>
     </section>
@@ -157,10 +173,13 @@ async function handleRemoveAvatar() {
       <div class="scenic-body">
         <div>
           <div class="scenic-motto">励学 · 敦行 · 明理 · 至善</div>
-          <p class="scenic-desc">郑州工业应用技术学院坐落于郑州市南大学城。笃学尚行、求真至善，在静谧优雅的校园环境中，专注探求学业新知与专业实践。</p>
+          <p class="scenic-desc">
+            郑州工业应用技术学院坐落于郑州市南大学城。笃学尚行、求真至善，在静谧优雅的校园环境中，专注探求学业新知与专业实践。
+          </p>
         </div>
         <RouterLink to="/campus/explore" class="scenic-link">
-          进入 3D 校园探索 <ArrowUpRight :size="14" aria-hidden="true" />
+          进入 3D 校园探索
+          <ArrowUpRight :size="14" aria-hidden="true" />
         </RouterLink>
       </div>
     </aside>
@@ -179,8 +198,14 @@ async function handleRemoveAvatar() {
 .profile-info-panel {
   padding: 30px 34px;
 }
-.profile-password-panel { grid-column: 1 / -1; padding: 4px 34px 28px; }
-.profile-password-panel :deep(.password-section) { border-top: 0; margin-top: 0; }
+.profile-password-panel {
+  grid-column: 1 / -1;
+  padding: 4px 34px 28px;
+}
+.profile-password-panel :deep(.password-section) {
+  border-top: 0;
+  margin-top: 0;
+}
 
 /* Avatar header layout */
 .profile-avatar-header {
@@ -204,14 +229,18 @@ async function handleRemoveAvatar() {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: var(--brand, #244b78);
-  color: #fff;
+  background: var(--brand, var(--color-brand));
+  color: var(--color-white);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 0 0 2px #ffffff;
-  transition: transform 0.15s ease, background-color 0.15s ease;
+  box-shadow:
+    0 2px 6px rgb(0, 0, 0, 0.18),
+    0 0 0 2px var(--color-white);
+  transition:
+    transform 0.15s ease,
+    background-color 0.15s ease;
 }
 
 .avatar-camera-btn:hover {
@@ -232,7 +261,7 @@ async function handleRemoveAvatar() {
   margin: 0 0 6px;
   font-size: 24px;
   font-weight: 600;
-  color: #1e293b;
+  color: var(--color-ink);
 }
 
 .account-identity-row {
@@ -241,8 +270,8 @@ async function handleRemoveAvatar() {
   align-items: center;
   gap: 12px;
   margin: 0 0 14px;
-  font-size: 13px;
-  color: #64748b;
+  font-size: var(--text-supporting);
+  color: var(--color-text-secondary);
 }
 
 .user-id {
@@ -250,11 +279,11 @@ async function handleRemoveAvatar() {
 }
 
 .role-pill {
-  font-size: 11px;
-  background: #f1f5f9;
-  color: #475569;
+  font-size: var(--text-meta);
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .avatar-action-row {
@@ -266,25 +295,25 @@ async function handleRemoveAvatar() {
 
 .avatar-btn {
   padding: 6px 14px;
-  font-size: 12px;
+  font-size: var(--text-supporting);
   height: 32px;
 }
 
 .avatar-btn.upload {
-  background: #f8fafc;
-  border-color: #cbd5e1;
-  color: #334155;
+  background: var(--color-surface);
+  border-color: var(--color-border-strong);
+  color: var(--color-ink);
 }
 
 .avatar-btn.upload:hover {
-  background: #f1f5f9;
-  color: #1e293b;
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
 }
 
 .avatar-btn.remove {
   background: transparent;
-  border-color: #e2e8f0;
-  color: #64748b;
+  border-color: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .avatar-btn.remove:hover {
@@ -296,13 +325,13 @@ async function handleRemoveAvatar() {
 .feedback-banner {
   margin: 10px 0 0;
   padding: 6px 12px;
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-supporting);
   line-height: 1.5;
 }
 
 .feedback-banner.error {
-  background: #fef2f2;
+  background: var(--color-danger-soft);
   color: #991b1b;
   border: 1px solid #fecaca;
 }
@@ -321,15 +350,15 @@ async function handleRemoveAvatar() {
 }
 
 .profile-list dt {
-  font-size: 12px;
+  font-size: var(--text-supporting);
   color: #788494;
   margin-bottom: 4px;
 }
 
 .profile-list dd {
   margin: 0;
-  font-size: 14px;
-  color: #1e293b;
+  font-size: var(--text-body);
+  color: var(--color-ink);
   font-weight: 500;
 }
 
@@ -338,8 +367,8 @@ async function handleRemoveAvatar() {
 }
 
 .data-note {
-  font-size: 11px;
-  color: #94a3b8;
+  font-size: var(--text-meta);
+  color: var(--color-text-tertiary);
   margin-top: 20px;
   border-top: 1px dashed #edf2f7;
   padding-top: 12px;
@@ -347,9 +376,9 @@ async function handleRemoveAvatar() {
 
 /* Right: Campus scenic card */
 .profile-scenic-card {
-  background: #fff;
-  border: 1px solid #dfe5ec;
-  border-radius: 9px;
+  background: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -358,7 +387,7 @@ async function handleRemoveAvatar() {
 .scenic-photo-wrap {
   position: relative;
   height: 220px;
-  background: #244b78;
+  background: var(--color-brand);
   overflow: hidden;
 }
 
@@ -373,12 +402,12 @@ async function handleRemoveAvatar() {
   position: absolute;
   top: 14px;
   left: 14px;
-  background: rgba(20, 35, 55, 0.72);
+  background: rgb(20, 35, 55, 0.72);
   backdrop-filter: blur(8px);
-  color: #fff;
-  font-size: 11px;
+  color: var(--color-white);
+  font-size: var(--text-meta);
   padding: 4px 10px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   letter-spacing: 1px;
 }
 
@@ -391,17 +420,17 @@ async function handleRemoveAvatar() {
 }
 
 .scenic-motto {
-  font-family: 'Songti SC', 'STSong', 'SimSun', serif;
-  font-size: 18px;
+  font-family: var(--campus-display-serif);
+  font-size: var(--text-title-sm);
   font-weight: 600;
-  color: #243c55;
-  letter-spacing: .06em;
+  color: var(--color-heading);
+  letter-spacing: 0.06em;
   margin-bottom: 8px;
 }
 
 .scenic-desc {
-  font-size: 12px;
-  color: #64748b;
+  font-size: var(--text-supporting);
+  color: var(--color-text-secondary);
   line-height: 1.8;
   margin: 0;
 }
@@ -410,8 +439,8 @@ async function handleRemoveAvatar() {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
-  color: #244b78;
+  font-size: var(--text-supporting);
+  color: var(--color-brand);
   text-decoration: none;
   font-weight: 600;
   margin-top: 18px;

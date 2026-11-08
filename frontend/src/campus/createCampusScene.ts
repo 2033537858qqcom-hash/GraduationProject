@@ -9,7 +9,12 @@ import { campusSceneData } from './campusSceneData'
 import type { CampusId } from './campusSceneData'
 
 export type CampusView = 'overview' | 'top' | 'detail' | 'free'
-export interface PlaceLabel { id: string; left: number; top: number; visible: boolean }
+export interface PlaceLabel {
+  id: string
+  left: number
+  top: number
+  visible: boolean
+}
 export interface SceneCallbacks {
   select: (id: string) => void
   labels: (labels: PlaceLabel[]) => void
@@ -20,61 +25,102 @@ export interface SceneCallbacks {
 
 export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, options: { campusId?: CampusId } = {}) {
   const { places: campusPlaces, bounds } = campusSceneData(options.campusId)
-  const overviewTarget = options.campusId === 'WEST' ? new THREE.Vector3(-15,-10,5) : eastOverviewTarget
+  const overviewTarget = options.campusId === 'WEST' ? new THREE.Vector3(-15, -10, 5) : eastOverviewTarget
   const scene = new THREE.Scene()
   const camera = new THREE.PerspectiveCamera(38, 1, 0.5, options.campusId === 'WEST' ? 2500 : 1200)
   const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, logarithmicDepthBuffer: true })
-  let disposed = false, contextLost = false, frame = 0
+  let disposed = false,
+    contextLost = false,
+    frame = 0
   let stopSiteMotion = () => {}
   const resize = new ResizeObserver(size)
-  let width = 1, height = 1, view: CampusView = 'overview', current: CampusPlace | undefined
-  let transition: { start: number; from: THREE.Vector3; to: THREE.Vector3; targetFrom: THREE.Vector3; targetTo: THREE.Vector3 } | undefined
+  let width = 1,
+    height = 1,
+    view: CampusView = 'overview',
+    current: CampusPlace | undefined
+  let transition:
+    | { start: number; from: THREE.Vector3; to: THREE.Vector3; targetFrom: THREE.Vector3; targetTo: THREE.Vector3 }
+    | undefined
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
-  const raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2(), projected = new THREE.Vector3()
-  const labelRay = new THREE.Ray(), labelAnchor = new THREE.Vector3(), obstruction = new THREE.Vector3()
-  const labelOccluders = campusPlaces.filter(place => place.kind === 'building' && place.locationType === 'outline').map(place => ({ id: place.id,
-    bounds: new THREE.Box3(new THREE.Vector3(place.x - place.width / 2, 0, place.z - place.depth / 2),
-      new THREE.Vector3(place.x + place.width / 2, place.height + 3, place.z + place.depth / 2)),
-  }))
+  const raycaster = new THREE.Raycaster(),
+    pointer = new THREE.Vector2(),
+    projected = new THREE.Vector3()
+  const labelRay = new THREE.Ray(),
+    labelAnchor = new THREE.Vector3(),
+    obstruction = new THREE.Vector3()
+  const labelOccluders = campusPlaces
+    .filter(place => place.kind === 'building' && place.locationType === 'outline')
+    .map(place => ({
+      id: place.id,
+      bounds: new THREE.Box3(
+        new THREE.Vector3(place.x - place.width / 2, 0, place.z - place.depth / 2),
+        new THREE.Vector3(place.x + place.width / 2, place.height + 3, place.z + place.depth / 2),
+      ),
+    }))
   const activePointers = new Set<number>()
-  const westLabelOrder=['west-library','west-chengyi','west-information','west-tech-center','west-mingde',
-    'west-sports-ground','west-siyuan-canteen','west-steel-canteen','west-incubator-1','west-dorm-24']
-  let down = { x: 0, y: 0 }, gesture = false
+  const westLabelOrder = [
+    'west-library',
+    'west-chengyi',
+    'west-information',
+    'west-tech-center',
+    'west-mingde',
+    'west-sports-ground',
+    'west-siyuan-canteen',
+    'west-steel-canteen',
+    'west-incubator-1',
+    'west-dorm-24',
+  ]
+  let down = { x: 0, y: 0 },
+    gesture = false
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFShadowMap
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   renderer.shadowMap.autoUpdate = false
   renderer.toneMapping = THREE.ACESFilmicToneMapping
-  renderer.toneMappingExposure = 1.18
+  renderer.toneMappingExposure = 1.02
   renderer.domElement.setAttribute('aria-label', '三维校园场景。拖动旋转，滚轮缩放；也可使用场景按钮和地点目录探索。')
   host.appendChild(renderer.domElement)
   const controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true; controls.dampingFactor = 0.09
-  controls.minDistance = 30; controls.maxDistance = options.campusId === 'WEST' ? 1800 : 760
-  controls.minPolarAngle = 0.035; controls.maxPolarAngle = Math.PI / 2.08
+  controls.enableDamping = true
+  controls.dampingFactor = 0.09
+  controls.minDistance = 30
+  controls.maxDistance = options.campusId === 'WEST' ? 1800 : 760
+  controls.minPolarAngle = 0.035
+  controls.maxPolarAngle = Math.PI / 2.08
   controls.maxTargetRadius = options.campusId === 'WEST' ? 180 : 118
   controls.cursor.set(0, 0, 0)
   controls.screenSpacePanning = false
   controls.zoomToCursor = true
-  const ambient = new THREE.HemisphereLight('#f2f7fd', '#8fa78a', 2.35)
-  const sun = new THREE.DirectionalLight('#fff8ea', 3.0)
-  sun.position.set(-65, 110, 65)
-  sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048)
+  const ambient = new THREE.HemisphereLight('#f1f2e9', '#6e8069', 1.65)
+  const sun = new THREE.DirectionalLight('#fff0d9', 2.6)
+  sun.position.set(-85, 95, 55)
+  sun.castShadow = true
+  sun.shadow.mapSize.set(2048, 2048)
   Object.assign(sun.shadow.camera, { left: -135, right: 135, top: 115, bottom: -115, near: 1, far: 260 })
-  sun.shadow.normalBias = 0.08; sun.shadow.bias = -0.0001
+  sun.shadow.normalBias = 0.08
+  sun.shadow.bias = -0.0001
   scene.add(ambient, sun)
-  scene.background = new THREE.Color('#f0f5f8')
-  scene.fog = new THREE.Fog('#f0f5f8', 850, 1300)
+  scene.background = new THREE.Color('#e7e9df')
+  scene.fog = new THREE.Fog('#e7e9df', 850, 1300)
   let model: ReturnType<typeof buildCampus>
-  try { model = buildCampus(scene, options) } catch (error) { dispose(); throw error }
+  try {
+    model = buildCampus(scene, options)
+  } catch (error) {
+    dispose()
+    throw error
+  }
   renderer.shadowMap.needsUpdate = true
 
   function invalidate() {
     if (!frame && !disposed && !contextLost && !document.hidden) frame = requestAnimationFrame(render)
   }
-  function setView(next: CampusView) { view = next; callbacks.view(next) }
+  function setView(next: CampusView) {
+    view = next
+    callbacks.view(next)
+  }
   function stopTransition() {
-    transition = undefined; callbacks.moving(false)
+    transition = undefined
+    callbacks.moving(false)
   }
   function render(time: number) {
     frame = 0
@@ -100,25 +146,79 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
       const anchorHeight = place.height + 4
       labelAnchor.set(place.x, anchorHeight, place.z)
       projected.copy(labelAnchor).project(camera)
-      const important = (place.campusId === 'WEST' && !place.id.startsWith('west-road-')) || ['east-library', 'south-gate', 'north-gate', 'east-gate', 'east-sports', 'east-square', 'east-art', 'east-wenhua', 'east-shuhua', 'east-gym', 'east-water', 'east-h1', 'east-h2', 'east-affairs', 'east-admin', 'east-jingyi', 'east-jinxiu-dining', 'east-jinxiu', 'east-canteen-wenhua', 'east-auditorium'].includes(place.id)
-      const mobile = [...westLabelOrder,'east-library', 'south-gate', 'east-gate', 'east-sports', 'east-square', 'east-gym', 'east-jinxiu-dining', 'east-jingyi', 'east-water'].includes(place.id)
+      const important =
+        (place.campusId === 'WEST' && !place.id.startsWith('west-road-')) ||
+        [
+          'east-library',
+          'south-gate',
+          'north-gate',
+          'east-gate',
+          'east-sports',
+          'east-square',
+          'east-art',
+          'east-wenhua',
+          'east-shuhua',
+          'east-gym',
+          'east-water',
+          'east-h1',
+          'east-h2',
+          'east-affairs',
+          'east-admin',
+          'east-jingyi',
+          'east-jinxiu-dining',
+          'east-jinxiu',
+          'east-canteen-wenhua',
+          'east-auditorium',
+        ].includes(place.id)
+      const mobile = [
+        ...westLabelOrder,
+        'east-library',
+        'south-gate',
+        'east-gate',
+        'east-sports',
+        'east-square',
+        'east-gym',
+        'east-jinxiu-dining',
+        'east-jingyi',
+        'east-water',
+      ].includes(place.id)
       const distance = camera.position.distanceTo(new THREE.Vector3(place.x, place.height, place.z))
       const anchorDistance = camera.position.distanceTo(labelAnchor)
       labelRay.set(camera.position, labelAnchor.clone().sub(camera.position).normalize())
-      const occluded = labelOccluders.some(other => other.id !== place.id &&
-        labelRay.intersectBox(other.bounds, obstruction) && obstruction.distanceTo(camera.position) < anchorDistance - 1)
-      return { id: place.id, left: (projected.x + 1) * width / 2, top: (1 - projected.y) * height / 2,
-        visible: projected.z > -1 && projected.z < 1 && Math.abs(projected.x) < 0.88 && Math.abs(projected.y) < 0.86 &&
-          (!occluded || current?.id === place.id) && (current?.id === place.id || (distance > 150 ? important && (width > 600 || mobile) : distance < 110)) }
+      const occluded = labelOccluders.some(
+        other =>
+          other.id !== place.id &&
+          labelRay.intersectBox(other.bounds, obstruction) &&
+          obstruction.distanceTo(camera.position) < anchorDistance - 1,
+      )
+      return {
+        id: place.id,
+        left: ((projected.x + 1) * width) / 2,
+        top: ((1 - projected.y) * height) / 2,
+        visible:
+          projected.z > -1 &&
+          projected.z < 1 &&
+          Math.abs(projected.x) < 0.88 &&
+          Math.abs(projected.y) < 0.86 &&
+          (!occluded || current?.id === place.id) &&
+          (current?.id === place.id || (distance > 150 ? important && (width > 600 || mobile) : distance < 110)),
+      }
     })
     const occupied: PlaceLabel[] = []
     // The selected place gets priority; suppress overlapping labels and those hidden behind buildings.
-    const priority=(id:string)=>{const index=westLabelOrder.indexOf(id);return index<0?100:index}
-    const orderedLabels = [...nextLabels].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id) ||
-      (options.campusId==='WEST'?priority(a.id)-priority(b.id):0))
+    const priority = (id: string) => {
+      const index = westLabelOrder.indexOf(id)
+      return index < 0 ? 100 : index
+    }
+    const orderedLabels = [...nextLabels].sort(
+      (a, b) =>
+        Number(b.id === current?.id) - Number(a.id === current?.id) ||
+        (options.campusId === 'WEST' ? priority(a.id) - priority(b.id) : 0),
+    )
     orderedLabels.forEach(label => {
       if (!label.visible) return
-      if (occupied.some(other => Math.abs(other.left - label.left) < 86 && Math.abs(other.top - label.top) < 26)) label.visible = false
+      if (occupied.some(other => Math.abs(other.left - label.left) < 86 && Math.abs(other.top - label.top) < 26))
+        label.visible = false
       else occupied.push(label)
     })
     callbacks.labels(nextLabels)
@@ -130,15 +230,31 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
   function move(position: THREE.Vector3, target: THREE.Vector3, nextView: CampusView, instant = false) {
     stopTransition()
     // Flush OrbitControls' residual damping before starting an intentional camera move.
-    const damping = controls.enableDamping; controls.enableDamping = false; controls.update(); controls.enableDamping = damping
+    const damping = controls.enableDamping
+    controls.enableDamping = false
+    controls.update()
+    controls.enableDamping = damping
     setView(nextView)
-    if (instant || reduced.matches || publicReducedMotion.value) { camera.position.copy(position); controls.target.copy(target); controls.update(); invalidate(); return }
-    transition = { start: performance.now(), from: camera.position.clone(), to: position, targetFrom: controls.target.clone(), targetTo: target }
-    callbacks.moving(true); invalidate()
+    if (instant || reduced.matches || publicReducedMotion.value) {
+      camera.position.copy(position)
+      controls.target.copy(target)
+      controls.update()
+      invalidate()
+      return
+    }
+    transition = {
+      start: performance.now(),
+      from: camera.position.clone(),
+      to: position,
+      targetFrom: controls.target.clone(),
+      targetTo: target,
+    }
+    callbacks.moving(true)
+    invalidate()
   }
   function pick(event: PointerEvent) {
     const rect = renderer.domElement.getBoundingClientRect()
-    pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1)
+    pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, (-(event.clientY - rect.top) / rect.height) * 2 + 1)
     raycaster.setFromCamera(pointer, camera)
     return raycaster.intersectObjects(model.pickables, false)[0]?.object.userData.placeId as string | undefined
   }
@@ -155,37 +271,58 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
     const id = pick(event)
     if (id) callbacks.select(id)
   }
-  function pointerCancel(event: PointerEvent) { activePointers.delete(event.pointerId); if (!activePointers.size) gesture = false }
+  function pointerCancel(event: PointerEvent) {
+    activePointers.delete(event.pointerId)
+    if (!activePointers.size) gesture = false
+  }
   function pointerMove(event: PointerEvent) {
     if (activePointers.size || event.pointerType === 'touch') return
     renderer.domElement.style.cursor = pick(event) ? 'pointer' : 'grab'
   }
-  function interaction() { stopTransition(); setView('free'); invalidate() }
-  function visibility() { if (document.hidden) { cancelAnimationFrame(frame); frame = 0 } else invalidate() }
+  function interaction() {
+    stopTransition()
+    setView('free')
+    invalidate()
+  }
+  function visibility() {
+    if (document.hidden) {
+      cancelAnimationFrame(frame)
+      frame = 0
+    } else invalidate()
+  }
   function onContextLost(event: Event) {
-    event.preventDefault(); contextLost = true; cancelAnimationFrame(frame); frame = 0; stopTransition()
+    event.preventDefault()
+    contextLost = true
+    cancelAnimationFrame(frame)
+    frame = 0
+    stopTransition()
     callbacks.unavailable('三维画面暂时中断，请重新加载场景。地点目录仍可使用。')
   }
   function size() {
     if (disposed) return
-    width = Math.max(1, host.clientWidth); height = Math.max(1, host.clientHeight)
+    width = Math.max(1, host.clientWidth)
+    height = Math.max(1, host.clientHeight)
     renderer.setSize(width, height)
-    camera.aspect = width / height; camera.updateProjectionMatrix()
+    camera.aspect = width / height
+    camera.updateProjectionMatrix()
     if (view === 'overview') move(overviewPosition(), overviewTarget, 'overview', true)
     else if (view === 'top') top(true)
     invalidate()
   }
   function top(instant = false) {
-    const distance = options.campusId === 'WEST'
-      ? Math.max(345, (bounds.maxZ-bounds.minZ)*1.8, (bounds.maxX-bounds.minX)*1.8 / camera.aspect)
-      : Math.max(345, 385 / camera.aspect)
-    const center = new THREE.Vector3((bounds.minX+bounds.maxX)/2,0,(bounds.minZ+bounds.maxZ)/2)
-    move(center.clone().add(new THREE.Vector3(0,distance,0.1)), center, 'top', instant)
+    const distance =
+      options.campusId === 'WEST'
+        ? Math.max(345, (bounds.maxZ - bounds.minZ) * 1.8, ((bounds.maxX - bounds.minX) * 1.8) / camera.aspect)
+        : Math.max(345, 385 / camera.aspect)
+    const center = new THREE.Vector3((bounds.minX + bounds.maxX) / 2, 0, (bounds.minZ + bounds.maxZ) / 2)
+    move(center.clone().add(new THREE.Vector3(0, distance, 0.1)), center, 'top', instant)
   }
   function onReducedMotion() {
-    if ((reduced.matches || publicReducedMotion.value) && transition) move(transition.to, transition.targetTo, view, true)
+    if ((reduced.matches || publicReducedMotion.value) && transition)
+      move(transition.to, transition.targetTo, view, true)
   }
-  controls.addEventListener('change', invalidate); controls.addEventListener('start', interaction)
+  controls.addEventListener('change', invalidate)
+  controls.addEventListener('start', interaction)
   renderer.domElement.addEventListener('pointerdown', pointerDown)
   renderer.domElement.addEventListener('pointerup', pointerUp)
   renderer.domElement.addEventListener('pointercancel', pointerCancel)
@@ -194,36 +331,48 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
   document.addEventListener('visibilitychange', visibility)
   reduced.addEventListener('change', onReducedMotion)
   stopSiteMotion = watch(publicReducedMotion, onReducedMotion)
-  resize.observe(host); size()
+  resize.observe(host)
+  size()
 
   function dispose() {
-    disposed = true; cancelAnimationFrame(frame)
+    disposed = true
+    cancelAnimationFrame(frame)
     // Initialization can fail before the observer has been created.
     resize?.disconnect()
     document.removeEventListener('visibilitychange', visibility)
     reduced.removeEventListener('change', onReducedMotion)
     stopSiteMotion()
-    controls.removeEventListener('change', invalidate); controls.removeEventListener('start', interaction); controls.dispose()
+    controls.removeEventListener('change', invalidate)
+    controls.removeEventListener('start', interaction)
+    controls.dispose()
     renderer.domElement.removeEventListener('pointerdown', pointerDown)
     renderer.domElement.removeEventListener('pointerup', pointerUp)
     renderer.domElement.removeEventListener('pointercancel', pointerCancel)
     renderer.domElement.removeEventListener('pointermove', pointerMove)
     renderer.domElement.removeEventListener('webglcontextlost', onContextLost)
-    const geometries = new Set<THREE.BufferGeometry>(), materials = new Set<THREE.Material>()
+    const geometries = new Set<THREE.BufferGeometry>(),
+      materials = new Set<THREE.Material>()
     scene.traverse(object => {
       if (object instanceof THREE.Mesh) {
         if (object instanceof THREE.InstancedMesh) object.dispose()
         geometries.add(object.geometry)
-        for (const material of Array.isArray(object.material) ? object.material : [object.material]) materials.add(material)
+        for (const material of Array.isArray(object.material) ? object.material : [object.material])
+          materials.add(material)
       }
     })
-    geometries.forEach(geometry => geometry.dispose()); materials.forEach(material => material.dispose())
-    model?.dispose(); sun.shadow.dispose(); renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove()
+    geometries.forEach(geometry => geometry.dispose())
+    materials.forEach(material => material.dispose())
+    model?.dispose()
+    sun.shadow.dispose()
+    renderer.dispose()
+    renderer.forceContextLoss()
+    renderer.domElement.remove()
   }
   return {
     dispose,
     select(id: string | null) {
-      current = campusPlaces.find(place => place.id === id); model.select(current)
+      current = campusPlaces.find(place => place.id === id)
+      model.select(current)
       if (!current) {
         controls.minDistance = 30
         move(overviewPosition(), overviewTarget, 'overview')
@@ -235,20 +384,33 @@ export function createCampusScene(host: HTMLElement, callbacks: SceneCallbacks, 
       controls.minDistance = Math.max(22, extent * 0.65 + 8)
       move(target.clone().add(new THREE.Vector3(distance * 0.85, distance * 0.83, distance)), target, 'detail')
     },
-    overview() { move(overviewPosition(), overviewTarget, 'overview') },
+    overview() {
+      move(overviewPosition(), overviewTarget, 'overview')
+    },
     top,
     zoom(direction: 'in' | 'out') {
-      stopTransition(); setView('free')
+      stopTransition()
+      setView('free')
       const offset = camera.position.clone().sub(controls.target)
-      offset.setLength(THREE.MathUtils.clamp(offset.length() * (direction === 'in' ? 0.8 : 1.25), controls.minDistance, controls.maxDistance))
+      offset.setLength(
+        THREE.MathUtils.clamp(
+          offset.length() * (direction === 'in' ? 0.8 : 1.25),
+          controls.minDistance,
+          controls.maxDistance,
+        ),
+      )
       move(controls.target.clone().add(offset), controls.target.clone(), 'free')
     },
     setEvening(evening: boolean) {
-      const background = evening ? '#263b55' : '#e8eef0'
-      scene.background = new THREE.Color(background); scene.fog = new THREE.Fog(background, 850, 1200)
-      ambient.color.set(evening ? '#b7c9ef' : '#f3f7ff'); ambient.intensity = evening ? 1.25 : 2.3
-      sun.color.set(evening ? '#ffc999' : '#fff2dc'); sun.intensity = evening ? 1.6 : 3.1
-      model.setEvening(evening); invalidate()
+      const background = evening ? '#263b45' : '#e7e9df'
+      scene.background = new THREE.Color(background)
+      scene.fog = new THREE.Fog(background, 850, 1200)
+      ambient.color.set(evening ? '#b7c9df' : '#f1f2e9')
+      ambient.intensity = evening ? 1.05 : 1.65
+      sun.color.set(evening ? '#ffc999' : '#fff0d9')
+      sun.intensity = evening ? 1.8 : 2.6
+      model.setEvening(evening)
+      invalidate()
     },
   }
 }

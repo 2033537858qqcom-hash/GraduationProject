@@ -1,101 +1,106 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { AlertCircle, CheckCircle2, Copy, Download, Search, ShieldCheck } from '@lucide/vue'
-import { api, errorMessage } from '../lib/api'
-import { useToast } from '../composables/useToast'
-import DownloadLink from '../components/DownloadLink.vue'
+import { onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { AlertCircle, CheckCircle2, Copy, Download, Search, ShieldCheck } from '@lucide/vue';
+import { api, errorMessage } from '../lib/api';
+import { useToast } from '../composables/useToast';
+import DownloadLink from '../components/DownloadLink.vue';
 
 interface VerificationResult {
-  valid: boolean
-  documentNumber: string
-  studentName: string
-  identityNumber: string
-  departmentName: string
-  majorName: string
-  className: string
-  campusName: string
-  issuedAt: string | null
-  message: string
+  valid: boolean;
+  documentNumber: string;
+  studentName: string;
+  identityNumber: string;
+  departmentName: string;
+  majorName: string;
+  className: string;
+  campusName: string;
+  issuedAt: string | null;
+  message: string;
 }
 
-const route = useRoute()
-const router = useRouter()
-const inputCode = ref('')
-const loading = ref(false)
-const searched = ref(false)
-const error = ref('')
-const copied = ref(false)
-const result = ref<VerificationResult | null>(null)
+const route = useRoute();
+const router = useRouter();
+const inputCode = ref('');
+const loading = ref(false);
+const searched = ref(false);
+const error = ref('');
+const copied = ref(false);
+const result = ref<VerificationResult | null>(null);
 
 function formatTime(iso: string | null) {
-  if (!iso) return ''
-  return iso.slice(0, 16).replace('T', ' ')
+  if (!iso) return '';
+  return iso.slice(0, 16).replace('T', ' ');
 }
 
 async function doVerify(codeToVerify?: string) {
-  const code = (codeToVerify ?? inputCode.value).trim()
+  const code = (codeToVerify ?? inputCode.value).trim();
   if (!code) {
-    error.value = '请输入在校证明防伪编码'
-    result.value = null
-    return
+    error.value = '请输入在校证明防伪编码';
+    result.value = null;
+    return;
   }
-  loading.value = true
-  error.value = ''
-  searched.value = true
+  loading.value = true;
+  error.value = '';
+  searched.value = true;
   try {
-    const data = await api<VerificationResult>(`/public/certificates/verify?number=${encodeURIComponent(code)}`)
-    result.value = data
+    const data = await api<VerificationResult>(`/public/certificates/verify?number=${encodeURIComponent(code)}`);
+    result.value = data;
     if (!data.valid) {
-      error.value = data.message || '未检索到有效证明'
+      error.value = data.message || '未检索到有效证明';
     } else {
-      inputCode.value = data.documentNumber
+      inputCode.value = data.documentNumber;
     }
   } catch (cause) {
-    error.value = errorMessage(cause)
-    result.value = null
+    error.value = errorMessage(cause);
+    result.value = null;
   } finally {
-    loading.value = false
+    loading.value = false;
   }
 }
 
 function handleSearch() {
   if (inputCode.value.trim()) {
-    void router.replace({ query: { number: inputCode.value.trim() } })
-    void doVerify(inputCode.value.trim())
+    void router.replace({ query: { number: inputCode.value.trim() } });
+    void doVerify(inputCode.value.trim());
   }
 }
 
-const toast = useToast()
+const toast = useToast();
 
 async function copyShareLink() {
-  const url = window.location.origin + '/verify/certificate?number=' + encodeURIComponent(result.value?.documentNumber ?? '')
+  const url =
+    window.location.origin + '/verify/certificate?number=' + encodeURIComponent(result.value?.documentNumber ?? '');
   try {
-    await navigator.clipboard.writeText(url)
-    copied.value = true
-    toast.success('验真链接已复制到剪贴板，可供扫码或转发核验')
-    setTimeout(() => { copied.value = false }, 2500)
+    await navigator.clipboard.writeText(url);
+    copied.value = true;
+    toast.success('验真链接已复制到剪贴板，可供扫码或转发核验');
+    setTimeout(() => {
+      copied.value = false;
+    }, 2500);
   } catch {
-    toast.info('请直接复制浏览器地址栏链接进行核验')
+    toast.info('请直接复制浏览器地址栏链接进行核验');
   }
 }
 
 onMounted(() => {
-  const queryNum = String(route.query.number ?? route.query.code ?? '').trim()
+  const queryNum = String(route.query.number ?? route.query.code ?? '').trim();
   if (queryNum) {
-    inputCode.value = queryNum
-    void doVerify(queryNum)
+    inputCode.value = queryNum;
+    void doVerify(queryNum);
   }
-})
+});
 
-watch(() => route.query.number, next => {
-  const val = String(next ?? '').trim()
-  if (val && val !== inputCode.value) {
-    inputCode.value = val
-    void doVerify(val)
-  }
-})
-
+watch(
+  () => route.query.number,
+  next => {
+    const val = String(next ?? '').trim();
+    if (val && val !== inputCode.value) {
+      inputCode.value = val;
+      void doVerify(val);
+    }
+  },
+);
 </script>
 
 <template>
@@ -163,7 +168,10 @@ watch(() => route.query.number, next => {
       <div class="verify-doc-title">
         <h2>在校证明核验报告（演示）</h2>
         <div class="verify-meta-line">
-          <span>防伪核验编号：<strong>{{ result.documentNumber }}</strong></span>
+          <span>
+            防伪核验编号：
+            <strong>{{ result.documentNumber }}</strong>
+          </span>
           <span>生成时间：{{ formatTime(result.issuedAt) }}</span>
         </div>
       </div>
@@ -200,9 +208,7 @@ watch(() => route.query.number, next => {
       <div class="verify-statement-row">
         <div class="verify-statement-text">
           <p class="statement-lead">核验证明结论：</p>
-          <p>
-            已在校园综合服务平台中匹配到已办结的演示证明记录。上方信息来自申请办理时的登记快照，姓名和学号已脱敏。
-          </p>
+          <p>已在校园综合服务平台中匹配到已办结的演示证明记录。上方信息来自申请办理时的登记快照，姓名和学号已脱敏。</p>
           <p class="statement-legal">
             本报告用于毕业设计功能展示，不代表学校正式学籍认证、电子签章或官方存证，不替代学校正式证明。
           </p>
@@ -212,7 +218,10 @@ watch(() => route.query.number, next => {
       <!-- Footer Note & Actions -->
       <footer class="verify-card-footer">
         <div class="audit-foot-info">
-          <span>记录状态：<strong>平台演示记录已办结</strong></span>
+          <span>
+            记录状态：
+            <strong>平台演示记录已办结</strong>
+          </span>
           <span>下载 PDF 后可打开打印</span>
         </div>
         <div class="verify-actions no-print">
@@ -220,8 +229,13 @@ watch(() => route.query.number, next => {
             <Copy :size="14" />
             <span>{{ copied ? '链接已复制' : '复制验真链接' }}</span>
           </button>
-          <DownloadLink class="button primary compact" :href="`/api/public/certificates/report?number=${encodeURIComponent(result.documentNumber)}`" expected-type="application/pdf">
-            <Download :size="14" />下载报告 PDF
+          <DownloadLink
+            class="button primary compact"
+            :href="`/api/public/certificates/report?number=${encodeURIComponent(result.documentNumber)}`"
+            expected-type="application/pdf"
+          >
+            <Download :size="14" />
+            下载报告 PDF
           </DownloadLink>
         </div>
       </footer>
@@ -233,7 +247,11 @@ watch(() => route.query.number, next => {
         <ShieldCheck :size="48" />
       </div>
       <h3>演示证明记录查询</h3>
-      <p>请输入校园综合服务平台演示证明中的编号（如 <code>DEMO-20261017-000001</code>）进行真伪查验。</p>
+      <p>
+        请输入校园综合服务平台演示证明中的编号（如
+        <code>DEMO-20261017-000001</code>
+        ）进行真伪查验。
+      </p>
     </div>
   </div>
 </template>
@@ -290,18 +308,20 @@ watch(() => route.query.number, next => {
 .search-input-wrap input {
   width: 100%;
   padding: 12px 14px 12px 42px;
-  font-size: 14px;
+  font-size: var(--text-body);
   font-family: inherit;
   border: 1px solid var(--line);
-  border-radius: 6px;
-  background: #fff;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
 }
 
 .search-input-wrap input:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgba(36, 75, 120, 0.15);
+  box-shadow: 0 0 0 3px rgb(36, 75, 120, 0.15);
 }
 
 .verify-alert {
@@ -312,17 +332,17 @@ watch(() => route.query.number, next => {
   border: 1px solid #f5c6cb;
   color: #721c24;
   padding: 16px 20px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 28px;
 }
 
 .verify-card {
   position: relative;
-  background: #fff;
+  background: var(--color-white);
   border: 1px solid #d4deea;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 36px 42px;
-  box-shadow: 0 8px 30px rgba(20, 43, 69, 0.06);
+  box-shadow: 0 8px 30px rgb(20, 43, 69, 0.06);
   overflow: hidden;
 }
 
@@ -351,7 +371,7 @@ watch(() => route.query.number, next => {
 
 .school-emboss .univ-cn {
   display: block;
-  font-size: 18px;
+  font-size: var(--text-title-sm);
   font-weight: 600;
   color: var(--brand);
   letter-spacing: 1px;
@@ -359,7 +379,7 @@ watch(() => route.query.number, next => {
 
 .school-emboss .univ-en {
   display: block;
-  font-size: 10px;
+  font-size: var(--text-meta);
   color: var(--muted);
   letter-spacing: 0.5px;
   margin-top: 2px;
@@ -373,8 +393,8 @@ watch(() => route.query.number, next => {
   color: #1e7e34;
   border: 1px solid #c3e6cb;
   padding: 5px 12px;
-  border-radius: 9999px;
-  font-size: 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-meta);
   font-weight: 500;
 }
 
@@ -393,7 +413,7 @@ watch(() => route.query.number, next => {
 .verify-meta-line {
   display: flex;
   gap: 24px;
-  font-size: 12px;
+  font-size: var(--text-supporting);
   color: var(--muted);
   flex-wrap: wrap;
 }
@@ -401,7 +421,7 @@ watch(() => route.query.number, next => {
 .verify-meta-line strong {
   color: var(--brand);
   font-family: monospace;
-  font-size: 13px;
+  font-size: var(--text-supporting);
 }
 
 .verify-facts-grid {
@@ -411,12 +431,12 @@ watch(() => route.query.number, next => {
   background: #e5ebf3;
   border: 1px solid #e5ebf3;
   margin-block: 28px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .fact-cell {
-  background: #fff;
+  background: var(--color-white);
   padding: 14px 18px;
   display: flex;
   flex-direction: column;
@@ -424,12 +444,12 @@ watch(() => route.query.number, next => {
 }
 
 .fact-label {
-  font-size: 11px;
+  font-size: var(--text-meta);
   color: var(--muted);
 }
 
 .fact-val {
-  font-size: 14px;
+  font-size: var(--text-body);
   color: #24292e;
 }
 
@@ -443,7 +463,7 @@ watch(() => route.query.number, next => {
 
 .verify-statement-text {
   flex: 1;
-  font-size: 13px;
+  font-size: var(--text-supporting);
   line-height: 1.8;
   color: #444d56;
 }
@@ -455,7 +475,7 @@ watch(() => route.query.number, next => {
 }
 
 .statement-legal {
-  font-size: 11px;
+  font-size: var(--text-meta);
   color: var(--muted);
   margin-top: 8px;
 }
@@ -464,7 +484,7 @@ watch(() => route.query.number, next => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid #edf0f4;
+  border-top: 1px solid var(--color-border);
   padding-top: 20px;
   gap: 16px;
   flex-wrap: wrap;
@@ -474,7 +494,7 @@ watch(() => route.query.number, next => {
   display: flex;
   gap: 10px 20px;
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: var(--text-meta);
   color: var(--muted);
 }
 
@@ -487,9 +507,9 @@ watch(() => route.query.number, next => {
 .verify-placeholder {
   text-align: center;
   padding: 60px 20px;
-  background: #fff;
+  background: var(--color-white);
   border: 1px dashed var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .placeholder-icon-ring {
@@ -505,14 +525,14 @@ watch(() => route.query.number, next => {
 }
 
 .verify-placeholder h3 {
-  font-size: 18px;
+  font-size: var(--text-title-sm);
   margin: 0 0 10px;
   color: var(--brand);
 }
 
 .verify-placeholder p {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--text-supporting);
   max-width: 500px;
   margin: 0 auto;
   line-height: 1.7;
@@ -520,9 +540,9 @@ watch(() => route.query.number, next => {
 
 .verify-placeholder code {
   color: var(--brand);
-  background: #edf3f9;
+  background: var(--color-surface-soft);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Print Friendly Styles */

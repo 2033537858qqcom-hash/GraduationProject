@@ -1,11 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  reservationStatuses,
-  reservationActions,
-  activityTypes,
-  reservationPassUrl,
-} from '../src/reservations.ts'
+import { reservationStatuses, reservationActions, activityTypes, reservationPassUrl } from '../src/reservations.ts'
 import { safeLoginDestination, safeAffairDestination } from '../src/lib/navigation.ts'
 import { affairTimelinePath } from '../src/lib/affairTimeline.ts'
 import { affairStatus, affairAction } from '../src/lib/affairs.ts'
@@ -50,10 +45,7 @@ test('affair unified mapping handles RESERVATION properly', () => {
 })
 
 test('reservation affair timeline path is strictly safe', () => {
-  assert.equal(
-    affairTimelinePath('RESERVATION', 12, 1),
-    '/affairs/mine/RESERVATION/12/timeline?page=1&pageSize=10',
-  )
+  assert.equal(affairTimelinePath('RESERVATION', 12, 1), '/affairs/mine/RESERVATION/12/timeline?page=1&pageSize=10')
   assert.equal(
     affairTimelinePath('RESERVATION', 12, 2, 3),
     '/affairs/mine/RESERVATION/12/timeline?page=2&pageSize=10&expectedVersion=3',
@@ -63,6 +55,12 @@ test('reservation affair timeline path is strictly safe', () => {
 test('navigation safe destination accepts portal and student-affairs reservation paths', () => {
   assert.equal(safeLoginDestination('/portal/reservations'), '/portal/reservations')
   assert.equal(safeLoginDestination('/student-affairs/reservations'), '/student-affairs/reservations')
-  assert.equal(safeAffairDestination('/portal/reservations?id=10&tab=details'), '/portal/reservations?id=10&tab=details')
-  assert.equal(safeAffairDestination('/student-affairs/reservations?id=10&tab=details'), '/student-affairs/reservations?id=10&tab=details')
+  assert.equal(
+    safeAffairDestination('/portal/reservations?id=10&tab=details'),
+    '/portal/reservations?id=10&tab=details',
+  )
+  assert.equal(
+    safeAffairDestination('/student-affairs/reservations?id=10&tab=details'),
+    '/student-affairs/reservations?id=10&tab=details',
+  )
 })

@@ -1,6 +1,9 @@
 import type { ManagedContent } from '../types.ts'
 
-export function contentActions(item: Pick<ManagedContent, 'status' | 'createdBy' | 'live'>, user: { id: number; permissions: readonly string[] } | null) {
+export function contentActions(
+  item: Pick<ManagedContent, 'status' | 'createdBy' | 'live'>,
+  user: { id: number; permissions: readonly string[] } | null,
+) {
   const edit = !!user?.permissions.includes('content:edit')
   const review = !!user?.permissions.includes('content:review')
   const own = !!user && item.createdBy === user.id

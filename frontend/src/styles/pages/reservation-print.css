@@ -1,0 +1,36 @@
+/* Print rules must escape Vue's scoped selectors and remove other content from pagination. */
+@media print {
+  body:has(#venue-access-pass) #app *:not(:has(#venue-access-pass)):not(#venue-access-pass):not(#venue-access-pass *) {
+    display: none !important;
+  }
+  body:has(#venue-access-pass) :is(#app, .portal-shell, .portal-main, .reservation-page, .reservation-detail-panel) {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  #venue-access-pass {
+    position: static !important;
+    width: auto !important;
+    margin: 0 !important;
+    padding: 8mm !important;
+    border: 1px solid #829b8d !important;
+    box-shadow: none !important;
+    background: white !important;
+    color: #172b25 !important;
+    overflow: visible !important;
+  }
+  #venue-access-pass .pass-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  #venue-access-pass :is(.pass-header, .pass-grid-item, .pass-footer) {
+    break-inside: avoid;
+  }
+  #venue-access-pass :is(.no-print, .pass-watermark) {
+    display: none !important;
+  }
+}

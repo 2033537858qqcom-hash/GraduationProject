@@ -1,0 +1,744 @@
+.reservation-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.reservation-nav-tabs {
+  margin-top: -6px;
+  margin-bottom: 6px;
+}
+
+/* Venue Catalog */
+.venue-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.category-pills {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--color-surface-soft);
+  padding: 3px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border);
+}
+
+.category-pills button {
+  position: relative;
+  z-index: 1;
+  padding: 6px 15px;
+  border-radius: var(--radius-pill);
+  border: 0;
+  background: transparent;
+  font-size: var(--text-supporting);
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none !important;
+}
+
+.category-pills button:hover:not(.active) {
+  color: #0f172a;
+}
+
+.category-pills button:focus:not(:focus-visible) {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.category-pills button.active {
+  color: var(--color-white);
+  font-weight: 600;
+  background: transparent !important;
+}
+
+.category-pill-indicator {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  background: var(--brand, var(--color-brand));
+  border-radius: var(--radius-pill);
+  box-shadow: 0 1px 3px rgb(36, 75, 120, 0.28);
+  pointer-events: none;
+  transition:
+    transform 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05),
+    width 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05);
+  will-change: transform, width;
+  z-index: 0;
+}
+
+.venue-cards-grid.is-loading,
+.table-scroll.is-loading {
+  opacity: 0.65;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.search-input-group {
+  display: flex;
+  align-items: center;
+  position: relative;
+  gap: 8px;
+}
+
+.search-input-group input {
+  padding-left: 32px;
+  min-width: 260px;
+}
+
+.search-icon {
+  position: absolute;
+  left: 10px;
+  color: var(--color-text-tertiary);
+}
+
+.filter-tag-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface-soft);
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-supporting);
+  margin-bottom: 16px;
+}
+
+.venue-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.venue-card {
+  background: var(--color-white);
+  border: 1px solid var(--line, var(--color-border));
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.venue-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.05);
+}
+
+.venue-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.venue-category-badge {
+  font-size: var(--text-meta);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+
+.venue-category-badge.venue {
+  background: var(--color-info-soft);
+  color: var(--color-info);
+}
+
+.venue-category-badge.equipment {
+  background: var(--color-warning-active);
+  color: #d97706;
+}
+
+.venue-code {
+  font-size: var(--text-meta);
+  color: var(--color-text-tertiary);
+  font-family: monospace;
+}
+
+.venue-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text, var(--color-ink));
+}
+
+.venue-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-supporting);
+  color: var(--color-text-secondary);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.venue-equipment-box,
+.venue-rules-box {
+  background: var(--color-surface);
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-supporting);
+}
+
+.box-label {
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  display: inline-block;
+  margin-bottom: 2px;
+}
+
+.venue-equipment-box p,
+.venue-rules-box p {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.venue-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line, var(--color-border));
+}
+
+/* Reservation Table */
+.time-range-cell {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-action-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.cancel-text-btn {
+  color: var(--color-danger);
+}
+
+/* Reservation Details Drawer */
+.reservation-detail-panel {
+  border-top: 3px solid var(--brand, #1e3a8a);
+}
+
+.detail-header-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Access Pass (入场凭证) */
+.access-pass-card {
+  position: relative;
+  background: linear-gradient(135deg, var(--color-success-soft) 0%, var(--color-white) 100%);
+  border: 2px solid #86efac;
+  border-radius: var(--radius-xl);
+  padding: 22px;
+  margin: 16px 0 24px;
+  box-shadow: 0 4px 16px rgb(16, 185, 129, 0.08);
+  overflow: hidden;
+}
+
+.pass-watermark {
+  position: absolute;
+  right: -20px;
+  bottom: -20px;
+  font-size: 54px;
+  font-weight: 900;
+  color: rgb(16, 185, 129, 0.05);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.pass-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #bbf7d0;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+}
+
+.pass-badge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-success);
+}
+
+.pass-badge h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.pass-badge small {
+  font-size: var(--text-meta);
+  color: #166534;
+}
+
+.pass-number {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+}
+
+.pass-number span {
+  font-size: var(--text-meta);
+  color: #65a30d;
+}
+
+.pass-number strong {
+  font-family: monospace;
+  font-size: var(--text-supporting);
+  color: var(--color-success);
+}
+
+.pass-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+}
+
+.pass-grid-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.pass-wide {
+  grid-column: 1 / -1;
+}
+
+.pass-grid-item .label {
+  font-size: var(--text-meta);
+  color: #4b5563;
+  margin-bottom: 2px;
+}
+
+.pass-grid-item .val {
+  font-size: var(--text-body);
+  color: #111827;
+  font-weight: 600;
+}
+
+.pass-grid-item .time-val {
+  color: var(--color-success);
+}
+
+.pass-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px dashed #bbf7d0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.pass-instructions p {
+  margin: 0;
+  font-size: var(--text-supporting);
+  color: #374151;
+  line-height: 1.6;
+}
+
+/* Review Box */
+.reservation-review-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin: 18px 0;
+}
+
+.reservation-review-box h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 0;
+  margin-bottom: 12px;
+  font-size: var(--text-reading);
+}
+
+.reservation-review-box .danger {
+  color: var(--color-danger);
+  border-color: #fca5a5;
+}
+
+.reservation-timeline-wrap {
+  margin-top: 24px;
+}
+
+/* Modals */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card {
+  background: white;
+  border-radius: var(--radius-xl);
+  width: 100%;
+  max-width: 680px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow:
+    0 20px 25px -5px rgb(0, 0, 0, 0.1),
+    0 8px 10px -6px rgb(0, 0, 0, 0.1);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 12px;
+}
+
+.modal-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 17px;
+}
+
+.close-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.close-icon-btn:hover {
+  background: var(--color-surface-soft);
+  color: #0f172a;
+}
+
+.form-grid-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.time-selection-section {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.time-inputs-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.quick-chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-supporting);
+}
+
+.chips-label {
+  color: var(--color-text-secondary);
+}
+
+.chip-btn {
+  background: white;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-xl);
+  padding: 3px 10px;
+  font-size: var(--text-supporting);
+  cursor: pointer;
+  color: var(--color-ink);
+  transition: all 0.15s ease;
+}
+
+.chip-btn:hover {
+  border-color: var(--brand, #1e3a8a);
+  color: var(--brand, #1e3a8a);
+}
+
+.conflict-check-banner {
+  margin-top: 4px;
+}
+
+.checking-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--text-supporting);
+  color: var(--color-text-secondary);
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.conflict-alert {
+  display: flex;
+  gap: 10px;
+  background: var(--color-danger-soft);
+  border: 1px solid #fecaca;
+  color: var(--color-danger-strong);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-supporting);
+}
+
+.conflict-slot-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  list-style: disc;
+}
+
+.conflict-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-success-soft);
+  border: 1px solid #bbf7d0;
+  color: var(--color-success);
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-supporting);
+}
+
+/* Schedule Modal */
+.schedule-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.schedule-slots-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.schedule-slot-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface);
+  border-left: 3px solid #f59e0b;
+  padding: 10px 14px;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.slot-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.slot-status-badge {
+  font-size: var(--text-meta);
+  color: #d97706;
+}
+
+.slot-desc h4 {
+  margin: 0;
+  font-size: var(--text-body);
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  border-top: 1px solid var(--color-border);
+  padding-top: 14px;
+}
+
+.pass-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.pass-actions .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.pass-instructions .pass-export-note {
+  color: #627b6b;
+  font-size: var(--text-meta);
+  margin-top: 8px;
+}
+
+@media (max-width: 640px) {
+  .pass-footer {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+  .pass-actions {
+    justify-content: flex-end;
+  }
+  .form-grid-two,
+  .time-inputs-row,
+  .pass-grid {
+    grid-template-columns: 1fr;
+  }
+  .category-pills {
+    flex-wrap: wrap;
+  }
+  .search-input-group input {
+    min-width: 160px;
+  }
+}
+
+/* Venue Management Tab Styles */
+.manage-header-desc {
+  flex: 1;
+  min-width: 280px;
+}
+.manage-header-desc p {
+  font-size: var(--text-supporting);
+  line-height: 1.6;
+}
+.badge-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.venue-status-tag {
+  font-size: var(--text-meta);
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+.venue-status-tag.enabled {
+  background: #dcfce7;
+  color: var(--color-success);
+}
+.venue-status-tag.disabled {
+  background: #fee2e2;
+  color: var(--color-danger-strong);
+}
+.manage-card.disabled {
+  opacity: 0.85;
+  background: #fafafa;
+}
+.venue-managers-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.managers-box-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.no-manager-alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-danger-strong);
+  font-size: var(--text-supporting);
+  background: var(--color-danger-soft);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+}
+.manager-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.manager-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-meta);
+  background: #e0e7ff;
+  color: #3730a3;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+.manager-tag small {
+  color: #4f46e5;
+  font-size: var(--text-meta);
+}
+.manage-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+.manager-tag.is-inactive {
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
+}
+.manager-tag.is-inactive small {
+  color: inherit;
+}
+.warning-btn {
+  color: #b45309 !important;
+  border-color: #fde68a !important;
+  background: var(--color-warning-soft) !important;
+}
+.warning-btn:hover {
+  background: var(--color-warning-active) !important;
+}
+.venue-edit-modal {
+  max-width: 580px;
+}
+.manager-modal-card {
+  max-width: 640px;
+}

@@ -1,24 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { Check, Clock, X } from '@lucide/vue'
-import BaseSelect from './BaseSelect.vue'
+import { computed, ref } from 'vue';
+import { Check, Clock, X } from '@lucide/vue';
+import BaseSelect from './BaseSelect.vue';
 
 const props = withDefaults(
   defineProps<{
-    modelValue?: string
-    disabled?: boolean
-    placeholder?: string
+    modelValue?: string;
+    disabled?: boolean;
+    placeholder?: string;
   }>(),
   {
     modelValue: '',
     disabled: false,
     placeholder: '请选择方便联系的时间',
-  }
-)
+  },
+);
 
 const emit = defineEmits<{
-  (e: 'update:modelValue', value: string): void
-}>()
+  (e: 'update:modelValue', value: string): void;
+}>();
 
 const quickPills = [
   { label: '随时可联系', value: '随时可联系' },
@@ -26,7 +26,7 @@ const quickPills = [
   { label: '工作日晚上 (18:30-21:30)', value: '工作日晚上 (18:30-21:30)' },
   { label: '工作日全天', value: '工作日全天 (08:30-17:30)' },
   { label: '周末全天', value: '周末全天 (09:00-21:00)' },
-]
+];
 
 const standardOptions = [
   { value: '随时可联系', label: '随时可联系 (08:30 - 21:30)' },
@@ -46,18 +46,15 @@ const standardOptions = [
   { value: '后天下午 (14:00-18:00)', label: '后天下午 (14:00 - 18:00)' },
   { value: '__CUSTOM_PICKER__', label: '📅 指定具体日期与时间段…' },
   { value: '__MANUAL_INPUT__', label: '✏️ 手动填写其他时间备注…' },
-]
+];
 
-const selectDropdownOptions = computed(() => [
-  { value: '', label: props.placeholder },
-  ...standardOptions,
-])
+const selectDropdownOptions = computed(() => [{ value: '', label: props.placeholder }, ...standardOptions]);
 
-const isCustomDateMode = ref(false)
-const isManualInputMode = ref(false)
-const todayStr = new Date().toISOString().slice(0, 10)
-const customDate = ref(todayStr)
-const customSlot = ref('下午 (14:00-18:00)')
+const isCustomDateMode = ref(false);
+const isManualInputMode = ref(false);
+const todayStr = new Date().toISOString().slice(0, 10);
+const customDate = ref(todayStr);
+const customSlot = ref('下午 (14:00-18:00)');
 
 const slotOptions = [
   { value: '全天 (08:30-21:00)', label: '全天 (08:30 - 21:00)' },
@@ -65,59 +62,59 @@ const slotOptions = [
   { value: '下午 (14:00-18:00)', label: '下午 (14:00 - 18:00)' },
   { value: '课后 (16:30-18:30)', label: '课后 (16:30 - 18:30)' },
   { value: '晚上 (18:30-21:30)', label: '晚上 (18:30 - 21:30)' },
-]
+];
 
 const selectValue = computed({
   get() {
-    if (isCustomDateMode.value) return '__CUSTOM_PICKER__'
-    if (isManualInputMode.value) return '__MANUAL_INPUT__'
-    const found = standardOptions.find(opt => opt.value === props.modelValue)
-    return found ? found.value : (props.modelValue ? '__MANUAL_INPUT__' : '')
+    if (isCustomDateMode.value) return '__CUSTOM_PICKER__';
+    if (isManualInputMode.value) return '__MANUAL_INPUT__';
+    const found = standardOptions.find(opt => opt.value === props.modelValue);
+    return found ? found.value : props.modelValue ? '__MANUAL_INPUT__' : '';
   },
   set(val: string) {
     if (val === '__CUSTOM_PICKER__') {
-      isCustomDateMode.value = true
-      isManualInputMode.value = false
-      applyCustomDateTime()
+      isCustomDateMode.value = true;
+      isManualInputMode.value = false;
+      applyCustomDateTime();
     } else if (val === '__MANUAL_INPUT__') {
-      isManualInputMode.value = true
-      isCustomDateMode.value = false
+      isManualInputMode.value = true;
+      isCustomDateMode.value = false;
     } else {
-      isCustomDateMode.value = false
-      isManualInputMode.value = false
-      emit('update:modelValue', val)
+      isCustomDateMode.value = false;
+      isManualInputMode.value = false;
+      emit('update:modelValue', val);
     }
-  }
-})
+  },
+});
 
 function selectPill(val: string) {
-  isCustomDateMode.value = false
-  isManualInputMode.value = false
-  emit('update:modelValue', val)
+  isCustomDateMode.value = false;
+  isManualInputMode.value = false;
+  emit('update:modelValue', val);
 }
 
 function applyCustomDateTime() {
-  const dateStr = customDate.value ? customDate.value : '近期'
-  emit('update:modelValue', `${dateStr} ${customSlot.value}`)
+  const dateStr = customDate.value ? customDate.value : '近期';
+  emit('update:modelValue', `${dateStr} ${customSlot.value}`);
 }
 
 function onDateChange() {
-  applyCustomDateTime()
+  applyCustomDateTime();
 }
 
 function onSlotChange() {
-  applyCustomDateTime()
+  applyCustomDateTime();
 }
 
 function onManualInput(e: Event) {
-  const target = e.target as HTMLInputElement
-  emit('update:modelValue', target.value)
+  const target = e.target as HTMLInputElement;
+  emit('update:modelValue', target.value);
 }
 
 function clearTime() {
-  isCustomDateMode.value = false
-  isManualInputMode.value = false
-  emit('update:modelValue', '')
+  isCustomDateMode.value = false;
+  isManualInputMode.value = false;
+  emit('update:modelValue', '');
 }
 </script>
 
@@ -192,15 +189,12 @@ function clearTime() {
     <div v-if="modelValue" class="contact-time-current">
       <span class="contact-time-tag">
         <Clock :size="13" />
-        <span>已选：<strong>{{ modelValue }}</strong></span>
+        <span>
+          已选：
+          <strong>{{ modelValue }}</strong>
+        </span>
       </span>
-      <button
-        v-if="!disabled"
-        type="button"
-        class="contact-time-clear"
-        aria-label="清空已选时间"
-        @click="clearTime"
-      >
+      <button v-if="!disabled" type="button" class="contact-time-clear" aria-label="清空已选时间" @click="clearTime">
         <X :size="13" />
       </button>
     </div>
@@ -233,11 +227,11 @@ function clearTime() {
 .contact-time-pill {
   appearance: none;
   border: 1px solid #dbe3ed;
-  background: #f8fafc;
-  color: #475569;
-  font-size: 11px;
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -249,16 +243,16 @@ function clearTime() {
 
 .contact-time-pill:hover:not(:disabled) {
   border-color: #93c5fd;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 
 .contact-time-pill.active {
   border-color: #3b82f6;
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--color-info-soft);
+  color: var(--color-info);
   font-weight: 500;
-  box-shadow: 0 1px 2px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 1px 2px rgb(59, 130, 246, 0.1);
 }
 
 .contact-time-pill:disabled {
@@ -272,19 +266,19 @@ function clearTime() {
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
 }
 
-.contact-time-custom-picker input[type="date"] {
+.contact-time-custom-picker input[type='date'] {
   height: 34px;
   padding: 4px 8px;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  font-size: 12px;
-  background: #fff;
-  color: #1e293b;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  font-size: var(--text-meta);
+  background: var(--color-white);
+  color: var(--color-ink);
 }
 
 .contact-time-manual {
@@ -300,8 +294,8 @@ function clearTime() {
 .contact-time-back-btn {
   background: none;
   border: none;
-  color: #2563eb;
-  font-size: 11px;
+  color: var(--color-info);
+  font-size: var(--text-meta);
   cursor: pointer;
   padding: 4px 6px;
   text-decoration: underline;
@@ -309,7 +303,7 @@ function clearTime() {
 }
 
 .contact-time-back-btn:hover:not(:disabled) {
-  color: #1d4ed8;
+  color: var(--color-info);
 }
 
 .contact-time-current {
@@ -318,10 +312,10 @@ function clearTime() {
   justify-content: space-between;
   gap: 8px;
   padding: 4px 10px;
-  background: #f1f5f9;
-  border-radius: 6px;
-  font-size: 11.5px;
-  color: #334155;
+  background: var(--color-surface-soft);
+  border-radius: var(--radius-md);
+  font-size: var(--text-meta);
+  color: var(--color-ink);
 }
 
 .contact-time-tag {
@@ -335,28 +329,28 @@ function clearTime() {
 
 .contact-time-tag strong {
   font-weight: 600;
-  color: #1d4ed8;
+  color: var(--color-info);
 }
 
 .contact-time-clear {
   border: none;
   background: transparent;
-  color: #94a3b8;
+  color: var(--color-text-tertiary);
   display: grid;
   place-items: center;
   cursor: pointer;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .contact-time-clear:hover {
-  background: #e2e8f0;
-  color: #475569;
+  background: var(--color-border);
+  color: var(--color-text-secondary);
 }
 
 .contact-time-hint {
-  font-size: 11px;
-  color: #64748b;
+  font-size: var(--text-meta);
+  color: var(--color-text-secondary);
   line-height: 1.4;
   margin-top: 1px;
 }

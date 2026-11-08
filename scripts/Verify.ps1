@@ -29,6 +29,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw '前端草稿恢复测试失败。' }
     & pnpm run lint
     if ($LASTEXITCODE -ne 0) { throw '前端静态检查失败。' }
+    & pnpm run check:design
+    if ($LASTEXITCODE -ne 0) { throw '前端设计 token 或样式债务预算检查失败。' }
     & pnpm run build
     if ($LASTEXITCODE -ne 0) { throw '前端类型检查或构建失败。' }
 } finally { Pop-Location }

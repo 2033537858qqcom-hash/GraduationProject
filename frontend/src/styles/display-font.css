@@ -1,0 +1,9 @@
+/* Muted gold is a single 35px signature per workflow header; actions and statuses use green. */
+/* Fixed interface headings. Dynamic text falls back for characters outside the subset. */
+@font-face {
+  font-family: 'Campus Heading Serif';
+  src: url('../assets/noto-serif-sc-headings.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+}

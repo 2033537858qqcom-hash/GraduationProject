@@ -1,13 +1,19 @@
 <script setup lang="ts">
-import { useId } from 'vue'
-import wordmark from '../../../assets/brand/zzuit-wordmark-white.png'
+import { useId } from 'vue';
+import wordmark from '../../../assets/brand/zzuit-wordmark-white.png';
 
-const inkId = `school-identity-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
+const inkId = `school-identity-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
 </script>
 
 <template>
   <!-- The original official monochrome artwork is retained; only its display ink follows the page. -->
-  <svg class="school-identity" viewBox="131 21 2305 577" role="img" aria-label="郑州工业应用技术学院校徽与校名" focusable="false">
+  <svg
+    class="school-identity"
+    viewBox="131 21 2305 577"
+    role="img"
+    aria-label="郑州工业应用技术学院校徽与校名"
+    focusable="false"
+  >
     <defs>
       <filter :id="inkId" color-interpolation-filters="sRGB">
         <feFlood flood-color="currentColor" />
@@ -19,5 +25,10 @@ const inkId = `school-identity-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`
 </template>
 
 <style scoped>
-.school-identity { display: block; width: 100%; height: auto; aspect-ratio: 2305 / 577; }
+.school-identity {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2305 / 577;
+}
 </style>

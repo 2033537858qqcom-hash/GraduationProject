@@ -53,7 +53,12 @@ const pages = {
 }
 
 // Use client setup semantics: SSR deliberately skips non-immediate watchers.
-export async function checkPageSetup(path: string, destination?: string, inspect?: (bindings: Record<string, unknown>) => Promise<void>, componentProps: Record<string, unknown> = {}) {
+export async function checkPageSetup(
+  path: string,
+  destination?: string,
+  inspect?: (bindings: Record<string, unknown>) => Promise<void>,
+  componentProps: Record<string, unknown> = {},
+) {
   const basePath = path.split('?')[0]!
   const page = pages[basePath as keyof typeof pages]
   const errors: unknown[] = []
@@ -83,17 +88,28 @@ export async function checkPageSetup(path: string, destination?: string, inspect
   const app = renderer.createApp(RouterView).use(router)
   // Vite's SFC module adds SSR metadata; setup itself still runs as a client.
   app.provide(ssrContextKey, { modules: new Set() })
-  app.config.errorHandler = error => { errors.push(error) }
+  app.config.errorHandler = error => {
+    errors.push(error)
+  }
   await router.push(path)
   await router.isReady()
   app.mount({})
   await nextTick()
   if (destination) {
-    for (let n = 0; n < 20; n++) { await Promise.resolve(); await nextTick() }
+    for (let n = 0; n < 20; n++) {
+      await Promise.resolve()
+      await nextTick()
+    }
     await router.push(destination)
-    for (let n = 0; n < 30; n++) { await Promise.resolve(); await nextTick() }
+    for (let n = 0; n < 30; n++) {
+      await Promise.resolve()
+      await nextTick()
+    }
   }
-  try { if (inspect && bindings) await inspect(bindings) }
-  finally { app.unmount() }
+  try {
+    if (inspect && bindings) await inspect(bindings)
+  } finally {
+    app.unmount()
+  }
   return errors
 }

@@ -9,7 +9,12 @@ export interface RepairPreviewFields {
   contact: string
   contactWindow: string
 }
-export interface RepairPlace { id: number; campusId: number; campusName: string; name: string }
+export interface RepairPlace {
+  id: number
+  campusId: number
+  campusName: string
+  name: string
+}
 export interface AssistantRepairPreview {
   runId: string
   mode: 'LOCAL' | 'DEEPSEEK'
@@ -25,8 +30,24 @@ export interface AssistantRepairPreview {
   preparedAt: string
 }
 export function emptyRepairPreview(): RepairPreviewFields {
-  return { category: '', title: '', description: '', locationId: null, locationDetail: '', contact: '', contactWindow: '' }
+  return {
+    category: '',
+    title: '',
+    description: '',
+    locationId: null,
+    locationDetail: '',
+    contact: '',
+    contactWindow: '',
+  }
 }
 export function repairPreviewFingerprint(fields: RepairPreviewFields) {
-  return JSON.stringify([fields.category, fields.title.trim(), fields.description.trim(), fields.locationId, fields.locationDetail.trim(), fields.contact.trim(), fields.contactWindow.trim()])
+  return JSON.stringify([
+    fields.category,
+    fields.title.trim(),
+    fields.description.trim(),
+    fields.locationId,
+    fields.locationDetail.trim(),
+    fields.contact.trim(),
+    fields.contactWindow.trim(),
+  ])
 }

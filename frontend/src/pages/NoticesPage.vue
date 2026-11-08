@@ -1,42 +1,76 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
-import { Bell, Check, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight } from '@lucide/vue'
-import { api, errorMessage } from '../lib/api'
-import BaseSelect from '../components/BaseSelect.vue'
-import { safeAffairDestination } from '../lib/navigation'
-import type { Notice } from '../types'
-import type { Paged } from '../foundation'
-const route = useRoute(), router = useRouter()
-const list = ref<Paged<Notice> & { unreadCount: number }>({ items: [], total: 0, page: 1, pageSize: 20, unreadCount: 0 })
-const filter = ref(''), loading = ref(true), reading = ref<number | null>(null), error = ref('')
+import { onMounted, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
+import { Bell, Check, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight } from '@lucide/vue';
+import { api, errorMessage } from '../lib/api';
+import BaseSelect from '../components/BaseSelect.vue';
+import { safeAffairDestination } from '../lib/navigation';
+import type { Notice } from '../types';
+import type { Paged } from '../foundation';
+const route = useRoute(),
+  router = useRouter();
+const list = ref<Paged<Notice> & { unreadCount: number }>({
+  items: [],
+  total: 0,
+  page: 1,
+  pageSize: 20,
+  unreadCount: 0,
+});
+const filter = ref(''),
+  loading = ref(true),
+  reading = ref<number | null>(null),
+  error = ref('');
 const readFilterOptions = [
   { value: '', label: '全部消息' },
   { value: 'false', label: '未读消息' },
   { value: 'true', label: '已读消息' },
-]
-let sequence = 0
+];
+let sequence = 0;
 async function load() {
-  const request = ++sequence; loading.value = true; error.value = ''; filter.value = String(route.query.read ?? '')
-  const params = new URLSearchParams({ page: String(Math.max(1, Number(route.query.page) || 1)), pageSize: '20' })
-  if (filter.value) params.set('read', filter.value)
-  try { const result = await api<typeof list.value>('/notices?' + params); if (request === sequence) list.value = result }
-  catch (cause) { if (request === sequence) error.value = errorMessage(cause) }
-  finally { if (request === sequence) loading.value = false }
+  const request = ++sequence;
+  loading.value = true;
+  error.value = '';
+  filter.value = String(route.query.read ?? '');
+  const params = new URLSearchParams({ page: String(Math.max(1, Number(route.query.page) || 1)), pageSize: '20' });
+  if (filter.value) params.set('read', filter.value);
+  try {
+    const result = await api<typeof list.value>('/notices?' + params);
+    if (request === sequence) list.value = result;
+  } catch (cause) {
+    if (request === sequence) error.value = errorMessage(cause);
+  } finally {
+    if (request === sequence) loading.value = false;
+  }
 }
 async function mark(notice: Notice, open = false) {
-  reading.value = notice.id; error.value = ''
+  reading.value = notice.id;
+  error.value = '';
   try {
-    if (!notice.read) await api('/notices/' + notice.id + '/read', { method: 'POST' })
-    const target = safeAffairDestination(notice.targetPath)
-    if (open && target) await router.push(target)
-    else await load()
-  } catch (cause) { error.value = errorMessage(cause) }
-  finally { reading.value = null }
+    if (!notice.read) await api('/notices/' + notice.id + '/read', { method: 'POST' });
+    const target = safeAffairDestination(notice.targetPath);
+    if (open && target) await router.push(target);
+    else await load();
+  } catch (cause) {
+    error.value = errorMessage(cause);
+  } finally {
+    reading.value = null;
+  }
 }
-async function search() { await router.replace({ query: { read: filter.value, page: '1' } }) }
-async function page(number: number) { await router.replace({ query: { ...route.query, page: String(number) } }) }
-onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load() })
+async function search() {
+  await router.replace({ query: { read: filter.value, page: '1' } });
+}
+async function page(number: number) {
+  await router.replace({ query: { ...route.query, page: String(number) } });
+}
+onMounted(() => {
+  void load();
+});
+watch(
+  () => route.fullPath,
+  () => {
+    void load();
+  },
+);
 </script>
 <template>
   <div>
@@ -47,7 +81,8 @@ onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load(
         <p class="muted">阅读发给你的消息，查看对应申请的办理进度。</p>
       </div>
       <button class="button compact" :disabled="loading || reading !== null" @click="load">
-        <RefreshCw :size="15" />刷新消息
+        <RefreshCw :size="15" />
+        刷新消息
       </button>
     </div>
 
@@ -90,15 +125,12 @@ onMounted(() => { void load() }); watch(() => route.fullPath, () => { void load(
             :disabled="reading !== null"
             @click="mark(notice, true)"
           >
-            查看对应申请<ArrowUpRight :size="14" />
+            查看对应申请
+            <ArrowUpRight :size="14" />
           </button>
-          <button
-            v-if="!notice.read"
-            class="text-button"
-            :disabled="reading !== null"
-            @click="mark(notice)"
-          >
-            <Check :size="14" />标为已读
+          <button v-if="!notice.read" class="text-button" :disabled="reading !== null" @click="mark(notice)">
+            <Check :size="14" />
+            标为已读
           </button>
         </div>
       </article>

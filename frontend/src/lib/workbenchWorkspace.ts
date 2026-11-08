@@ -5,8 +5,17 @@ import type { WorkspaceInfo } from '../workbench'
  * 数组顺序即业务优先级；后端返回顺序调整、或新增未知空间时，默认落点不变。
  */
 export const WORKSPACE_PRIORITY = [
-  'TEACHING', 'COUNSELOR', 'AFFAIRS', 'HOUSING', 'LOGISTICS', 'ACADEMIC', 'CONTENT', 'ADMIN',
-  'FINANCE', 'PAYMENT_SOURCE', 'PERSONAL',
+  'TEACHING',
+  'COUNSELOR',
+  'AFFAIRS',
+  'HOUSING',
+  'LOGISTICS',
+  'ACADEMIC',
+  'CONTENT',
+  'ADMIN',
+  'FINANCE',
+  'PAYMENT_SOURCE',
+  'PERSONAL',
 ] as const
 
 /** 当前账号可进入的工作空间中，按业务优先级应默认展示的空间编码；未知编码按后端顺序兜底。 */

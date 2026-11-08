@@ -63,7 +63,8 @@ export function createLakeLight(host: HTMLElement, imageAspect: number, unavaila
   let lastTime = 0
 
   function resize() {
-    const width = Math.max(1, host.clientWidth), height = Math.max(1, host.clientHeight)
+    const width = Math.max(1, host.clientWidth),
+      height = Math.max(1, host.clientHeight)
     renderer.setSize(width, height, false)
     material.uniforms.uFrameAspect!.value = width / height
   }

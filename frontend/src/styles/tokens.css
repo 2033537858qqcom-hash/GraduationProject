@@ -1,0 +1,66 @@
+/* Campus design foundations. Components consume semantic names, not local palettes.
+   Display: headings only. Supporting copy: 13px; reading: 14px; metadata: 12px.
+   Status colors carry business meaning and remain separate from the brand. */
+:root {
+  --font-family-body: 'Microsoft YaHei', 'PingFang SC', Arial, sans-serif;
+  --font-family-display: 'Campus Heading Serif', 'Songti SC', 'STSong', SimSun, serif;
+  --campus-display-serif: var(--font-family-display);
+  --site-serif: var(--campus-display-serif);
+  --campus-serif: var(--campus-display-serif);
+  --color-white: #fff;
+  --color-black: #000;
+  --color-paper: #f6f6f0;
+  --color-surface: #fdfdf9;
+  --color-surface-soft: #f0f3e9;
+  --color-surface-active: #e5eddb;
+  --color-brand: #315244;
+  --color-brand-hover: #274739;
+  --color-heading: #31533e;
+  --color-ink: #293e34;
+  --color-text-secondary: #59695c;
+  --color-text-tertiary: #6c796b;
+  --color-border: #d7dfce;
+  --color-border-strong: #bdcdb1;
+  --color-gold: #b6a477;
+  --color-heading-border: #dfe5d9;
+  --color-info: #416b89;
+  --color-info-soft: #edf3f6;
+  --color-danger: #dc2626;
+  --color-danger-strong: #b91c1c;
+  --color-danger-soft: #fef2f2;
+  --color-success: #15803d;
+  --color-success-strong: #047857;
+  --color-success-soft: #f0fdf4;
+  --color-warning: #a16207;
+  --color-warning-soft: #fffbeb;
+  --color-warning-active: #fef3c7;
+  --color-night-surface: #213c35;
+  --color-night-ink: #e6eee1;
+  --color-night-muted: #b9cbb2;
+  --color-night-border: #526c5d;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 999px;
+  --text-eyebrow: 10px;
+  --text-meta: 12px;
+  --text-supporting: 13px;
+  --text-body: 14px;
+  --text-reading: 15px;
+  --text-title-sm: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --shadow-panel: 0 12px 38px #24422d1a;
+  --focus-ring: 0 0 0 3px #31524424;
+  --motion-fast: 160ms;
+  --motion-reveal: 480ms;
+  --ease-campus: cubic-bezier(0.22, 1, 0.36, 1);
+  --campus-heading-rule: var(--color-gold);
+  --campus-heading-border: var(--color-heading-border);
+}

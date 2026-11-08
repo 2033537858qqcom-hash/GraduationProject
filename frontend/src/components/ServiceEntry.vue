@@ -1,22 +1,25 @@
 <script setup lang="ts">
-import type { Component } from 'vue'
-import { ArrowUpRight } from '@lucide/vue'
+import type { Component } from 'vue';
+import { ArrowUpRight } from '@lucide/vue';
 
-withDefaults(defineProps<{
-  to: string
-  title: string
-  description: string
-  icon: Component
-  category?: string
-  badge?: string | number
-  badgeType?: 'primary' | 'warning' | 'success' | 'neutral' | 'danger'
-  theme?: string
-}>(), {
-  category: '',
-  badge: '',
-  badgeType: 'neutral',
-  theme: 'blue',
-})
+withDefaults(
+  defineProps<{
+    to: string;
+    title: string;
+    description: string;
+    icon: Component;
+    category?: string;
+    badge?: string | number;
+    badgeType?: 'primary' | 'warning' | 'success' | 'neutral' | 'danger';
+    theme?: string;
+  }>(),
+  {
+    category: '',
+    badge: '',
+    badgeType: 'neutral',
+    theme: 'blue',
+  },
+);
 </script>
 
 <template>

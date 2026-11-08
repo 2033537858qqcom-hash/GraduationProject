@@ -1,6 +1,14 @@
 import { api } from './lib/api.ts'
 
-export interface ClassroomChoice { id: number; campusId: number; name: string; buildingName: string; roomNumber: string; capacity: number; enabled: boolean }
+export interface ClassroomChoice {
+  id: number
+  campusId: number
+  name: string
+  buildingName: string
+  roomNumber: string
+  capacity: number
+  enabled: boolean
+}
 
 export interface VenueCreationCatalog {
   campuses: { id: number; code: string; name: string }[]
@@ -170,7 +178,12 @@ export const activityTypes: Record<string, string> = {
   OTHER: '其他校园事务',
 }
 
-export async function listVenues(params?: { category?: string; placeId?: string; keyword?: string; enabledOnly?: boolean }): Promise<VenueSummary[]> {
+export async function listVenues(params?: {
+  category?: string
+  placeId?: string
+  keyword?: string
+  enabledOnly?: boolean
+}): Promise<VenueSummary[]> {
   const query = new URLSearchParams()
   if (params?.category) query.set('category', params.category)
   if (params?.placeId) query.set('placeId', params.placeId)
@@ -195,7 +208,11 @@ export async function checkConflict(cmd: CheckConflictCommand): Promise<Conflict
   })
 }
 
-export async function listMine(params?: { status?: string; page?: number; pageSize?: number }): Promise<ReservationPage> {
+export async function listMine(params?: {
+  status?: string
+  page?: number
+  pageSize?: number
+}): Promise<ReservationPage> {
   const query = new URLSearchParams()
   if (params?.status) query.set('status', params.status)
   query.set('page', String(params?.page ?? 1))
@@ -239,7 +256,12 @@ export async function cancelReservation(id: number, reason?: string): Promise<Re
   })
 }
 
-export async function listReview(params?: { status?: string; venueId?: number; page?: number; pageSize?: number }): Promise<ReservationPage> {
+export async function listReview(params?: {
+  status?: string
+  venueId?: number
+  page?: number
+  pageSize?: number
+}): Promise<ReservationPage> {
   const query = new URLSearchParams()
   if (params?.status) query.set('status', params.status)
   if (params?.venueId) query.set('venueId', String(params.venueId))
@@ -320,15 +342,25 @@ export async function addVenueManager(venueId: number, userId: number): Promise<
   })
 }
 
-export async function removeVenueManager(venueId: number, userId: number): Promise<{ success: boolean; message: string }> {
+export async function removeVenueManager(
+  venueId: number,
+  userId: number,
+): Promise<{ success: boolean; message: string }> {
   return api<{ success: boolean; message: string }>(`/reservations/venues/${venueId}/managers/${userId}`, {
     method: 'DELETE',
   })
 }
 
-
-export async function recordReservationUsage(id: number, version: number, action: 'START' | 'COMPLETE', comment: string): Promise<ReservationDetail> {
-  return api<ReservationDetail>(`/reservations/${id}/usage`, { method: 'POST', body: JSON.stringify({ version, action, comment }) })
+export async function recordReservationUsage(
+  id: number,
+  version: number,
+  action: 'START' | 'COMPLETE',
+  comment: string,
+): Promise<ReservationDetail> {
+  return api<ReservationDetail>(`/reservations/${id}/usage`, {
+    method: 'POST',
+    body: JSON.stringify({ version, action, comment }),
+  })
 }
 
 export function occupancyStatus(status: string): string {
@@ -338,5 +370,14 @@ export function occupancyStatus(status: string): string {
 }
 
 export function classroomOptions(rooms: ClassroomChoice[], campusId: number, currentId = 0) {
-  return [{ value: 0, label: '不关联教学教室', disabled: false }, ...rooms.filter(r => r.campusId === campusId).map(r => ({ value: r.id, label: `${r.name} · ${r.buildingName} ${r.roomNumber} · ${r.capacity}人`, disabled: !r.enabled && r.id !== currentId }))]
+  return [
+    { value: 0, label: '不关联教学教室', disabled: false },
+    ...rooms
+      .filter(r => r.campusId === campusId)
+      .map(r => ({
+        value: r.id,
+        label: `${r.name} · ${r.buildingName} ${r.roomNumber} · ${r.capacity}人`,
+        disabled: !r.enabled && r.id !== currentId,
+      })),
+  ]
 }

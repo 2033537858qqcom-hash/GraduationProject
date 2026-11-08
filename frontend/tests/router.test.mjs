@@ -73,7 +73,10 @@ test('safeLoginDestination normalizes trailing slashes and validates all app rou
   assert.equal(safeLoginDestination('/campus/explore'), '/campus/explore')
   assert.equal(safeLoginDestination('/verify/certificate'), '/verify/certificate')
   assert.equal(safeLoginDestination('/content/school-introduction'), '/content/school-introduction')
-  assert.equal(safeLoginDestination('/student-affairs/housing?id=12&tab=details'), '/student-affairs/housing?id=12&tab=details')
+  assert.equal(
+    safeLoginDestination('/student-affairs/housing?id=12&tab=details'),
+    '/student-affairs/housing?id=12&tab=details',
+  )
   assert.equal(safeLoginDestination('/portal/reservations?id=5&tab=details'), '/portal/reservations?id=5&tab=details')
 
   // Block dangerous URLs
@@ -93,7 +96,10 @@ test('safeAssistantDestination validates assistant tool targets across affairs, 
   assert.equal(safeAssistantDestination('/teaching'), '/teaching')
   assert.equal(safeAssistantDestination('/academic'), '/academic')
   assert.equal(safeAssistantDestination('/housing/transfer?id=8&tab=details'), '/housing/transfer?id=8&tab=details')
-  assert.equal(safeAssistantDestination('/portal/reservations?id=2&tab=details'), '/portal/reservations?id=2&tab=details')
+  assert.equal(
+    safeAssistantDestination('/portal/reservations?id=2&tab=details'),
+    '/portal/reservations?id=2&tab=details',
+  )
 
   // Malformed or dangerous destinations remain rejected
   assert.equal(safeAssistantDestination('https://evil.test'), null)

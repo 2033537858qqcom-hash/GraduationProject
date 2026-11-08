@@ -14,8 +14,10 @@ test('finance and source duties have their own destinations while system adminis
 })
 
 test('finance and student bill links survive login and notification navigation without accepting external destinations', () => {
-  for (const path of ['/finance/payments', '/finance/payments?id=12&tab=details', '/payment-bases', '/portal/payments']) assert.equal(safeLoginDestination(path), path)
-  for (const path of ['/finance/payments?id=12&tab=details', '/portal/payments?id=12&tab=details']) assert.equal(safeAffairDestination(path), path)
+  for (const path of ['/finance/payments', '/finance/payments?id=12&tab=details', '/payment-bases', '/portal/payments'])
+    assert.equal(safeLoginDestination(path), path)
+  for (const path of ['/finance/payments?id=12&tab=details', '/portal/payments?id=12&tab=details'])
+    assert.equal(safeAffairDestination(path), path)
   assert.equal(safeLoginDestination('//external.example/finance/payments'), null)
   assert.equal(safeAffairDestination('/finance/payments?id=12&tab=details&next=https://external.example'), null)
 })

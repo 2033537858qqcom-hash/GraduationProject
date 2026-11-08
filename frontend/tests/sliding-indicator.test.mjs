@@ -11,7 +11,7 @@ test('sliding indicator computes offset and width of active element', async () =
   const fakeContainer = {
     scrollLeft: 10,
     getBoundingClientRect: () => ({ left: 50, top: 0, bottom: 20, width: 600 }),
-    querySelector: (selector) => selector.includes('selected') ? fakeActive : null,
+    querySelector: selector => (selector.includes('selected') ? fakeActive : null),
   }
 
   const containerRef = ref(fakeContainer)
@@ -44,8 +44,8 @@ test('sliding indicator sets opacity to 0 when no active element is matched', as
 })
 
 test('portal nav route activation cleanly separates reservations from affairs', () => {
-  const isAffairs = (path) => ['/portal/affairs', '/portal/leave', '/portal/certificates'].some(p => path.startsWith(p))
-  const isReservations = (path) => path.startsWith('/portal/reservations')
+  const isAffairs = path => ['/portal/affairs', '/portal/leave', '/portal/certificates'].some(p => path.startsWith(p))
+  const isReservations = path => path.startsWith('/portal/reservations')
 
   assert.equal(isAffairs('/portal/affairs'), true)
   assert.equal(isReservations('/portal/affairs'), false)
@@ -72,7 +72,9 @@ test('indicator hides when a previously selected navigation item disappears', as
     indicator.updateIndicator()
     await nextTick()
     assert.equal(indicator.indicatorStyle.value.opacity, 0)
-  } finally { scope.stop() }
+  } finally {
+    scope.stop()
+  }
 })
 
 test('indicator measures a conditionally recreated container without a filter change', async () => {
@@ -94,5 +96,7 @@ test('indicator measures a conditionally recreated container without a filter ch
     await nextTick()
     await nextTick()
     assert.equal(indicator.indicatorStyle.value.opacity, 0)
-  } finally { scope.stop() }
+  } finally {
+    scope.stop()
+  }
 })

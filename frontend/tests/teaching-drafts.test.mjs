@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
-import { writeTeachingDraft, readTeachingDraft, removeTeachingDraft, clearTeachingDrafts } from '../src/lib/teachingDrafts.ts'
+import {
+  writeTeachingDraft,
+  readTeachingDraft,
+  removeTeachingDraft,
+  clearTeachingDrafts,
+} from '../src/lib/teachingDrafts.ts'
 
 const entries = new Map()
 const storage = {
@@ -8,10 +13,16 @@ const storage = {
   setItem: (key, value) => entries.set(key, value),
   removeItem: key => entries.delete(key),
   key: index => [...entries.keys()][index] ?? null,
-  get length() { return entries.size },
+  get length() {
+    return entries.size
+  },
 }
 const draft = title => ({ notice: { title, body: '未发布正文', requestKey: 'request-1' } })
-beforeEach(() => { globalThis.sessionStorage = storage; for (const id of [1, 2, 11]) clearTeachingDrafts(id); entries.clear() })
+beforeEach(() => {
+  globalThis.sessionStorage = storage
+  for (const id of [1, 2, 11]) clearTeachingDrafts(id)
+  entries.clear()
+})
 
 test('drafts are isolated by account and teaching class', () => {
   writeTeachingDraft(1, 1, draft('Java'), null)
@@ -32,7 +43,12 @@ test('changing the input or restored object does not mutate the saved draft', ()
 })
 
 test('clearing a submitted class preserves other classes and independent notice drafts', () => {
-  writeTeachingDraft(1, 1, { ...draft('通知'), material: { source: null, title: '资料', body: '正文', attachmentName: '' } }, null)
+  writeTeachingDraft(
+    1,
+    1,
+    { ...draft('通知'), material: { source: null, title: '资料', body: '正文', attachmentName: '' } },
+    null,
+  )
   writeTeachingDraft(1, 2, draft('另一班'), null)
   writeTeachingDraft(1, 1, draft('通知'), null)
   assert.equal(readTeachingDraft(1, 1).draft.material, undefined)
@@ -65,7 +81,17 @@ test('expired and structurally invalid stored drafts are rejected', () => {
 })
 
 test('disabled storage falls back to memory and reports that refresh persistence failed', () => {
-  globalThis.sessionStorage = { getItem() { throw Error('disabled') }, setItem() { throw Error('disabled') }, removeItem() { throw Error('disabled') } }
+  globalThis.sessionStorage = {
+    getItem() {
+      throw Error('disabled')
+    },
+    setItem() {
+      throw Error('disabled')
+    },
+    removeItem() {
+      throw Error('disabled')
+    },
+  }
   assert.equal(writeTeachingDraft(1, 1, draft('仍可切换'), null), false)
   assert.equal(readTeachingDraft(1, 1).draft.notice.title, '仍可切换')
 })
@@ -80,7 +106,12 @@ test('file objects are held in memory, while only their name is serialized', () 
 
 test('a full storage quota does not replace newer in-memory text with an older stored draft', () => {
   writeTeachingDraft(1, 1, draft('旧文字'), null)
-  globalThis.sessionStorage = { ...storage, setItem() { throw Error('quota') } }
+  globalThis.sessionStorage = {
+    ...storage,
+    setItem() {
+      throw Error('quota')
+    },
+  }
   assert.equal(writeTeachingDraft(1, 1, draft('新文字'), null), false)
   assert.equal(readTeachingDraft(1, 1).draft.notice.title, '新文字')
 })

@@ -9,7 +9,8 @@ import type { CampusId, CampusRepresentation } from './campusSceneData'
 function createFacadeTextures() {
   const kinds = ['building', 'library', 'sports', 'gym', 'annex', 'canteen', 'anonymous'] as const
   const textures: Record<string, { map: THREE.DataTexture; roughnessMap: THREE.DataTexture }> = {}
-  const w = 64, h = 64
+  const w = 64,
+    h = 64
   for (const kind of kinds) {
     const colorData = new Uint8Array(w * h * 4)
     const roughData = new Uint8Array(w * h * 4)
@@ -17,53 +18,94 @@ function createFacadeTextures() {
       for (let x = 0; x < w; x++) {
         const idx = (y * w + x) * 4
         // Clean off-white porcelain / warm limestone base
-        let r = 248, g = 247, b = 244, rough = 210
+        let r = 248,
+          g = 247,
+          b = 244,
+          rough = 210
         if (y < 4 || y > 60) {
           // Subtle floor slab / parapet line
-          r = 218; g = 215; b = 210; rough = 230
+          r = 218
+          g = 215
+          b = 210
+          rough = 230
         } else if (y >= 16 && y <= 48 && x >= 8 && x <= 56) {
           // Ribbon window band
-          const isMullion = (x >= 31 && x <= 33) || (x <= 9) || (x >= 55)
+          const isMullion = (x >= 31 && x <= 33) || x <= 9 || x >= 55
           if (isMullion) {
-            r = 160; g = 170; b = 180; rough = 150
+            r = 160
+            g = 170
+            b = 180
+            rough = 150
           } else {
             // Elegant modern architectural glass with soft sky gradient
             const grad = (y - 16) / 32
             if (kind === 'library') {
-              r = Math.floor(130 + 40 * grad); g = Math.floor(175 + 40 * grad); b = Math.floor(220 + 30 * grad)
+              r = Math.floor(130 + 40 * grad)
+              g = Math.floor(175 + 40 * grad)
+              b = Math.floor(220 + 30 * grad)
             } else if (kind === 'gym') {
-              r = Math.floor(185 + 20 * grad); g = Math.floor(105 + 20 * grad); b = Math.floor(95 + 25 * grad)
+              r = Math.floor(185 + 20 * grad)
+              g = Math.floor(105 + 20 * grad)
+              b = Math.floor(95 + 25 * grad)
             } else if (kind === 'canteen') {
-              r = Math.floor(205 + 25 * grad); g = Math.floor(190 + 25 * grad); b = Math.floor(170 + 30 * grad)
+              r = Math.floor(205 + 25 * grad)
+              g = Math.floor(190 + 25 * grad)
+              b = Math.floor(170 + 30 * grad)
             } else {
-              r = Math.floor(140 + 35 * grad); g = Math.floor(180 + 35 * grad); b = Math.floor(215 + 30 * grad)
+              r = Math.floor(140 + 35 * grad)
+              g = Math.floor(180 + 35 * grad)
+              b = Math.floor(215 + 30 * grad)
             }
             // Crisp subtle specular glass gleam
-            if (Math.abs((x - 8) - (y - 16) * 1.2) < 3) {
-              r = Math.min(255, r + 45); g = Math.min(255, g + 45); b = Math.min(255, b + 45)
+            if (Math.abs(x - 8 - (y - 16) * 1.2) < 3) {
+              r = Math.min(255, r + 45)
+              g = Math.min(255, g + 45)
+              b = Math.min(255, b + 45)
             }
             rough = 35
           }
         } else if (x < 3 || x > 60) {
-          r = 230; g = 227; b = 222; rough = 220
+          r = 230
+          g = 227
+          b = 222
+          rough = 220
         }
-        colorData[idx] = r; colorData[idx + 1] = g; colorData[idx + 2] = b; colorData[idx + 3] = 255
-        roughData[idx] = rough; roughData[idx + 1] = rough; roughData[idx + 2] = rough; roughData[idx + 3] = 255
+        colorData[idx] = r
+        colorData[idx + 1] = g
+        colorData[idx + 2] = b
+        colorData[idx + 3] = 255
+        roughData[idx] = rough
+        roughData[idx + 1] = rough
+        roughData[idx + 2] = rough
+        roughData[idx + 3] = 255
       }
     }
     const map = new THREE.DataTexture(colorData, w, h, THREE.RGBAFormat)
-    map.wrapS = THREE.RepeatWrapping; map.wrapT = THREE.RepeatWrapping
-    map.repeat.set(0.18, 0.42); map.needsUpdate = true
+    map.colorSpace = THREE.SRGBColorSpace
+    map.name = `campus-facade-${kind}`
+    map.magFilter = THREE.LinearFilter
+    map.minFilter = THREE.LinearMipmapLinearFilter
+    map.generateMipmaps = true
+    map.wrapS = THREE.RepeatWrapping
+    map.wrapT = THREE.RepeatWrapping
+    map.repeat.set(0.18, 0.42)
+    map.needsUpdate = true
     const roughnessMap = new THREE.DataTexture(roughData, w, h, THREE.RGBAFormat)
-    roughnessMap.wrapS = THREE.RepeatWrapping; roughnessMap.wrapT = THREE.RepeatWrapping
-    roughnessMap.repeat.set(0.18, 0.42); roughnessMap.needsUpdate = true
+    roughnessMap.magFilter = THREE.LinearFilter
+    roughnessMap.minFilter = THREE.LinearMipmapLinearFilter
+    roughnessMap.generateMipmaps = true
+    roughnessMap.wrapS = THREE.RepeatWrapping
+    roughnessMap.wrapT = THREE.RepeatWrapping
+    roughnessMap.repeat.set(0.18, 0.42)
+    roughnessMap.needsUpdate = true
     textures[kind] = { map, roughnessMap }
   }
   return textures
 }
 
 function createWaterTexture(): THREE.DataTexture {
-  const w = 64, h = 64
+  const w = 64,
+    h = 64
   const data = new Uint8Array(w * h * 4)
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
@@ -76,46 +118,82 @@ function createWaterTexture(): THREE.DataTexture {
     }
   }
   const texture = new THREE.DataTexture(data, w, h, THREE.RGBAFormat)
-  texture.wrapS = THREE.RepeatWrapping; texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(0.2, 0.2); texture.needsUpdate = true
+  texture.colorSpace = THREE.SRGBColorSpace
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.generateMipmaps = true
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(0.2, 0.2)
+  texture.needsUpdate = true
   return texture
 }
 
-function buildCampusTrees(scene: THREE.Object3D, mapRoads: MapRoad[], mapToModel: (point: MapPoint) => [number,number]) {
+function buildCampusTrees(
+  scene: THREE.Object3D,
+  mapRoads: MapRoad[],
+  mapToModel: (point: MapPoint) => [number, number],
+) {
   const trunk = new THREE.CylinderGeometry(0.13, 0.2, 1.0, 5)
   trunk.translate(0, 0.5, 0)
   const tc = new Float32Array(trunk.attributes.position.count * 3)
-  for (let i = 0; i < tc.length; i += 3) { tc[i] = 0.36; tc[i + 1] = 0.26; tc[i + 2] = 0.18 }
+  for (let i = 0; i < tc.length; i += 3) {
+    tc[i] = 0.36
+    tc[i + 1] = 0.26
+    tc[i + 2] = 0.18
+  }
   trunk.setAttribute('color', new THREE.BufferAttribute(tc, 3))
   const crown = new THREE.ConeGeometry(0.8, 1.9, 6)
   crown.translate(0, 1.85, 0)
   const cc = new Float32Array(crown.attributes.position.count * 3)
-  for (let i = 0; i < cc.length; i += 3) { cc[i] = 0.26; cc[i + 1] = 0.52; cc[i + 2] = 0.28 }
+  for (let i = 0; i < cc.length; i += 3) {
+    cc[i] = 0.26
+    cc[i + 1] = 0.52
+    cc[i + 2] = 0.28
+  }
   crown.setAttribute('color', new THREE.BufferAttribute(cc, 3))
   const treeGeo = mergeGeometries([trunk, crown])
-  trunk.dispose(); crown.dispose()
+  trunk.dispose()
+  crown.dispose()
   if (!treeGeo) return null
 
   const positions: [number, number][] = []
-  const treeRoads = new Set(['south-approach', 'north-axis', 'east-internal', 'central-east-curve', 'central-west-curve', 'east-bank', 'library-ring', 'west-inner-west', 'west-inner-north', 'west-inner-south', 'west-inner-axis'])
-  mapRoads.filter(r => treeRoads.has(r.id)).forEach(road => {
-    for (let i = 1; i < road.points.length; i++) {
-      const [ax, az] = mapToModel(road.points[i - 1]!)
-      const [bx, bz] = mapToModel(road.points[i]!)
-      const dx = bx - ax, dz = bz - az
-      const len = Math.hypot(dx, dz)
-      if (len < 12) continue
-      const nx = -dz / len, nz = dx / len
-      const count = Math.max(1, Math.floor(len / 18))
-      const offset = road.width * 0.35 / 2 + 2.2
-      for (let s = 1; s <= count; s++) {
-        const t = s / (count + 1)
-        const mx = ax + dx * t, mz = az + dz * t
-        positions.push([mx + nx * offset, mz + nz * offset])
-        positions.push([mx - nx * offset, mz - nz * offset])
+  const treeRoads = new Set([
+    'south-approach',
+    'north-axis',
+    'east-internal',
+    'central-east-curve',
+    'central-west-curve',
+    'east-bank',
+    'library-ring',
+    'west-inner-west',
+    'west-inner-north',
+    'west-inner-south',
+    'west-inner-axis',
+  ])
+  mapRoads
+    .filter(r => treeRoads.has(r.id))
+    .forEach(road => {
+      for (let i = 1; i < road.points.length; i++) {
+        const [ax, az] = mapToModel(road.points[i - 1]!)
+        const [bx, bz] = mapToModel(road.points[i]!)
+        const dx = bx - ax,
+          dz = bz - az
+        const len = Math.hypot(dx, dz)
+        if (len < 12) continue
+        const nx = -dz / len,
+          nz = dx / len
+        const count = Math.max(1, Math.floor(len / 18))
+        const offset = (road.width * 0.35) / 2 + 2.2
+        for (let s = 1; s <= count; s++) {
+          const t = s / (count + 1)
+          const mx = ax + dx * t,
+            mz = az + dz * t
+          positions.push([mx + nx * offset, mz + nz * offset])
+          positions.push([mx - nx * offset, mz - nz * offset])
+        }
       }
-    }
-  })
+    })
 
   const treeMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 })
   const instanced = new THREE.InstancedMesh(treeGeo, treeMat, positions.length)
@@ -135,8 +213,18 @@ function buildCampusTrees(scene: THREE.Object3D, mapRoads: MapRoad[], mapToModel
   return { mesh: instanced, geometry: treeGeo, material: treeMat }
 }
 
-export function buildCampus(scene: THREE.Object3D, options: { includeContext?: boolean; campusId?: CampusId; representation?: CampusRepresentation } = {}) {
-  const { features: mapFeatures, roads: mapRoads, coverage: campusCoverage, toModel: mapToModel, verticalRange: featureVerticalRange, bounds } = campusSceneData(options.campusId, options.representation)
+export function buildCampus(
+  scene: THREE.Object3D,
+  options: { includeContext?: boolean; campusId?: CampusId; representation?: CampusRepresentation } = {},
+) {
+  const {
+    features: mapFeatures,
+    roads: mapRoads,
+    coverage: campusCoverage,
+    toModel: mapToModel,
+    verticalRange: featureVerticalRange,
+    bounds,
+  } = campusSceneData(options.campusId, options.representation)
   const facadeTextures = createFacadeTextures()
   const waterTexture = createWaterTexture()
   const colors = {
@@ -147,32 +235,111 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     annex: '#eeeae2',
     canteen: '#faeee2',
     anonymous: '#ebe8df',
-    water: '#569fcc',
-    plaza: '#f0f3f6',
+    water: '#668f88',
+    plaza: '#dedccd',
     track: '#cc6a59',
-    field: '#5ea274',
-    court: '#4f8fc5',
-    point: '#2b6694',
-    base: '#86b488',
-    road: '#f7fafc',
+    field: '#6b8a62',
+    court: '#708f8c',
+    point: '#315244',
+    base: '#8b9e79',
+    road: '#ede9de',
     grandstand: '#d2dbe3',
   }
   const materials = {
-    building: new THREE.MeshStandardMaterial({ color: colors.building, map: facadeTextures.building.map, roughnessMap: facadeTextures.building.roughnessMap, roughness: 0.85 }),
-    library: new THREE.MeshStandardMaterial({ color: colors.library, map: facadeTextures.library.map, roughnessMap: facadeTextures.library.roughnessMap, roughness: 0.80 }),
-    sports: new THREE.MeshStandardMaterial({ color: colors.sports, map: facadeTextures.sports.map, roughnessMap: facadeTextures.sports.roughnessMap, roughness: 0.78 }),
-    gym: new THREE.MeshStandardMaterial({ color: colors.gym, map: facadeTextures.gym.map, roughnessMap: facadeTextures.gym.roughnessMap, roughness: 0.82 }),
-    annex: new THREE.MeshStandardMaterial({ color: colors.annex, map: facadeTextures.annex.map, roughnessMap: facadeTextures.annex.roughnessMap, roughness: 0.86 }),
-    canteen: new THREE.MeshStandardMaterial({ color: colors.canteen, map: facadeTextures.canteen.map, roughnessMap: facadeTextures.canteen.roughnessMap, roughness: 0.84 }),
-    anonymous: new THREE.MeshStandardMaterial({ color: colors.anonymous, map: facadeTextures.anonymous.map, roughnessMap: facadeTextures.anonymous.roughnessMap, roughness: 0.86 }),
-    water: new THREE.MeshStandardMaterial({ color: colors.water, map: waterTexture, roughness: 0.14, metalness: 0.26, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    plaza: new THREE.MeshStandardMaterial({ color: colors.plaza, roughness: 0.84, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    track: new THREE.MeshStandardMaterial({ color: colors.track, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    field: new THREE.MeshStandardMaterial({ color: colors.field, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    court: new THREE.MeshStandardMaterial({ color: colors.court, roughness: 0.85, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -1 }),
-    point: new THREE.MeshStandardMaterial({ color: colors.point, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    building: new THREE.MeshStandardMaterial({
+      color: colors.building,
+      map: facadeTextures.building.map,
+      roughnessMap: facadeTextures.building.roughnessMap,
+      roughness: 0.85,
+    }),
+    library: new THREE.MeshStandardMaterial({
+      color: colors.library,
+      map: facadeTextures.library.map,
+      roughnessMap: facadeTextures.library.roughnessMap,
+      roughness: 0.8,
+    }),
+    sports: new THREE.MeshStandardMaterial({
+      color: colors.sports,
+      map: facadeTextures.sports.map,
+      roughnessMap: facadeTextures.sports.roughnessMap,
+      roughness: 0.78,
+    }),
+    gym: new THREE.MeshStandardMaterial({
+      color: colors.gym,
+      map: facadeTextures.gym.map,
+      roughnessMap: facadeTextures.gym.roughnessMap,
+      roughness: 0.82,
+    }),
+    annex: new THREE.MeshStandardMaterial({
+      color: colors.annex,
+      map: facadeTextures.annex.map,
+      roughnessMap: facadeTextures.annex.roughnessMap,
+      roughness: 0.86,
+    }),
+    canteen: new THREE.MeshStandardMaterial({
+      color: colors.canteen,
+      map: facadeTextures.canteen.map,
+      roughnessMap: facadeTextures.canteen.roughnessMap,
+      roughness: 0.84,
+    }),
+    anonymous: new THREE.MeshStandardMaterial({
+      color: colors.anonymous,
+      map: facadeTextures.anonymous.map,
+      roughnessMap: facadeTextures.anonymous.roughnessMap,
+      roughness: 0.86,
+    }),
+    water: new THREE.MeshStandardMaterial({
+      color: colors.water,
+      map: waterTexture,
+      roughness: 0.14,
+      metalness: 0.26,
+      polygonOffset: true,
+      polygonOffsetFactor: -0.5,
+      polygonOffsetUnits: -1,
+    }),
+    plaza: new THREE.MeshStandardMaterial({
+      color: colors.plaza,
+      roughness: 0.84,
+      polygonOffset: true,
+      polygonOffsetFactor: -0.5,
+      polygonOffsetUnits: -1,
+    }),
+    track: new THREE.MeshStandardMaterial({
+      color: colors.track,
+      roughness: 0.85,
+      polygonOffset: true,
+      polygonOffsetFactor: -0.5,
+      polygonOffsetUnits: -1,
+    }),
+    field: new THREE.MeshStandardMaterial({
+      color: colors.field,
+      roughness: 0.85,
+      polygonOffset: true,
+      polygonOffsetFactor: -0.5,
+      polygonOffsetUnits: -1,
+    }),
+    court: new THREE.MeshStandardMaterial({
+      color: colors.court,
+      roughness: 0.85,
+      polygonOffset: true,
+      polygonOffsetFactor: -0.5,
+      polygonOffsetUnits: -1,
+    }),
+    point: new THREE.MeshStandardMaterial({
+      color: colors.point,
+      roughness: 0.82,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -2,
+    }),
     base: new THREE.MeshStandardMaterial({ color: colors.base, roughness: 0.86 }),
-    road: new THREE.MeshStandardMaterial({ color: colors.road, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
+    road: new THREE.MeshStandardMaterial({
+      color: colors.road,
+      roughness: 0.82,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -2,
+    }),
     grandstand: new THREE.MeshStandardMaterial({ color: '#d2dbe3', metalness: 0.62, roughness: 0.28 }),
   }
   const buckets = new Map<string, { material: THREE.Material; id?: string; geometries: THREE.BufferGeometry[] }>()
@@ -206,39 +373,73 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     geometry.dispose()
   }
 
-  function surface(outline: MapPoint[], holes: MapPoint[][], height: number, y: number, material: THREE.Material, id?: string) {
+  function surface(
+    outline: MapPoint[],
+    holes: MapPoint[][],
+    height: number,
+    y: number,
+    material: THREE.Material,
+    id?: string,
+  ) {
     const geometry = new THREE.ExtrudeGeometry(shapeOf(outline, holes), { depth: height, bevelEnabled: false })
     geometry.rotateX(-Math.PI / 2)
     geometry.translate(0, y, 0)
+    if (material instanceof THREE.MeshStandardMaterial && material.map?.name.startsWith('campus-facade-')) {
+      // Caps sample one neutral stone texel; walls retain their window bands.
+      // A shared material keeps every place batched in a single selectable mesh.
+      const uv = geometry.getAttribute('uv')
+      for (const group of geometry.groups)
+        if (group.materialIndex === 0) {
+          for (let i = group.start; i < group.start + group.count; i++) uv.setXY(i, 0, 0)
+        }
+    }
     add(geometry, material, id)
   }
 
   // A neutral support plane also carries peripheral streets and water outside the crop.
   if (options.includeContext !== false) {
-    const base = options.campusId === 'WEST' && options.representation === 'geographic'
-      ? [[bounds.minX,bounds.minZ],[bounds.maxX,bounds.minZ],[bounds.maxX,bounds.maxZ],[bounds.minX,bounds.maxZ]] as MapPoint[]
-      : options.campusId === 'WEST' ? [[110,-10],[1810,-10],[1810,1340],[110,1340]] as MapPoint[]
-      : [[-65,40],[638,40],[638,611],[-65,611]] as MapPoint[]
-    surface(base, [], 1.6, -1.6, materials.anonymous)
+    const base =
+      options.campusId === 'WEST' && options.representation === 'geographic'
+        ? ([
+            [bounds.minX, bounds.minZ],
+            [bounds.maxX, bounds.minZ],
+            [bounds.maxX, bounds.maxZ],
+            [bounds.minX, bounds.maxZ],
+          ] as MapPoint[])
+        : options.campusId === 'WEST'
+          ? ([
+              [110, -10],
+              [1810, -10],
+              [1810, 1340],
+              [110, 1340],
+            ] as MapPoint[])
+          : ([
+              [-65, 40],
+              [638, 40],
+              [638, 611],
+              [-65, 611],
+            ] as MapPoint[])
+    surface(base, [], 1.6, -1.6, materials.plaza)
     surface(campusCoverage, [], 0.05, 0, materials.base)
   }
 
   // Traced polylines, with no generated road grid, crossings or roadside furniture.
-  if (options.includeContext !== false) mapRoads.forEach(road => {
-    for (let i = 1; i < road.points.length; i++) {
-      const [ax, az] = mapToModel(road.points[i - 1]!)
-      const [bx, bz] = mapToModel(road.points[i]!)
-      const w = road.width * 0.35
-      const length = Math.hypot(bx - ax, bz - az)
-      const geometry = new THREE.BoxGeometry(w, 0.09, length + w * 0.15)
-      geometry.rotateY(Math.atan2(bx - ax, bz - az))
-      geometry.translate((ax + bx) / 2, 0.1, (az + bz) / 2)
-      add(geometry, materials.road)
-      const junction = new THREE.CylinderGeometry(w / 2, w / 2, 0.09, 12)
-      junction.translate(bx, 0.1, bz)
-      add(junction, materials.road)
-    }
-  })
+  if (options.includeContext !== false)
+    mapRoads.forEach(road => {
+      for (let i = 1; i < road.points.length; i++) {
+        const [ax, az] = mapToModel(road.points[i - 1]!)
+        const [bx, bz] = mapToModel(road.points[i]!)
+        const w = road.width * 0.35
+        const length = Math.hypot(bx - ax, bz - az)
+        const geometry = new THREE.BoxGeometry(w, 0.09, length + w * 0.15)
+        geometry.rotateY(Math.atan2(bx - ax, bz - az))
+        geometry.translate((ax + bx) / 2, 0.1, (az + bz) / 2)
+        add(geometry, materials.road)
+        const junction = new THREE.CylinderGeometry(w / 2, w / 2, 0.09, 12)
+        junction.translate(bx, 0.1, bz)
+        add(junction, materials.road)
+      }
+    })
 
   function materialFor(kind: SurfaceKind, placeId?: string): THREE.MeshStandardMaterial {
     if (kind !== 'building') return materials[kind]
@@ -247,7 +448,8 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     if (placeId === 'east-gym') return materials.gym
     if (placeId === 'east-swimming') return materials.sports
     if (placeId === 'east-h8') return materials.annex
-    if (['east-jinxiu-dining','east-canteen-wenhua','west-steel-canteen','west-siyuan-canteen'].includes(placeId)) return materials.canteen
+    if (['east-jinxiu-dining', 'east-canteen-wenhua', 'west-steel-canteen', 'west-siyuan-canteen'].includes(placeId))
+      return materials.canteen
     return materials.building
   }
 
@@ -261,7 +463,14 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
       marker.translate(x, base + height / 2, z)
       add(marker, materials.point, feature.placeId)
     } else {
-      surface(feature.outline, feature.holes ?? [], height, base, materialFor(feature.kind, feature.placeId), feature.placeId)
+      surface(
+        feature.outline,
+        feature.holes ?? [],
+        height,
+        base,
+        materialFor(feature.kind, feature.placeId),
+        feature.placeId,
+      )
     }
   })
 
@@ -272,9 +481,12 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     const track = mapFeatures.find(feature => feature.id === 'west-track')
     if (track) {
       const pts = track.outline.map(mapToModel)
-      const xs = pts.map(p => p[0]), zs = pts.map(p => p[1])
-      const minX = Math.min(...xs), maxX = Math.max(...xs)
-      const minZ = Math.min(...zs), maxZ = Math.max(...zs)
+      const xs = pts.map(p => p[0]),
+        zs = pts.map(p => p[1])
+      const minX = Math.min(...xs),
+        maxX = Math.max(...xs)
+      const minZ = Math.min(...zs),
+        maxZ = Math.max(...zs)
       const cz = (minZ + maxZ) / 2
       const lenZ = maxZ - minZ
       const top = sportsGrandstandRoofTop
@@ -294,7 +506,6 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
       }
     }
   }
-
 
   const nonCastingMaterials = new Set([
     materials.water,
@@ -321,7 +532,15 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
     scene.add(mesh)
   }
 
-  const selectionMaterial = new THREE.MeshBasicMaterial({ color: '#447fa7', transparent: true, opacity: 0.25, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 })
+  const selectionMaterial = new THREE.MeshBasicMaterial({
+    color: '#315244',
+    transparent: true,
+    opacity: 0.22,
+    depthWrite: false,
+    polygonOffset: true,
+    polygonOffsetFactor: -2,
+    polygonOffsetUnits: -4,
+  })
   const selection = new THREE.Group()
   selection.visible = false
   scene.add(selection)
@@ -334,7 +553,10 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
       selectionMaterial.dispose()
       trees?.geometry.dispose()
       trees?.material.dispose()
-      Object.values(facadeTextures).forEach(t => { t.map.dispose(); t.roughnessMap.dispose() })
+      Object.values(facadeTextures).forEach(t => {
+        t.map.dispose()
+        t.roughnessMap.dispose()
+      })
       waterTexture.dispose()
     },
     tick(time: number) {
@@ -349,11 +571,13 @@ export function buildCampus(scene: THREE.Object3D, options: { includeContext?: b
       selection.visible = !!place
       if (!place) return
       // Highlight traced geometry and courtyard holes, not a guessed rectangle.
-      pickables.filter(mesh => mesh.userData.placeId === place.id).forEach(mesh => {
-        const overlay = new THREE.Mesh(mesh.geometry.clone(), selectionMaterial)
-        overlay.position.y = 0.04
-        selection.add(overlay)
-      })
+      pickables
+        .filter(mesh => mesh.userData.placeId === place.id)
+        .forEach(mesh => {
+          const overlay = new THREE.Mesh(mesh.geometry.clone(), selectionMaterial)
+          overlay.position.y = 0.04
+          selection.add(overlay)
+        })
     },
     setEvening(evening: boolean) {
       materials.point.emissive.set(evening ? '#538bb8' : '#000000')

@@ -9,13 +9,20 @@ test('every existing business status keeps its domain label and stays within its
     for (const [status, label] of Object.entries(kind === 'CERTIFICATE' ? certificateStatuses : affairStatuses(kind))) {
       const result = serviceJourney(kind, status)
       assert.equal(result.label, label)
-      assert.ok(result.index === null || result.index >= 0 && result.index < result.steps.length)
+      assert.ok(result.index === null || (result.index >= 0 && result.index < result.steps.length))
       assert.ok(result.note)
     }
   }
 })
 test('approval, pending return, awaiting inspection and reserved beds never imply completion', () => {
-  for (const [kind, status] of [['LEAVE', 'APPROVED'], ['LEAVE', 'RETURN_PENDING'], ['REPAIR', 'AWAITING_CONFIRMATION'], ['HOUSING', 'AWAITING_CHECKIN'], ['RESERVATION', 'APPROVED'], ['RESERVATION', 'IN_USE']]) {
+  for (const [kind, status] of [
+    ['LEAVE', 'APPROVED'],
+    ['LEAVE', 'RETURN_PENDING'],
+    ['REPAIR', 'AWAITING_CONFIRMATION'],
+    ['HOUSING', 'AWAITING_CHECKIN'],
+    ['RESERVATION', 'APPROVED'],
+    ['RESERVATION', 'IN_USE'],
+  ]) {
     assert.notEqual(serviceJourney(kind, status).tone, 'complete')
   }
   assert.match(serviceJourney('HOUSING', 'AWAITING_CHECKIN').note, /尚未完成入住/)
@@ -29,7 +36,13 @@ test('returned applications distinguish applicant supplementation from reviewer 
   }
 })
 test('closed and expired records do not mark all intermediate stages as successful', () => {
-  for (const [kind, status] of [['LEAVE', 'REJECTED'], ['CERTIFICATE', 'WITHDRAWN'], ['REPAIR', 'CANCELLED'], ['HOUSING', 'EXPIRED'], ['RESERVATION', 'EXPIRED']]) {
+  for (const [kind, status] of [
+    ['LEAVE', 'REJECTED'],
+    ['CERTIFICATE', 'WITHDRAWN'],
+    ['REPAIR', 'CANCELLED'],
+    ['HOUSING', 'EXPIRED'],
+    ['RESERVATION', 'EXPIRED'],
+  ]) {
     assert.equal(serviceJourney(kind, status).index, null)
     assert.equal(serviceJourney(kind, status).tone, 'closed')
   }

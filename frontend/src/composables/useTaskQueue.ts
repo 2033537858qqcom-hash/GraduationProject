@@ -1,6 +1,13 @@
 import { computed, ref } from 'vue'
 import { errorMessage } from '../lib/api.ts'
-import { getTaskPage, type AggregatedTask, type TaskDomain, type TaskPage, type TaskSourceError, type WorkbenchOverview } from '../workbench.ts'
+import {
+  getTaskPage,
+  type AggregatedTask,
+  type TaskDomain,
+  type TaskPage,
+  type TaskSourceError,
+  type WorkbenchOverview,
+} from '../workbench.ts'
 
 export function useTaskQueue(fetchPage = getTaskPage, pageSize = 8) {
   const tasks = ref<AggregatedTask[]>([])
@@ -56,6 +63,23 @@ export function useTaskQueue(fetchPage = getTaskPage, pageSize = 8) {
     }
   }
 
-  function invalidate() { revision++ }
-  return { tasks, totalPending, taskCounts, taskFilter, currentPage, total, loading, error, complete, sourceErrors, pageCount, initialize, load, invalidate }
+  function invalidate() {
+    revision++
+  }
+  return {
+    tasks,
+    totalPending,
+    taskCounts,
+    taskFilter,
+    currentPage,
+    total,
+    loading,
+    error,
+    complete,
+    sourceErrors,
+    pageCount,
+    initialize,
+    load,
+    invalidate,
+  }
 }

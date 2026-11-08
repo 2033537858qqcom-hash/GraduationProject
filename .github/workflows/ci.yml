@@ -33,6 +33,9 @@ jobs:
         with: { node-version: '24', cache: pnpm, cache-dependency-path: frontend/pnpm-lock.yaml }
       - run: pnpm install --frozen-lockfile
       - run: pnpm run lint
+      - run: pnpm run lint:style
+      - run: pnpm check:important
+      - run: pnpm check:design
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm run build

@@ -25,9 +25,22 @@ test('completion links describe the actual business result', () => {
   assert.equal(affairAction('HOUSING', 'RETURNED'), '查看补交要求')
 })
 test('housing notifications allow only the three fixed detail destinations', () => {
-  for (const path of ['/housing/transfer', '/student-affairs/housing', '/housing/assignments', '/portal/reservations', '/student-affairs/reservations']) {
+  for (const path of [
+    '/housing/transfer',
+    '/student-affairs/housing',
+    '/housing/assignments',
+    '/portal/reservations',
+    '/student-affairs/reservations',
+  ]) {
     assert.equal(safeAffairDestination(path + '?id=18&tab=details'), path + '?id=18&tab=details')
-    for (const query of ['?id=0&tab=details', '?id=-1&tab=details', '?id=18&tab=details&action=check-in', '?id=18', '?id=18&tab=history']) assert.equal(safeAffairDestination(path + query), null)
+    for (const query of [
+      '?id=0&tab=details',
+      '?id=-1&tab=details',
+      '?id=18&tab=details&action=check-in',
+      '?id=18',
+      '?id=18&tab=history',
+    ])
+      assert.equal(safeAffairDestination(path + query), null)
   }
   assert.equal(safeAffairDestination('/housing/mine?id=18&tab=details'), null)
 })

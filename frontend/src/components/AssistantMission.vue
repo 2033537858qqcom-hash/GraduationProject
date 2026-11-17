@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { confirmDialog } from '../composables/useConfirm';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { api, ApiError, errorMessage } from '../lib/api';
+import { AI_REQUEST_TIMEOUT, api, ApiError, errorMessage, streamPostJson } from '../lib/api';
+import { formatDateTime } from '../lib/format';
+import { currentUser } from '../stores/auth';
 import { safeAssistantDestination } from '../lib/assistant';
 import {
   canConfirmMission,
@@ -12,6 +14,7 @@ import {
   repairMissionFieldsPayload,
   leaveMissionFieldsPayload,
   certificateMissionFieldsPayload,
+  housingMissionFieldsPayload,
   missionNeedsPolling,
   missionStageLabel,
   missionStepStatusLabel,
@@ -25,6 +28,7 @@ const props = defineProps<{
   modelReady: boolean;
   missionId?: number | null;
   embedded?: boolean;
+  sessionConsent?: boolean;
 }>();
 const emit = defineEmits<{ working: [value: boolean]; updated: [view: MissionView] }>();
 const mission = ref<MissionView | null>(null),
@@ -37,7 +41,8 @@ const goal = ref(''),
 const loading = ref(false),
   busy = ref(false),
   cancelling = ref(false),
-  error = ref('');
+  error = ref(''),
+  thinkingSteps = ref<string[]>([]);
 const createKey = ref(crypto.randomUUID());
 const empty = () => ({
   campus: '',
@@ -71,8 +76,15 @@ const emptyLeave = () => ({
 const leaveForm = ref(emptyLeave());
 const emptyCertificate = () => ({ purpose: '' });
 const certificateForm = ref(emptyCertificate());
+const emptyHousing = () => ({ reason: '', preferredArea: '', materialNote: '' });
+const housingForm = ref(emptyHousing());
 const kind = ref('AUTO'),
   repairForm = ref(emptyRepair());
+const isHousing = computed(() =>
+  mission.value
+    ? mission.value.kind === 'HOUSING'
+    : kind.value === 'HOUSING' || (kind.value === 'AUTO' && /调宿|换宿舍|换寝室|转宿|退宿|床位/.test(goal.value)),
+);
 const isRepair = computed(() =>
   mission.value
     ? mission.value.kind === 'REPAIR'
@@ -90,32 +102,51 @@ const isCertificate = computed(() =>
       (kind.value === 'AUTO' && /在校证明|学籍证明|证明草稿|开证明|办证明/.test(goal.value)),
 );
 const activeFields = computed(() =>
-  isCertificate.value
-    ? certificateForm.value
-    : isLeave.value
-      ? leaveForm.value
-      : isRepair.value
-        ? repairForm.value
-        : form.value,
+  isHousing.value
+    ? housingForm.value
+    : isCertificate.value
+      ? certificateForm.value
+      : isLeave.value
+        ? leaveForm.value
+        : isRepair.value
+          ? repairForm.value
+          : form.value,
 );
+const taskOptions = computed(() =>
+  summaries.value.map(item => ({
+    value: item.id,
+    label: `#${item.id} · ${missionStageLabel(item.stage)} · ${item.goal.slice(0, 24)}`,
+  })),
+);
+const repairLocationOptions = computed(() => [
+  { value: '', label: mission.value ? '请选择当前开放地点' : '开始任务后读取本人可用地点目录' },
+  ...(mission.value?.repairLocations ?? []).map(location => ({
+    value: location.id,
+    label: `${location.campusName} · ${location.name}`,
+  })),
+]);
 const dirty = computed(() =>
   mission.value
-    ? isCertificate.value
-      ? JSON.stringify(certificateMissionFieldsPayload(certificateForm.value)) !==
-        JSON.stringify(certificateMissionFieldsPayload(mission.value.certificateFields ?? {}))
-      : isLeave.value
-        ? JSON.stringify(leaveMissionFieldsPayload(leaveForm.value)) !==
-          JSON.stringify(leaveMissionFieldsPayload(mission.value.leaveFields ?? {}))
-        : isRepair.value
-          ? JSON.stringify(repairMissionFieldsPayload(repairForm.value)) !==
-            JSON.stringify(repairMissionFieldsPayload(mission.value.repairFields ?? {}))
-          : JSON.stringify(missionFieldsPayload(form.value)) !==
-            JSON.stringify(missionFieldsPayload(mission.value.fields))
+    ? isHousing.value
+      ? JSON.stringify(housingMissionFieldsPayload(housingForm.value)) !==
+        JSON.stringify(housingMissionFieldsPayload(mission.value.housingFields ?? {}))
+      : isCertificate.value
+        ? JSON.stringify(certificateMissionFieldsPayload(certificateForm.value)) !==
+          JSON.stringify(certificateMissionFieldsPayload(mission.value.certificateFields ?? {}))
+        : isLeave.value
+          ? JSON.stringify(leaveMissionFieldsPayload(leaveForm.value)) !==
+            JSON.stringify(leaveMissionFieldsPayload(mission.value.leaveFields ?? {}))
+          : isRepair.value
+            ? JSON.stringify(repairMissionFieldsPayload(repairForm.value)) !==
+              JSON.stringify(repairMissionFieldsPayload(mission.value.repairFields ?? {}))
+            : JSON.stringify(missionFieldsPayload(form.value)) !==
+              JSON.stringify(missionFieldsPayload(mission.value.fields))
     : !!goal.value.trim() ||
       JSON.stringify(form.value) !== JSON.stringify(empty()) ||
       Object.values(repairForm.value).some(Boolean) ||
       Object.values(leaveForm.value).some(Boolean) ||
-      Object.values(certificateForm.value).some(Boolean),
+      Object.values(certificateForm.value).some(Boolean) ||
+      Object.values(housingForm.value).some(Boolean),
 );
 const working = computed(() => loading.value || busy.value || cancelling.value);
 watch(working, value => emit('working', value));
@@ -131,13 +162,16 @@ const locked = computed(
 const readyToConfirm = computed(
   () => !working.value && !pending.value && canConfirmMission(mission.value, activeFields.value, confirmed.value),
 );
-const kindOptions = [
-  { value: 'AUTO', label: '按目标识别任务' },
-  { value: 'RESERVATION', label: '预约草稿' },
-  { value: 'REPAIR', label: '报修草稿' },
-  { value: 'LEAVE', label: '请假草稿' },
-  { value: 'CERTIFICATE', label: '在校证明草稿' },
-];
+const kindOptions = computed(() => {
+  const perms = currentUser.value?.permissions ?? [];
+  const options = [{ value: 'AUTO', label: '按目标识别任务' }];
+  if (perms.includes('reservation:apply')) options.push({ value: 'RESERVATION', label: '预约草稿' });
+  if (perms.includes('repair:apply')) options.push({ value: 'REPAIR', label: '报修草稿' });
+  if (perms.includes('leave:apply')) options.push({ value: 'LEAVE', label: '请假草稿' });
+  if (perms.includes('certificate:apply')) options.push({ value: 'CERTIFICATE', label: '在校证明草稿' });
+  if (perms.includes('housing:read')) options.push({ value: 'HOUSING', label: '调宿申请草稿' });
+  return options;
+});
 const repairCategories = [
   { value: '', label: '请选择故障类别' },
   ...Object.entries({
@@ -152,7 +186,7 @@ const repairCategories = [
 ];
 const modeOptions = computed(() => [
   { value: 'LOCAL', label: '本地任务流程' },
-  { value: 'DEEPSEEK', label: 'DeepSeek动态规划', disabled: !props.modelReady },
+  { value: 'DEEPSEEK', label: 'DeepSeek 动态规划', disabled: !props.modelReady },
 ]);
 const campusOptions = [
   { value: '', label: '请选择校区' },
@@ -187,11 +221,13 @@ Object.assign(missingLabels, {
 });
 Object.assign(missingLabels, {
   reasonType: '请假类型',
-  reason: '实际事由',
+  reason: '事由/原因',
   startDate: '开始日期',
   startTime: '开始时间',
   endDate: '结束日期',
   endTime: '结束时间',
+  preferredArea: '意向区域',
+  materialNote: '材料说明',
 });
 const leaveTypes = [
   { value: '', label: '请选择请假类型' },
@@ -238,6 +274,11 @@ function apply(view: MissionView, replaceFields = true) {
     fill(view.fields);
     fillLeave(view);
     certificateForm.value = { purpose: view.certificateFields?.purpose ?? '' };
+    housingForm.value = {
+      reason: view.housingFields?.reason ?? '',
+      preferredArea: view.housingFields?.preferredArea ?? '',
+      materialNote: view.housingFields?.materialNote ?? '',
+    };
     const r = view.repairFields;
     repairForm.value = {
       category: r?.category ?? '',
@@ -315,15 +356,34 @@ async function mutate(path: string, body: Record<string, unknown>) {
     epoch = ++generation;
   busy.value = true;
   error.value = '';
+  thinkingSteps.value = ['正在连接任务执行器…'];
   pending.value = { path, body, session };
   controller = new AbortController();
   schedulePolling();
   try {
-    const result = await api<MissionView>(path, {
-      method: 'POST',
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    let result: MissionView;
+    const streamPath = `${path}/stream`;
+    try {
+      result = await streamPostJson<MissionView>(streamPath, body, {
+        signal: controller.signal,
+        timeout: AI_REQUEST_TIMEOUT,
+        onStep: msg => {
+          if (epoch !== generation) return;
+          if (!thinkingSteps.value.includes(msg)) thinkingSteps.value = [...thinkingSteps.value, msg];
+        },
+      });
+    } catch (streamCause) {
+      if (streamCause instanceof ApiError && [404, 405].includes(streamCause.status)) {
+        result = await api<MissionView>(path, {
+          method: 'POST',
+          body: JSON.stringify(body),
+          signal: controller.signal,
+          timeout: AI_REQUEST_TIMEOUT,
+        });
+      } else {
+        throw streamCause;
+      }
+    }
     if (epoch !== generation || session !== props.sessionId) return;
     apply(result);
     pending.value = null;
@@ -336,6 +396,7 @@ async function mutate(path: string, body: Record<string, unknown>) {
   } finally {
     if (epoch === generation) {
       busy.value = false;
+      thinkingSteps.value = [];
       controller = null;
       schedulePolling();
     }
@@ -350,17 +411,22 @@ async function create() {
     kind: kind.value,
     mode: mode.value,
     externalConsent: consent.value,
-    fields: isCertificate.value || isLeave.value || isRepair.value ? null : missionFieldsPayload(form.value),
+    fields:
+      isHousing.value || isCertificate.value || isLeave.value || isRepair.value
+        ? null
+        : missionFieldsPayload(form.value),
     repairFields: isRepair.value ? repairMissionFieldsPayload(repairForm.value) : null,
     leaveFields: isLeave.value ? leaveMissionFieldsPayload(leaveForm.value) : null,
     certificateFields: isCertificate.value ? certificateMissionFieldsPayload(certificateForm.value) : null,
+    housingFields: isHousing.value ? housingMissionFieldsPayload(housingForm.value) : null,
   });
 }
 async function action(action: string) {
   if (!mission.value || working.value || pending.value) return;
   const body: Record<string, unknown> = { requestKey: crypto.randomUUID(), version: mission.value.version, action };
   if (action === 'REVISE') {
-    if (isCertificate.value) body.certificateFields = certificateMissionFieldsPayload(certificateForm.value);
+    if (isHousing.value) body.housingFields = housingMissionFieldsPayload(housingForm.value);
+    else if (isCertificate.value) body.certificateFields = certificateMissionFieldsPayload(certificateForm.value);
     else if (isLeave.value) body.leaveFields = leaveMissionFieldsPayload(leaveForm.value);
     else if (isRepair.value) body.repairFields = repairMissionFieldsPayload(repairForm.value);
     else body.fields = missionFieldsPayload(form.value);
@@ -418,6 +484,7 @@ async function newTask() {
   repairForm.value = emptyRepair();
   leaveForm.value = emptyLeave();
   certificateForm.value = emptyCertificate();
+  housingForm.value = emptyHousing();
   kind.value = 'AUTO';
   consent.value = false;
   confirmed.value = false;
@@ -429,12 +496,19 @@ async function selectTask(id: number) {
   if (!working.value && (await allowLeave())) await load(id);
 }
 watch(
-  [goal, form, repairForm, leaveForm, certificateForm, kind, mode],
+  [goal, form, repairForm, leaveForm, certificateForm, housingForm, kind, mode],
   () => {
     confirmed.value = false;
     if (!mission.value && !pending.value) createKey.value = crypto.randomUUID();
   },
   { deep: true },
+);
+watch(
+  () => props.sessionConsent,
+  agreed => {
+    if (agreed) consent.value = true;
+  },
+  { immediate: true },
 );
 watch(
   () => [props.active, props.sessionId, props.missionId] as const,
@@ -450,10 +524,11 @@ watch(
       repairForm.value = emptyRepair();
       leaveForm.value = emptyLeave();
       certificateForm.value = emptyCertificate();
+      housingForm.value = emptyHousing();
       kind.value = 'AUTO';
       goal.value = '';
       pending.value = null;
-      consent.value = false;
+      consent.value = !!props.sessionConsent;
       createKey.value = crypto.randomUUID();
     }
     if (active && session) void load();
@@ -473,25 +548,27 @@ defineExpose({ allowLeave });
 </script>
 
 <template>
-  <section class="assistant-history mission" aria-label="业务任务Agent">
+  <section class="assistant-history mission" aria-label="业务任务 Agent">
     <div class="mission-heading">
       <div>
         <h2>
           {{
-            isCertificate
-              ? '在校证明任务 Agent'
-              : isLeave
-                ? '请假任务 Agent'
-                : isRepair
-                  ? '报修任务 Agent'
-                  : '业务任务 Agent'
+            isHousing
+              ? '调宿任务 Agent'
+              : isCertificate
+                ? '在校证明任务 Agent'
+                : isLeave
+                  ? '请假任务 Agent'
+                  : isRepair
+                    ? '报修任务 Agent'
+                    : '业务任务 Agent'
           }}
         </h2>
         <p>
           {{
             embedded
               ? '核对本次目标中这一事项的实际资料与原申请。'
-              : '描述预约、报修、请假或在校证明目标，核对后保存本人草稿。'
+              : '描述调宿、预约、报修、请假或在校证明目标，核对后保存本人草稿。'
           }}
         </p>
       </div>
@@ -501,18 +578,27 @@ defineExpose({ allowLeave });
     </div>
     <label v-if="summaries.length" class="mission-label">
       恢复本次对话的任务
-      <select
-        :value="mission?.id ?? ''"
+      <BaseSelect
+        :model-value="mission?.id ?? null"
+        :options="taskOptions"
         :disabled="working"
-        @change="selectTask(Number(($event.target as HTMLSelectElement).value))"
-      >
-        <option value="" disabled>选择任务</option>
-        <option v-for="item in summaries" :key="item.id" :value="item.id">
-          #{{ item.id }} · {{ missionStageLabel(item.stage) }} · {{ item.goal.slice(0, 24) }}
-        </option>
-      </select>
+        compact
+        placeholder="选择任务"
+        @update:model-value="value => value && selectTask(Number(value))"
+      />
     </label>
     <p v-if="loading" role="status">正在恢复任务…</p>
+    <div v-if="busy && thinkingSteps.length" class="assistant-thinking" role="status" aria-live="polite">
+      <div class="assistant-thinking-head">
+        <span class="assistant-thinking-dot" aria-hidden="true"></span>
+        <span>任务步骤规划与核验中</span>
+      </div>
+      <ul class="assistant-thinking-steps">
+        <li v-for="(stepText, idx) in thinkingSteps" :key="idx" :class="{ active: idx === thinkingSteps.length - 1 }">
+          {{ stepText }}
+        </li>
+      </ul>
+    </div>
     <template v-if="!mission && !embedded">
       <label class="mission-label">
         任务目标
@@ -521,7 +607,7 @@ defineExpose({ allowLeave });
           rows="3"
           maxlength="1000"
           :disabled="working || !!pending"
-          placeholder="例如：帮我准备灯具故障报修草稿，或下周二30人教室预约草稿"
+          placeholder="例如：帮我准备灯具故障报修草稿，或下周二 30 人教室预约草稿"
         />
       </label>
       <label class="mission-label">
@@ -531,7 +617,7 @@ defineExpose({ allowLeave });
           :options="kindOptions"
           compact
           :disabled="working || !!pending"
-          aria-label="Agent任务类型"
+          aria-label="Agent 任务类型"
         />
       </label>
       <label class="mission-label">
@@ -541,7 +627,7 @@ defineExpose({ allowLeave });
           :options="modeOptions"
           compact
           :disabled="working || !!pending"
-          aria-label="Agent执行方式"
+          aria-label="Agent 执行方式"
         />
       </label>
       <label v-if="mode === 'DEEPSEEK'" class="mission-check">
@@ -554,7 +640,7 @@ defineExpose({ allowLeave });
     <template v-else-if="mission">
       <div class="mission-state" role="status">
         <strong>{{ missionStageLabel(mission.stage) }}</strong>
-        <span>{{ mission.mode === 'DEEPSEEK' ? 'DeepSeek逐步规划' : '本地任务流程' }}</span>
+        <span>{{ mission.mode === 'DEEPSEEK' ? 'DeepSeek 逐步规划' : '本地任务流程' }}</span>
       </div>
       <p class="mission-goal">{{ mission.goal }}</p>
       <p>{{ mission.message }}</p>
@@ -598,7 +684,14 @@ defineExpose({ allowLeave });
           </label>
           <label>
             预计人数
-            <input v-model.number="form.participants" type="number" min="1" max="10000" step="1" placeholder="例如30" />
+            <input
+              v-model.number="form.participants"
+              type="number"
+              min="1"
+              max="10000"
+              step="1"
+              placeholder="例如 30"
+            />
           </label>
           <label class="mission-wide">
             开始时间
@@ -654,12 +747,12 @@ defineExpose({ allowLeave });
           </label>
           <label class="mission-wide">
             当前报修地点
-            <select v-model="repairForm.locationId">
-              <option value="">{{ mission ? '请选择当前开放地点' : '开始任务后读取本人可用地点目录' }}</option>
-              <option v-for="location in mission?.repairLocations ?? []" :key="location.id" :value="location.id">
-                {{ location.campusName }} · {{ location.name }}
-              </option>
-            </select>
+            <BaseSelect
+              v-model="repairForm.locationId"
+              :options="repairLocationOptions"
+              compact
+              :placeholder="mission ? '请选择当前开放地点' : '开始任务后读取本人可用地点目录'"
+            />
           </label>
           <label class="mission-wide">
             具体位置补充
@@ -718,7 +811,7 @@ defineExpose({ allowLeave });
     </details>
     <p v-for="issue in mission?.leavePreview?.issues ?? []" :key="issue" class="mission-error">{{ issue }}</p>
     <p v-if="isLeave" class="mission-note">
-      日期与时间请明确填写，不自动补齐“下午”的时段。单次最长30天为演示规则，正式制度以学校为准。
+      日期与时间请明确填写，不自动补齐“下午”的时段。单次最长 30 天为演示规则，正式制度以学校为准。
     </p>
     <details
       v-if="isCertificate && !mission?.business"
@@ -742,6 +835,37 @@ defineExpose({ allowLeave });
     <p v-if="isCertificate" class="mission-note">
       用途和本人登记资料留在本地。确认保存草稿后，仍需在原页面提交，由学院审核。
     </p>
+    <details
+      v-if="isHousing && !mission?.business"
+      :open="!mission || mission.stage === 'WAITING_INPUT'"
+      class="mission-fields"
+    >
+      <summary>本地调宿资料</summary>
+      <fieldset :disabled="locked">
+        <div class="mission-grid">
+          <label class="mission-wide">
+            调宿原因
+            <textarea v-model="housingForm.reason" rows="3" maxlength="500" placeholder="请填写本人实际调宿原因" />
+          </label>
+          <label class="mission-wide">
+            意向楼栋/区域
+            <input
+              v-model="housingForm.preferredArea"
+              maxlength="200"
+              placeholder="例如西校区安静区域，最终由宿管排床"
+            />
+          </label>
+          <label class="mission-wide">
+            材料说明
+            <input v-model="housingForm.materialNote" maxlength="500" placeholder="说明已准备的证明材料情况" />
+          </label>
+        </div>
+      </fieldset>
+    </details>
+    <p v-for="issue in mission?.housingPreview?.issues ?? []" :key="issue" class="mission-error">{{ issue }}</p>
+    <p v-if="isHousing" class="mission-note">
+      当前住宿记录由本地读取核验。保存草稿后，提交前仍需在原页面或本页核对确认，不提前承诺或预留床位。
+    </p>
     <button
       v-if="!mission && !embedded"
       class="mission-primary"
@@ -749,7 +873,7 @@ defineExpose({ allowLeave });
       :disabled="working || !!pending || !goal.trim() || (mode === 'DEEPSEEK' && (!consent || !modelReady))"
       @click="create"
     >
-      {{ busy ? 'Agent正在执行…' : '开始任务' }}
+      {{ busy ? 'Agent 正在执行…' : '开始任务' }}
     </button>
     <button
       v-if="mission && !mission.business && !['DONE', 'CANCELLED', 'RUNNING'].includes(mission.stage)"
@@ -780,7 +904,14 @@ defineExpose({ allowLeave });
       </button>
     </template>
     <template v-if="mission?.stage === 'WAITING_CONFIRMATION'">
-      <div v-if="isCertificate" class="mission-proposal">
+      <div v-if="isHousing" class="mission-proposal">
+        <h3>调宿草稿预览</h3>
+        <p>当前住宿：{{ mission.housingPreview?.currentPlace || '待核对' }}</p>
+        <p>调宿原因：{{ mission.housingFields?.reason }}</p>
+        <p>意向区域：{{ mission.housingFields?.preferredArea }}</p>
+        <p>材料说明：{{ mission.housingFields?.materialNote }}</p>
+      </div>
+      <div v-else-if="isCertificate" class="mission-proposal">
         <h3>在校证明草稿预览</h3>
         <dl v-if="mission.certificatePreview?.identity" class="mission-identity">
           <dt>姓名</dt>
@@ -828,7 +959,7 @@ defineExpose({ allowLeave });
       <div v-else class="mission-proposal">
         <h3>预约草稿预览</h3>
         <p>{{ mission.options.find(item => item.key === mission?.selectedKey)?.name }}</p>
-        <p>{{ mission.fields.startsAt?.replace('T', ' ') }}—{{ mission.fields.endsAt?.replace('T', ' ') }}</p>
+        <p>{{ formatDateTime(mission.fields.startsAt) }}—{{ formatDateTime(mission.fields.endsAt) }}</p>
         <p>{{ mission.fields.participants }} 人 · {{ mission.fields.activityTheme }}</p>
         <p>
           {{ activityOptions.find(item => item.value === mission?.fields.activityType)?.label }} · 联系方式：{{
@@ -840,13 +971,15 @@ defineExpose({ allowLeave });
       <label class="mission-check">
         <input v-model="confirmed" type="checkbox" :disabled="working || !!pending || dirty" />
         {{
-          isCertificate
-            ? '我已核对本人登记资料及实际用途，确认保存本人在校证明草稿。'
-            : isLeave
-              ? '我已核对请假类型、时间、实际事由及联系方式，确认保存本人请假草稿。'
-              : isRepair
-                ? '我已核对地点、故障现象及联系方式，确认保存本人报修草稿。'
-                : '我已核对场地、时间、人数及活动信息，确认保存本人预约草稿。'
+          isHousing
+            ? '我已核对当前住宿、调宿原因、意向区域及材料说明，确认保存本人调宿草稿。'
+            : isCertificate
+              ? '我已核对本人登记资料及实际用途，确认保存本人在校证明草稿。'
+              : isLeave
+                ? '我已核对请假类型、时间、实际事由及联系方式，确认保存本人请假草稿。'
+                : isRepair
+                  ? '我已核对地点、故障现象及联系方式，确认保存本人报修草稿。'
+                  : '我已核对场地、时间、人数及活动信息，确认保存本人预约草稿。'
         }}
       </label>
       <button type="button" class="mission-primary" :disabled="!readyToConfirm" @click="confirm">确认保存并核验</button>
@@ -895,7 +1028,7 @@ defineExpose({ allowLeave });
   gap: 4px 12px;
 }
 .mission-identity dt {
-  color: #7b8999;
+  color: var(--color-text-tertiary);
 }
 .mission-identity dd {
   margin: 0;
@@ -907,11 +1040,11 @@ defineExpose({ allowLeave });
 .mission {
   font-size: var(--text-supporting);
   line-height: 1.65;
-  color: #52677e;
+  color: var(--color-text-secondary);
 }
 .mission h2 {
   font-size: var(--text-reading);
-  color: #294c71;
+  color: var(--color-brand);
   margin: 0;
 }
 .mission h3 {
@@ -937,12 +1070,12 @@ defineExpose({ allowLeave });
 }
 .mission-heading p {
   font-size: var(--text-meta);
-  color: #7b8b9b;
+  color: var(--color-text-tertiary);
 }
 .mission button {
   font: inherit;
   padding: 6px 10px;
-  border: 1px solid #d5dfe9;
+  border: 1px solid var(--color-border);
   background: var(--color-white);
   border-radius: var(--radius-md);
   color: var(--color-brand);
@@ -957,7 +1090,7 @@ defineExpose({ allowLeave });
 .mission input:focus-visible,
 .mission textarea:focus-visible,
 .mission select:focus-visible {
-  outline: 2px solid #6d91b9;
+  outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 .mission .mission-primary {
@@ -980,10 +1113,10 @@ defineExpose({ allowLeave });
   min-width: 0;
   box-sizing: border-box;
   padding: 7px 8px;
-  border: 1px solid #d9e2ec;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-white);
-  color: #355374;
+  color: var(--color-heading);
 }
 .mission textarea {
   resize: vertical;
@@ -1006,7 +1139,7 @@ defineExpose({ allowLeave });
 }
 .mission-note {
   font-size: var(--text-meta);
-  color: #7b8999;
+  color: var(--color-text-tertiary);
 }
 .mission-state {
   display: flex;
@@ -1022,18 +1155,18 @@ defineExpose({ allowLeave });
 }
 .mission-goal {
   overflow-wrap: anywhere;
-  color: #355374;
+  color: var(--color-heading);
 }
 .mission-fields,
 .mission-trace {
-  border-top: 1px solid #e4eaf1;
+  border-top: 1px solid var(--color-border-subtle);
   margin: 12px 0;
   padding-top: 8px;
 }
 .mission summary {
   cursor: pointer;
   font-weight: 600;
-  color: #3c5978;
+  color: var(--color-brand);
 }
 .mission fieldset {
   border: 0;
@@ -1059,7 +1192,7 @@ defineExpose({ allowLeave });
 .mission-trace li > span {
   font-size: var(--text-meta);
   margin-left: 8px;
-  color: #8392a1;
+  color: var(--color-text-tertiary);
 }
 .mission-trace li p {
   font-size: var(--text-meta);
@@ -1070,7 +1203,7 @@ defineExpose({ allowLeave });
   align-items: start;
   gap: 8px;
   padding: 9px;
-  border: 1px solid #dce5ef;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   margin: 7px 0;
 }
@@ -1079,13 +1212,13 @@ defineExpose({ allowLeave });
 }
 .mission-options small {
   display: block;
-  color: #8190a1;
+  color: var(--color-text-tertiary);
 }
 .mission-proposal,
 .mission-conflicts {
   padding: 8px 10px;
-  border: 1px solid #dce5ef;
-  background: #f7fafc;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-soft);
   border-radius: var(--radius-md);
   margin: 10px 0;
 }

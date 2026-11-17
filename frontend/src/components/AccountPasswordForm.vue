@@ -43,7 +43,7 @@ async function submit() {
       修改登录密码
     </h2>
     <p class="muted">
-      至少十位，包含字母和数字，不超过 72 个 UTF-8 字节。修改后需要重新登录，其他设备上的旧会话也会失效。
+      至少 10 位，须包含字母和数字，最多 72 个字符。修改后需要使用新密码重新登录，其他设备上的登录状态也将一并退出。
     </p>
     <form class="editor-form" @submit.prevent="submit">
       <fieldset :disabled="busy" class="password-fields" :class="{ stacked }">

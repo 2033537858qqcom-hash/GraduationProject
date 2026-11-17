@@ -131,7 +131,7 @@ export const router = createRouter({
         {
           path: 'student-affairs/reservations',
           component: () => import('./pages/ReservationPage.vue'),
-          meta: { title: '场地与设备借用审批', permission: 'reservation:review' },
+          meta: { title: '场地与设备借用审批', reservationStaffPermission: true },
         },
         { path: 'profile', component: () => import('./pages/ProfilePage.vue'), meta: { title: '个人资料' } },
         {
@@ -271,6 +271,11 @@ router.beforeEach(async to => {
   if (
     to.meta.repairResponsibility &&
     !currentUser.value?.permissions.some(p => p === 'repair:dispatch' || p === 'repair:work')
+  )
+    return '/forbidden'
+  if (
+    to.meta.reservationStaffPermission &&
+    !currentUser.value?.permissions.some(p => p === 'reservation:review' || p === 'reservation:manage')
   )
     return '/forbidden'
 })

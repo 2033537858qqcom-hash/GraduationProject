@@ -38,7 +38,6 @@ const {
   prepare,
   restore,
   save,
-  finishLeave,
   allowLeave,
   keydown,
 } = useAssistantDraft<CertificatePreviewFields, AssistantCertificatePreview>({
@@ -181,21 +180,6 @@ defineExpose({ allowLeave });
       恢复最新进度
     </button>
     <p v-if="error" class="assistant-draft-error" role="alert">{{ error }}</p>
-    <Teleport to="body">
-      <dialog
-        ref="dialog"
-        class="assistant-draft-dialog"
-        aria-labelledby="assistant-certificate-dialog-title"
-        @cancel.prevent="finishLeave(false)"
-      >
-        <h2 id="assistant-certificate-dialog-title">证明预览有未暂存修改</h2>
-        <p>未暂存的修改会丢失；已核对的内容可从历史对话恢复。</p>
-        <div>
-          <button ref="cancelButton" @click="finishLeave(false)">继续填写</button>
-          <button @click="finishLeave(true)">放弃修改并离开</button>
-        </div>
-      </dialog>
-    </Teleport>
   </div>
 </template>
 <style scoped src="../styles/assistant-draft.css"></style>
@@ -203,13 +187,13 @@ defineExpose({ allowLeave });
 .certificate-identity {
   margin: 14px 0 8px;
   padding: 10px;
-  border: 1px solid #e2e9f0;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: #fafbfd;
+  background: var(--color-surface);
 }
 .certificate-identity h3 {
   font-size: var(--text-meta);
-  color: #344d69;
+  color: var(--color-heading);
   margin: 0 0 8px;
 }
 .certificate-identity dl {
@@ -219,19 +203,19 @@ defineExpose({ allowLeave });
 }
 .certificate-identity dt {
   font-size: var(--text-meta);
-  color: #8392a3;
+  color: var(--color-text-tertiary);
   margin-top: 5px;
 }
 .certificate-identity dd {
   margin: 0;
   font-size: var(--text-meta);
-  color: #405b76;
+  color: var(--color-ink);
   overflow-wrap: anywhere;
   line-height: 1.6;
 }
 .certificate-identity p {
   font-size: var(--text-meta);
-  color: #8392a3;
+  color: var(--color-text-tertiary);
   line-height: 1.7;
   margin: 8px 0 0;
 }

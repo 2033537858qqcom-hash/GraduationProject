@@ -36,7 +36,7 @@ const routes = routeRecords(routerCode)
 const byPath = new Map(routes.map(route => [route.path, route]))
 const pickMeta = meta =>
   Object.fromEntries(
-    ['permission', 'financePermission', 'contentPermission', 'repairResponsibility']
+    ['permission', 'financePermission', 'contentPermission', 'repairResponsibility', 'reservationStaffPermission']
       .filter(key => key in meta)
       .map(key => [key, meta[key]]),
   )
@@ -63,7 +63,7 @@ const expectedPermissions = {
   // 岗位办理
   'student-affairs/certificates': { permission: 'certificate:review' },
   'student-affairs/leave': { permission: 'leave:review' },
-  'student-affairs/reservations': { permission: 'reservation:review' },
+  'student-affairs/reservations': { reservationStaffPermission: true },
   'student-affairs/housing': { permission: 'housing:review' },
   'housing/assignments': { permission: 'housing:assign' },
   'housing/mine': { permission: 'housing:read' },

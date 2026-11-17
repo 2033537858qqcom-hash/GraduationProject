@@ -1,5 +1,5 @@
 param(
-    [ValidateRange(1024,65535)][int]$Port = 5173,
+    [ValidateRange(1024,65535)][int]$Port = 18090,
     [ValidateRange(1,300)][int]$BackendWaitSeconds = 45,
     [switch]$SkipBackendCheck
 )

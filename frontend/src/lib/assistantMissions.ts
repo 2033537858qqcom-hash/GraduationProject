@@ -3,6 +3,11 @@ import type { AssistantCertificatePreview } from './assistantCertificate'
 export interface CertificateMissionFields {
   purpose: string | null
 }
+export interface HousingMissionFields {
+  reason: string | null
+  preferredArea: string | null
+  materialNote: string | null
+}
 export interface MissionFields {
   campus: string | null
   startsAt: string | null
@@ -84,6 +89,13 @@ export interface MissionView extends Omit<MissionSummary, 'requestKey'> {
   } | null
   certificateFields?: CertificateMissionFields | null
   certificatePreview?: AssistantCertificatePreview | null
+  housingFields?: HousingMissionFields | null
+  housingPreview?: {
+    ready: boolean
+    summary: string
+    currentPlace: string | null
+    issues: string[]
+  } | null
 }
 const clean = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null)
 export function missionFieldsPayload(input: Partial<Record<keyof MissionFields, unknown>>): MissionFields {
@@ -138,12 +150,22 @@ export function certificateMissionFieldsPayload(
 ): CertificateMissionFields {
   return { purpose: clean(input.purpose) }
 }
+export function housingMissionFieldsPayload(
+  input: Partial<Record<keyof HousingMissionFields, unknown>>,
+): HousingMissionFields {
+  return {
+    reason: clean(input.reason),
+    preferredArea: clean(input.preferredArea),
+    materialNote: clean(input.materialNote),
+  }
+}
 type Proposal = Pick<MissionView, 'version' | 'stage' | 'proposalHash'> & {
   kind?: string
   fields: MissionFields | null
   repairFields?: RepairMissionFields | null
   leaveFields?: LeaveMissionFields | null
   certificateFields?: CertificateMissionFields | null
+  housingFields?: HousingMissionFields | null
 }
 export function canConfirmMission(
   mission: Proposal | null,
@@ -157,6 +179,11 @@ export function canConfirmMission(
     !/^[a-f0-9]{64}$/.test(mission.proposalHash ?? '')
   )
     return false
+  if (mission.kind === 'HOUSING')
+    return (
+      JSON.stringify(housingMissionFieldsPayload(fields)) ===
+      JSON.stringify(housingMissionFieldsPayload(mission.housingFields ?? {}))
+    )
   if (mission.kind === 'CERTIFICATE')
     return (
       JSON.stringify(certificateMissionFieldsPayload(fields)) ===
@@ -255,6 +282,11 @@ Object.assign(missionActionLabels, {
   prepare_certificate: '核对证明预览',
   save_certificate: '保存本人证明草稿',
   verify_certificate: '读取原证明申请核验',
+  check_housing_requirements: '核对调宿资料与指南',
+  inspect_housing_stay: '读取本人当前住宿记录',
+  prepare_housing: '核对调宿预览',
+  save_housing: '保存本人调宿草稿',
+  verify_housing: '读取原调宿申请核验',
 })
 export function missionBusinessStatusLabel(status: string) {
   return (
@@ -270,6 +302,8 @@ export function missionBusinessStatusLabel(status: string) {
         WITHDRAWN: '已撤回',
         CANCELLED: '已取消',
         EXPIRED: '已过期',
+        AWAITING_ASSIGNMENT: '待排床',
+        AWAITING_CHECKIN: '待入住',
       } as Record<string, string>
     )[status] ?? '查看最新状态'
   )

@@ -1,5 +1,5 @@
 import { getCurrentScope, onScopeDispose, ref, shallowRef } from 'vue'
-import { errorMessage, isAbortError } from '../lib/api'
+import { errorMessage, isAbortError } from '../lib/api.ts'
 
 export interface UseRequestOptions {
   /** Run the request immediately. Defaults to true. */

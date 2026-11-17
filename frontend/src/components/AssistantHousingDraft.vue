@@ -37,7 +37,6 @@ const {
   prepare,
   restore,
   save,
-  finishLeave,
   allowLeave,
   keydown,
 } = useAssistantDraft<HousingPreviewFields, AssistantHousingPreview>({
@@ -108,14 +107,14 @@ defineExpose({ allowLeave });
             <label>
               <div class="label-heading-row">
                 <span>意向区域</span>
-                <small class="muted">选填</small>
+                <small class="muted">必填</small>
               </div>
               <input v-model="fields.preferredArea" maxlength="200" placeholder="例如东校区低楼层，不代表床位已安排" />
             </label>
             <label>
               <div class="label-heading-row">
                 <span>材料说明</span>
-                <small class="muted">选填</small>
+                <small class="muted">必填</small>
               </div>
               <textarea
                 v-model="fields.materialNote"
@@ -184,21 +183,6 @@ defineExpose({ allowLeave });
       恢复最新进度
     </button>
     <p v-if="error" class="assistant-draft-error" role="alert">{{ error }}</p>
-    <Teleport to="body">
-      <dialog
-        ref="dialog"
-        class="assistant-draft-dialog"
-        aria-labelledby="assistant-housing-dialog-title"
-        @cancel.prevent="finishLeave(false)"
-      >
-        <h2 id="assistant-housing-dialog-title">调宿预览有未暂存修改</h2>
-        <p>离开会丢失未暂存内容，已核对内容可从历史对话恢复。</p>
-        <div>
-          <button ref="cancelButton" @click="finishLeave(false)">继续填写</button>
-          <button @click="finishLeave(true)">放弃修改并离开</button>
-        </div>
-      </dialog>
-    </Teleport>
   </div>
 </template>
 <style scoped src="../styles/assistant-draft.css"></style>

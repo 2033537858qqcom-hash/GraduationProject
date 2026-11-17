@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import DownloadLink from '../components/DownloadLink.vue';
+import FileDropZone from './FileDropZone.vue';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { FileText, Paperclip, Upload } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
@@ -19,14 +20,14 @@ const opened = ref(props.initialOpen),
   error = ref(''),
   success = ref('');
 const file = ref<File | null>(null),
-  input = ref<HTMLInputElement | null>(null);
+  input = ref<InstanceType<typeof FileDropZone> | null>(null);
 const editable = computed(() => props.view === 'mine' && ['DRAFT', 'RETURNED'].includes(props.request.status));
 let sequence = 0,
   uploadKey = housingRequestKey();
 const removeKeys = new Map<string, string>();
 function clear() {
   file.value = null;
-  if (input.value) input.value.value = '';
+  input.value?.clear();
   emit('pending', false);
   uploadKey = housingRequestKey();
 }
@@ -182,19 +183,17 @@ onBeforeUnmount(() => {
             </li>
           </ul>
           <form v-if="editable" class="housing-upload" @submit.prevent="upload">
-            <label>
-              添加材料
-              <input
-                ref="input"
-                type="file"
-                accept=".pdf,.png,.jpg,.jpeg"
-                :disabled="saving || busy || data.current.length >= 3"
-                @change="choose"
-              />
-            </label>
-            <p class="muted">
-              PDF、JPEG 或 PNG，单份最多 2 MB，当前最多 3 份。PDF 不加密且最多 20 页。提交后冻结当次清单。
-            </p>
+            <FileDropZone
+              ref="input"
+              compact
+              accept=".pdf,.png,.jpg,.jpeg"
+              :disabled="saving || busy || data.current.length >= 3"
+              :file-name="file?.name ?? ''"
+              title="选择或拖入调宿证明材料"
+              hint="PDF、JPEG 或 PNG，单份最多 2 MB，当前最多 3 份；提交后冻结当次清单"
+              @change="choose"
+              @clear="clear"
+            />
             <div class="form-actions">
               <button class="button compact" :disabled="saving || busy || !file">
                 <Upload :size="14" />

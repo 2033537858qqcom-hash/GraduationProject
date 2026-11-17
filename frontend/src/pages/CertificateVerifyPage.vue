@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { AlertCircle, CheckCircle2, Copy, Download, Search, ShieldCheck } from '@lucide/vue';
+import { AlertCircle, ArrowLeft, CheckCircle2, Copy, Download, Search, ShieldCheck, X } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime as formatTime } from '../lib/format';
 import { useToast } from '../composables/useToast';
 import DownloadLink from '../components/DownloadLink.vue';
 
@@ -27,11 +28,6 @@ const searched = ref(false);
 const error = ref('');
 const copied = ref(false);
 const result = ref<VerificationResult | null>(null);
-
-function formatTime(iso: string | null) {
-  if (!iso) return '';
-  return iso.slice(0, 16).replace('T', ' ');
-}
 
 async function doVerify(codeToVerify?: string) {
   const code = (codeToVerify ?? inputCode.value).trim();
@@ -64,6 +60,21 @@ function handleSearch() {
     void router.replace({ query: { number: inputCode.value.trim() } });
     void doVerify(inputCode.value.trim());
   }
+}
+
+function fillSampleCode() {
+  const sample = 'DEMO-20261017-000001';
+  inputCode.value = sample;
+  void router.replace({ query: { number: sample } });
+  void doVerify(sample);
+}
+
+function clearCode() {
+  inputCode.value = '';
+  error.value = '';
+  searched.value = false;
+  result.value = null;
+  void router.replace({ query: {} });
 }
 
 const toast = useToast();
@@ -105,11 +116,19 @@ watch(
 
 <template>
   <div class="verify-page page-width">
+    <div class="verify-context-bar no-print">
+      <RouterLink to="/?chapter=disclosure">
+        <ArrowLeft :size="13" />
+        返回信息公开
+      </RouterLink>
+      <span>PUBLIC VERIFICATION / ARCHIVE</span>
+    </div>
+
     <!-- Non-print Search Header -->
     <header class="verify-header no-print">
       <div class="verify-title-row">
-        <ShieldCheck :size="32" class="shield-brand-icon" />
-        <div>
+        <div class="verify-title-copy">
+          <span class="verify-eyebrow">公开核验服务 · 郑州工业应用技术学院</span>
           <h1>在校证明核验</h1>
           <p class="muted">输入证明编号或扫描二维码，查询平台中的演示证明记录。公开信息已脱敏。</p>
         </div>
@@ -127,6 +146,15 @@ watch(
             placeholder="例如：DEMO-20261017-000001"
             :disabled="loading"
           />
+          <button
+            v-if="inputCode && !loading"
+            type="button"
+            class="search-clear-btn"
+            aria-label="清空防伪编码"
+            @click="clearCode"
+          >
+            <X :size="14" />
+          </button>
         </div>
         <button type="submit" class="button primary" :disabled="loading || !inputCode.trim()">
           {{ loading ? '正在核验…' : '立即核验' }}
@@ -213,6 +241,11 @@ watch(
             本报告用于毕业设计功能展示，不代表学校正式学籍认证、电子签章或官方存证，不替代学校正式证明。
           </p>
         </div>
+        <div class="verify-seal-emblem" aria-hidden="true">
+          <ShieldCheck :size="22" />
+          <strong>演示记录已核验</strong>
+          <small>Z.Z.U.I.T · VERIFIED</small>
+        </div>
       </div>
 
       <!-- Footer Note & Actions -->
@@ -244,7 +277,7 @@ watch(
     <!-- Empty State Guide -->
     <div v-else-if="!searched && !loading" class="verify-placeholder no-print">
       <div class="placeholder-icon-ring">
-        <ShieldCheck :size="48" />
+        <ShieldCheck :size="38" />
       </div>
       <h3>演示证明记录查询</h3>
       <p>
@@ -252,15 +285,40 @@ watch(
         <code>DEMO-20261017-000001</code>
         ）进行真伪查验。
       </p>
+      <button type="button" class="verify-sample-btn" @click="fillSampleCode">填入示例编号并核验</button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .verify-page {
-  padding-block: 40px 60px;
-  max-width: 920px;
+  padding-block: 32px 64px;
+  max-width: 940px;
   margin-inline: auto;
+}
+
+.verify-context-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 24px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  letter-spacing: 1.5px;
+}
+
+.verify-context-bar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-meta);
+  letter-spacing: 0;
+}
+
+.verify-context-bar a:hover {
+  color: var(--brand);
 }
 
 .verify-header {
@@ -268,21 +326,33 @@ watch(
 }
 
 .verify-title-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
   margin-bottom: 24px;
 }
 
-.shield-brand-icon {
-  color: var(--brand);
-  flex-shrink: 0;
+.verify-title-copy::before {
+  content: '';
+  display: block;
+  width: 35px;
+  height: 1px;
+  background: var(--color-gold);
+  margin-bottom: 12px;
+}
+
+.verify-eyebrow {
+  display: block;
+  color: var(--color-text-secondary);
+  font-size: var(--text-eyebrow);
+  letter-spacing: 1.4px;
+  margin-bottom: 6px;
 }
 
 .verify-title-row h1 {
-  font-size: 26px;
-  margin: 0 0 4px;
-  color: var(--brand);
+  font-family: var(--site-serif);
+  font-size: clamp(28px, 3vw, 35px);
+  font-weight: 400;
+  letter-spacing: 2px;
+  margin: 0 0 8px;
+  color: var(--color-heading);
 }
 
 .verify-search-box {
@@ -307,7 +377,7 @@ watch(
 
 .search-input-wrap input {
   width: 100%;
-  padding: 12px 14px 12px 42px;
+  padding: 12px 38px 12px 42px;
   font-size: var(--text-body);
   font-family: inherit;
   border: 1px solid var(--line);
@@ -321,16 +391,36 @@ watch(
 .search-input-wrap input:focus {
   outline: none;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px rgb(36, 75, 120, 0.15);
+  box-shadow: var(--focus-ring);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--color-text-tertiary);
+  cursor: pointer;
+}
+
+.search-clear-btn:hover {
+  background: var(--color-surface-soft);
+  color: var(--color-ink);
 }
 
 .verify-alert {
   display: flex;
   align-items: flex-start;
   gap: 12px;
-  background: #fdf3f2;
-  border: 1px solid #f5c6cb;
-  color: #721c24;
+  background: var(--color-danger-soft);
+  border: 1px solid var(--color-danger-border);
+  color: var(--color-danger-strong);
   padding: 16px 20px;
   border-radius: var(--radius-md);
   margin-bottom: 28px;
@@ -339,10 +429,10 @@ watch(
 .verify-card {
   position: relative;
   background: var(--color-white);
-  border: 1px solid #d4deea;
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
   padding: 36px 42px;
-  box-shadow: 0 8px 30px rgb(20, 43, 69, 0.06);
+  box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 
@@ -371,41 +461,45 @@ watch(
 
 .school-emboss .univ-cn {
   display: block;
-  font-size: var(--text-title-sm);
-  font-weight: 600;
+  font-family: var(--site-serif);
+  font-size: 20px;
+  font-weight: 500;
   color: var(--brand);
-  letter-spacing: 1px;
+  letter-spacing: 2px;
 }
 
 .school-emboss .univ-en {
   display: block;
   font-size: var(--text-meta);
   color: var(--muted);
-  letter-spacing: 0.5px;
-  margin-top: 2px;
+  letter-spacing: 0.6px;
+  margin-top: 3px;
 }
 
 .verify-badge-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: #eef8f1;
-  color: #1e7e34;
-  border: 1px solid #c3e6cb;
-  padding: 5px 12px;
-  border-radius: var(--radius-pill);
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid var(--color-border-strong);
+  padding: 4px 10px;
+  border-radius: var(--radius-xs);
   font-size: var(--text-meta);
   font-weight: 500;
 }
 
 .verify-card-divider {
   height: 2px;
-  background: linear-gradient(90deg, var(--brand) 0%, #d4deea 100%);
+  background: linear-gradient(90deg, var(--color-brand) 0%, var(--color-gold) 48%, var(--color-border) 100%);
   margin-block: 20px 24px;
 }
 
 .verify-doc-title h2 {
-  font-size: 20px;
+  font-family: var(--site-serif);
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 1px;
   color: var(--site-ink);
   margin: 0 0 10px;
 }
@@ -428,8 +522,8 @@ watch(
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 1px;
-  background: #e5ebf3;
-  border: 1px solid #e5ebf3;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-subtle);
   margin-block: 28px;
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -437,10 +531,10 @@ watch(
 
 .fact-cell {
   background: var(--color-white);
-  padding: 14px 18px;
+  padding: 15px 18px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .fact-label {
@@ -450,7 +544,7 @@ watch(
 
 .fact-val {
   font-size: var(--text-body);
-  color: #24292e;
+  color: var(--color-ink);
 }
 
 .verify-statement-row {
@@ -464,8 +558,8 @@ watch(
 .verify-statement-text {
   flex: 1;
   font-size: var(--text-supporting);
-  line-height: 1.8;
-  color: #444d56;
+  line-height: 1.85;
+  color: var(--color-text-secondary);
 }
 
 .statement-lead {
@@ -478,6 +572,34 @@ watch(
   font-size: var(--text-meta);
   color: var(--muted);
   margin-top: 8px;
+}
+
+.verify-seal-emblem {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 16px 20px;
+  border: 1px dashed var(--color-gold);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+  color: var(--brand);
+  text-align: center;
+}
+
+.verify-seal-emblem strong {
+  font-family: var(--site-serif);
+  font-size: var(--text-supporting);
+  font-weight: 500;
+  letter-spacing: 1px;
+}
+
+.verify-seal-emblem small {
+  font-size: var(--text-eyebrow);
+  letter-spacing: 1.2px;
+  color: var(--color-text-tertiary);
 }
 
 .verify-card-footer {
@@ -506,18 +628,19 @@ watch(
 
 .verify-placeholder {
   text-align: center;
-  padding: 60px 20px;
-  background: var(--color-white);
+  padding: 52px 24px;
+  background: rgb(253 253 249 / 75%);
   border: 1px dashed var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xs);
 }
 
 .placeholder-icon-ring {
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   margin: 0 auto 16px;
-  border-radius: 50%;
-  background: #eef3f8;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-subtle);
   color: var(--brand);
   display: flex;
   align-items: center;
@@ -525,7 +648,10 @@ watch(
 }
 
 .verify-placeholder h3 {
-  font-size: var(--text-title-sm);
+  font-family: var(--site-serif);
+  font-size: 20px;
+  font-weight: 400;
+  letter-spacing: 1px;
   margin: 0 0 10px;
   color: var(--brand);
 }
@@ -535,7 +661,7 @@ watch(
   font-size: var(--text-supporting);
   max-width: 500px;
   margin: 0 auto;
-  line-height: 1.7;
+  line-height: 1.8;
 }
 
 .verify-placeholder code {
@@ -543,6 +669,28 @@ watch(
   background: var(--color-surface-soft);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
+}
+
+.verify-sample-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 18px;
+  padding: 0 0 6px;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--brand);
+  font-size: var(--text-meta);
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.verify-sample-btn:hover {
+  border-bottom-color: var(--brand);
 }
 
 /* Print Friendly Styles */

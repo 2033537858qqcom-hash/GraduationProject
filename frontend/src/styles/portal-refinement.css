@@ -1,11 +1,11 @@
 /* Campus services: a restrained institutional palette and a denser reading rhythm. */
 .portal-shell {
-  background: #f3f5f7;
+  background: var(--color-paper);
 }
 .portal-shell .portal-header {
   position: relative;
   border-top: none;
-  background: radial-gradient(130% 120% at 50% 0%, #f6f8fb 0%, var(--color-white) 82%);
+  background: radial-gradient(130% 120% at 50% 0%, var(--color-surface-hover) 0%, var(--color-surface) 82%);
   overflow: hidden;
 }
 .portal-shell .portal-header-landscape {
@@ -57,10 +57,12 @@
 .portal-shell .account-action {
   padding: 6px 8px;
   border-radius: var(--radius-md);
-  transition: all 0.2s ease;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease;
 }
 .portal-shell .account-action:hover {
-  background: rgb(36, 75, 120, 0.05);
+  background: var(--color-brand-tint);
 }
 
 @media (max-width: 1050px) {
@@ -107,8 +109,8 @@
   background: var(--color-white);
 }
 .portal-shell .service-entry:hover {
-  border-color: #9bb0c7;
-  box-shadow: 0 3px 12px #244b7808;
+  border-color: var(--color-border-strong);
+  box-shadow: 0 3px 12px rgb(41 62 52 / 6%);
   transform: translateY(-1px);
 }
 .portal-shell .service-entry:focus-visible {
@@ -123,10 +125,10 @@
   grid-row: 1 / span 2;
   width: 38px;
   height: 38px;
-  border: 1px solid #e2e9f0;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  color: #315d86;
-  background: #f0f4f8;
+  color: var(--color-heading);
+  background: var(--color-surface-soft);
   box-shadow: none;
 }
 .portal-shell .service-entry .service-entry-icon svg {
@@ -142,13 +144,13 @@
 .portal-shell .service-entry-copy strong {
   font-size: var(--text-body);
   font-weight: 600;
-  color: #25384d;
+  color: var(--color-ink);
   line-height: 1.6;
 }
 .portal-shell .service-entry-copy > span {
   font-size: var(--text-supporting);
   line-height: 1.65;
-  color: #788494;
+  color: var(--color-text-secondary);
   margin-top: 5px;
 }
 .portal-shell .service-entry-meta {
@@ -159,7 +161,7 @@
 .portal-shell .service-category-tag {
   background: transparent;
   padding: 0;
-  color: #8592a1;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
 }
 .portal-shell .service-entry .service-badge {
@@ -171,27 +173,34 @@
   position: absolute;
   top: 12px;
   right: 11px;
-  opacity: 0.5;
+  opacity: 0.48;
   background: transparent;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.portal-shell .service-entry:hover .service-entry-arrow-wrap {
+  opacity: 0.92;
+  transform: translate(2px, -2px);
 }
 .portal-shell .service-count-pill {
   border-radius: var(--radius-sm);
-  background: #eaf0f6;
-  border: 0;
-  color: #4c6b8b;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-subtle);
+  color: var(--color-heading);
 }
 .portal-shell .service-segmented-control {
-  background: #ebeff3;
-  border: 0;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
 }
 .portal-shell .service-segment-btn {
   border-radius: var(--radius-sm);
 }
 .portal-shell .service-segment-btn.active {
-  color: var(--color-brand);
-  box-shadow: none !important;
-  background: transparent !important;
+  color: var(--color-heading);
+  box-shadow: none;
+  background: transparent;
 }
 .portal-shell .service-search-box {
   box-shadow: none;
@@ -221,7 +230,7 @@
 }
 .portal-shell .student-portal .section-heading .eyebrow {
   font-size: var(--text-eyebrow);
-  color: #8b98a7;
+  color: var(--color-text-tertiary);
   letter-spacing: 0.1em;
 }
 .portal-shell .student-portal .lesson-row {
@@ -241,14 +250,14 @@
 }
 .portal-shell .student-portal .notice-row h3 {
   font-size: var(--text-reading);
-  color: #2a425d;
+  color: var(--color-heading);
 }
 .portal-shell .student-portal .notice-row p {
   line-height: 1.9;
 }
 .portal-shell .student-portal .portal-services {
   margin: 28px 0 0;
-  border-top: 1px solid #dce3eb;
+  border-top: 1px solid var(--color-border);
   padding-top: 26px;
 }
 .portal-shell .student-portal .service-hub-header {
@@ -272,7 +281,7 @@
   padding: 0;
   margin-bottom: 24px;
   overflow: hidden;
-  border: 1px solid #dbe3ec;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-white);
 }
@@ -280,7 +289,7 @@
   padding: 27px 32px;
 }
 .portal-shell .portal-welcome-copy .portal-context {
-  color: #52718f;
+  color: var(--color-text-secondary);
   font-size: var(--text-eyebrow);
   letter-spacing: 0.08em;
 }
@@ -312,7 +321,7 @@
   position: relative;
   min-height: 205px;
   overflow: hidden;
-  background: #d6e1e8;
+  background: var(--color-surface-active);
 }
 .portal-campus-feature img {
   display: block;
@@ -326,7 +335,7 @@
   content: '';
   position: absolute;
   inset: 35% 0 0;
-  background: linear-gradient(transparent, #15314caa);
+  background: linear-gradient(transparent, rgb(33 60 53 / 67%));
   pointer-events: none;
 }
 .portal-campus-feature > span {
@@ -357,11 +366,11 @@
 }
 .portal-shell .workbench-page .workbench-welcome {
   margin-bottom: 24px;
-  border: 0;
-  border-left: 3px solid var(--color-brand);
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-brand);
   padding: 16px 24px;
-  background: #eaf0f6;
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  background: var(--color-surface-soft);
+  border-radius: var(--radius-xs);
 }
 .portal-shell .workbench-page .workbench-welcome h1 {
   color: var(--color-heading);
@@ -371,7 +380,7 @@
 }
 .portal-shell .workbench-page .workbench-welcome .portal-context {
   font-size: var(--text-eyebrow);
-  color: #5c7691;
+  color: var(--color-text-secondary);
 }
 .portal-shell .workbench-page .workbench-welcome p {
   max-width: 680px;
@@ -381,12 +390,12 @@
   min-width: 165px;
   padding-left: 25px;
   margin-left: 25px;
-  border-left: 1px solid #cedae5;
+  border-left: 1px solid var(--color-border);
   text-align: right;
 }
 .workbench-pending-summary > span {
   font-size: var(--text-meta);
-  color: #677f96;
+  color: var(--color-text-secondary);
 }
 .workbench-pending-summary strong {
   display: block;
@@ -398,7 +407,7 @@
 }
 .workbench-pending-summary small {
   display: block;
-  color: #8b98a5;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
 }
 .workbench-dashboard {
@@ -434,7 +443,7 @@
   gap: 7px 16px;
   padding: 17px 0;
   border: 0;
-  border-bottom: 1px solid #e7ecf1;
+  border-bottom: 1px solid var(--color-border-subtle);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -443,7 +452,7 @@
 .portal-shell .workbench-page .workbench-task-card:hover {
   transform: none;
   box-shadow: none;
-  background: #fafbfd;
+  background: var(--color-surface-hover);
 }
 .portal-shell .workbench-page .task-card-header {
   grid-column: 1;
@@ -458,7 +467,7 @@
   font-size: var(--text-body);
   line-height: 1.8;
   font-weight: 600;
-  color: #283d53;
+  color: var(--color-ink);
 }
 .portal-shell .workbench-page .task-meta {
   grid-column: 1;
@@ -528,7 +537,7 @@
   height: 112px;
   overflow: hidden;
   position: relative;
-  background: #dbe5ec;
+  background: var(--color-surface-active);
 }
 .workspace-campus-image img {
   width: 100%;
@@ -540,7 +549,7 @@
   content: '';
   position: absolute;
   inset: 30% 0 0;
-  background: linear-gradient(transparent, #18324da6);
+  background: linear-gradient(transparent, rgb(33 60 53 / 65%));
 }
 .workspace-campus-image > span {
   position: absolute;
@@ -556,12 +565,12 @@
 }
 .workspace-scope-copy .eyebrow {
   font-size: var(--text-eyebrow);
-  color: #8797a8;
+  color: var(--color-text-tertiary);
 }
 .workspace-scope-copy h2 {
   font-size: var(--text-title-sm);
   font-weight: 600;
-  color: #29425e;
+  color: var(--color-heading);
   margin: 8px 0 18px;
 }
 .workspace-scope-copy dl {
@@ -576,12 +585,12 @@
   line-height: 1.6;
 }
 .workspace-scope-copy dt {
-  color: #8a96a3;
+  color: var(--color-text-tertiary);
   flex-shrink: 0;
 }
 .workspace-scope-copy dd {
   margin: 0;
-  color: #465e76;
+  color: var(--color-text-secondary);
   text-align: right;
   overflow-wrap: anywhere;
 }
@@ -589,9 +598,10 @@
   margin: 18px 0;
   padding-top: 15px;
   border-top: 1px solid var(--color-border);
-  color: #8190a0;
+  color: var(--color-text-tertiary);
   line-height: 1.9;
   font-size: var(--text-meta);
+  text-wrap: pretty;
 }
 .workspace-scope-copy .text-button {
   font-size: var(--text-meta);
@@ -663,23 +673,30 @@
   }
   .workbench-pending-summary {
     display: grid;
-    grid-template-columns: auto auto 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    gap: 12px;
+    gap: 4px 14px;
     min-width: 0;
-    padding: 13px 0 0;
+    padding: 15px 18px;
     margin: 0;
     border-left: 0;
-    border-top: 1px solid #cedae5;
+    border-top: 1px solid var(--color-border);
     text-align: left;
   }
+  .workbench-pending-summary > span {
+    grid-column: 1;
+  }
   .workbench-pending-summary strong {
-    font-size: 28px;
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    font-size: 32px;
+    line-height: 1;
   }
   .workbench-pending-summary small {
+    grid-column: 1;
     max-width: none;
-    text-align: right;
-    line-height: 1.6;
+    text-align: left;
+    line-height: 1.5;
   }
   .portal-shell .workbench-page .workbench-tasks-panel {
     padding: 20px 18px;
@@ -759,7 +776,7 @@
 .portal-shell .learning-heading .portal-context,
 .portal-shell .profile-panel .eyebrow,
 .portal-shell .profile-info-panel .eyebrow {
-  color: #526d88;
+  color: var(--color-text-secondary);
   font-size: var(--text-eyebrow);
   line-height: 1.8;
   letter-spacing: 0.08em;
@@ -772,6 +789,6 @@
 .portal-shell .profile-info-panel p.muted {
   margin: 0;
   font-size: var(--text-supporting);
-  color: #66778a;
+  color: var(--color-text-tertiary);
   line-height: 1.8;
 }

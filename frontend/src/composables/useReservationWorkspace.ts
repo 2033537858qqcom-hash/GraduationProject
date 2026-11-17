@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch, u
 import { useRoute, useRouter } from 'vue-router'
 import { currentUser } from '../stores/auth'
 import { api, ApiError, errorMessage } from '../lib/api'
+import { formatDate as formatIsoDate, formatDateTime } from '../lib/format'
 import { createReservationConflictChecker, reservationSearchSelection } from '../lib/reservationSearch'
 import type { ReservationSearchSelection } from '../lib/reservationSearch'
 import { useEditProtection } from '../composables/useEditProtection'
@@ -54,7 +55,15 @@ export function useReservationWorkspace() {
 
   // Active Tab: 'venues' (browse), 'mine' (student applications), 'review' (staff approvals), 'manage' (venue management)
   const activeTab = ref<'venues' | 'mine' | 'review' | 'manage'>(
-    route.query.tab === 'manage' && canManage.value ? 'manage' : reviewMode.value ? 'review' : 'venues',
+    route.query.tab === 'manage' && canManage.value
+      ? 'manage'
+      : reviewMode.value
+        ? canReview.value
+          ? 'review'
+          : canManage.value
+            ? 'manage'
+            : 'review'
+        : 'venues',
   )
   const reservationNavRef = useTemplateRef<HTMLElement | null>('reservationNavRef')
   const { indicatorStyle: reservationIndicatorStyle } = useSlidingIndicator(reservationNavRef, () => activeTab.value, {
@@ -154,8 +163,7 @@ export function useReservationWorkspace() {
 
   // Formatting helpers
   function formatTime(val?: string) {
-    if (!val) return ''
-    return val.slice(0, 16).replace('T', ' ')
+    return formatDateTime(val)
   }
 
   function formatHour(val?: string) {
@@ -164,8 +172,7 @@ export function useReservationWorkspace() {
   }
 
   function formatDate(val?: string) {
-    if (!val) return ''
-    return val.slice(0, 10)
+    return formatIsoDate(val)
   }
 
   // Quick time slot generator
@@ -210,7 +217,7 @@ export function useReservationWorkspace() {
     bookingForm.borrowEquipment = ''
     bookingForm.startsAt = conditions?.startsAt ?? `${dateStr}T14:30`
     bookingForm.endsAt = conditions?.endsAt ?? `${dateStr}T17:00`
-    bookingForm.contactPhone = '13800000000'
+    bookingForm.contactPhone = ''
 
     conflictCheck.value = null
     baselineForm = JSON.stringify(bookingForm)
@@ -489,12 +496,19 @@ export function useReservationWorkspace() {
 
   // Cancel reservation
   async function handleCancel(id: number) {
+    const staffCancel = activeTab.value === 'review' && !isOwnReservation.value
+    const reason = staffCancel ? reviewComment.value.trim() : dialogComment.value.trim() || '申请人主动取消'
+    if (staffCancel && !reason) {
+      error.value = '请填写取消原因'
+      return
+    }
     if (!(await ask(`确认取消预约 #${id}？取消后释放场地时段，该操作无法撤销。`, 'cancel'))) return
     busy.value = true
     error.value = ''
     success.value = ''
     try {
-      await cancelReservation(id, dialogComment.value || '申请人主动取消')
+      await cancelReservation(id, staffCancel ? reason : dialogComment.value || '申请人主动取消')
+      if (staffCancel) reviewComment.value = ''
       success.value = '预约已取消，场地时段已释放。'
       await loadReservations()
       if (selectedReservation.value?.id === id) await chooseReservation(id)

@@ -14,8 +14,33 @@ export default defineConfig(({ mode }) => {
     // Middleware tests own independent optimizer lifecycles and must never replace the live app cache.
     cacheDir: fileURLToPath(new URL(`node_modules/.vite-app-${mode}`, import.meta.url)),
     optimizeDeps: { include: ['gsap', 'gsap/ScrollTrigger'] },
+    build: {
+      rolldownOptions: {
+        output: {
+          codeSplitting: {
+            groups: [
+              {
+                name: 'three-vendor',
+                test: /node_modules[\\/]three/,
+                priority: 3,
+              },
+              {
+                name: 'gsap-vendor',
+                test: /node_modules[\\/]gsap/,
+                priority: 2,
+              },
+              {
+                name: 'icons-vendor',
+                test: /node_modules[\\/]@lucide[\\/]vue/,
+                priority: 1,
+              },
+            ],
+          },
+        },
+      },
+    },
     plugins: [vue(), amapProxyGuard(mapSecret)],
-    server: { port: 5173, strictPort: true, proxy, fs: { allow: ['..'] } },
+    server: { port: 18090, strictPort: true, proxy, fs: { allow: ['..'] } },
     preview: { proxy },
   }
 })

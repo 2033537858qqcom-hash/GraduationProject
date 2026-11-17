@@ -1,5 +1,6 @@
 package cn.zzuit.campus.identity;
 
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -41,6 +42,7 @@ public class SecurityConfiguration {
             .addFilterBefore(new cn.zzuit.campus.common.OperationLoggingFilter(), org.springframework.security.web.access.ExceptionTranslationFilter.class)
             .addFilterBefore(new LiveIdentityFilter(identities,contexts),AuthorizationFilter.class)
             .authorizeHttpRequests(auth -> auth
+                .dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
                 .requestMatchers(org.springframework.http.HttpMethod.POST,"/api/payments/alipay/notify").permitAll()
                 .requestMatchers("/api/payments/mine", "/api/payments/mine/**").hasAuthority("portal:read")
                 .requestMatchers("/api/payments/categories").hasAuthority("portal:read")

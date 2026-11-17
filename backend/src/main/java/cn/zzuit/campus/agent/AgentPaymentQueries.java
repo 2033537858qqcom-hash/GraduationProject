@@ -98,7 +98,8 @@ public class AgentPaymentQueries {
         var choices=meters.stream().filter(m->m.category().equals(category)&&m.enabled()&&m.standardAvailable()&&(meter==null||m.id()==meter)).toList();
         if(choices.size()!=1)return result(name,"NEEDS_INPUT","当前没有唯一可用的对应宿舍表计，请进入缴费大厅选择或联系财务配置。",0,List.of(),"/portal/payments");
         var m=choices.get(0);var quote=dorm.quote(user,new DormRechargeService.RechargeInput(null,m.id(),mode,value,m.unitPriceCents()));
-        return result(name,"OK","以下只是当前报价，尚未创建订单或付款。请进入缴费大厅核对并创建充值订单。",1,List.of(new Fact("DORM_QUOTE:"+m.id(),m.building()+" "+m.room()+" · "+(category.equals("WATER")?"水费":"电费")+"报价","应付 ¥"+money(quote.amountCents())+" · "+units(quote.quantity())+" "+m.unit()+" · 当前单价 ¥"+money(m.unitPriceCents())+"/"+m.unit(),"/portal/payments")),"/portal/payments");
+        String prefill="/portal/payments?tab=dorm&dormCategory="+category+"&dormMode="+mode+"&dormValue="+java.net.URLEncoder.encode(value.trim(),java.nio.charset.StandardCharsets.UTF_8);
+        return result(name,"OK","以下只是当前报价，尚未创建订单或付款。点击卡片可带入试算参数前往缴费大厅核对下单。",1,List.of(new Fact("DORM_QUOTE:"+m.id(),m.building()+" "+m.room()+" · "+(category.equals("WATER")?"水费":"电费")+"报价","应付 ¥"+money(quote.amountCents())+" · "+units(quote.quantity())+" "+m.unit()+" · 当前单价 ¥"+money(m.unitPriceCents())+"/"+m.unit(),prefill)),prefill);
     }
     public List<Call> local(String q,Context context) {
         if(q.matches(".*(对账|差异).*(待办|待处理|处理|核查|复核).*"))return List.of(call("finance_reconciliation_pending",Map.of()));

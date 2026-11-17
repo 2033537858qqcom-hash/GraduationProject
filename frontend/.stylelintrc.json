@@ -24,13 +24,6 @@
     "property-no-vendor-prefix": null,
     "selector-not-notation": null,
     "import-notation": null,
-    "length-zero-no-unit": null,
-    "number-max-precision": null,
-    "declaration-property-value-no-unknown": null,
-    "property-no-deprecated": null,
-    "declaration-property-value-keyword-no-deprecated": null,
-    "at-rule-no-deprecated": null,
-    "nesting-selector-no-missing-scoping-root": null,
     "selector-pseudo-class-no-unknown": [
       true,
       {

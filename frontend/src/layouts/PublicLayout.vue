@@ -5,12 +5,7 @@ import { ArrowUpRight, Menu, X } from '@lucide/vue';
 import SchoolIdentity from '../components/SchoolIdentity.vue';
 import CampusContour from '../components/CampusContour.vue';
 import { activeChapter, chapterReadingProgress, chapters, requestedChapter } from '../lib/publicNavigation';
-import {
-  initializePublicMotion,
-  publicMotionPreference,
-  publicReducedMotion,
-  setPublicMotionPreference,
-} from '../lib/publicMotion';
+import { initializePublicMotion, publicReducedMotion } from '../lib/publicMotion';
 import { useSlidingIndicator } from '../composables/useSlidingIndicator';
 import { currentUser, landingPage } from '../stores/auth';
 import { contentOrigin } from '../lib/publicReading';
@@ -29,7 +24,9 @@ const selectedChapter = computed(() =>
       ? contentOrigin(route.params.slug, route.query.from).id
       : route.path === '/campus/explore'
         ? 'life'
-        : null,
+        : route.path === '/verify/certificate'
+          ? 'disclosure'
+          : null,
 );
 let headerFrame = 0;
 let releaseMotion = () => {};
@@ -92,6 +89,7 @@ function navigate(event: MouseEvent, id: string) {
       :class="{
         'over-photo': route.path === '/',
         'is-compact': compactHeader,
+        'is-menu-expanded': expanded,
         'cinema-header-light': route.path === '/' && !['home', 'life'].includes(activeChapter),
         'cinema-header-life': route.path === '/' && activeChapter === 'life',
       }"
@@ -113,25 +111,9 @@ function navigate(event: MouseEvent, id: string) {
               {{ item.name }}
             </a>
             <div class="school-nav-indicator" :style="schoolIndicatorStyle" aria-hidden="true"></div>
-            <button
-              class="public-motion-toggle mobile-motion-toggle"
-              :aria-pressed="publicMotionPreference === 'reduce'"
-              @click="setPublicMotionPreference(publicMotionPreference === 'reduce' ? 'auto' : 'reduce')"
-            >
-              <span class="motion-toggle-track" aria-hidden="true"><i></i></span>
-              减少动态
-            </button>
           </div>
         </nav>
         <div class="public-header-actions">
-          <button
-            class="public-motion-toggle"
-            :aria-pressed="publicMotionPreference === 'reduce'"
-            @click="setPublicMotionPreference(publicMotionPreference === 'reduce' ? 'auto' : 'reduce')"
-          >
-            <span class="motion-toggle-track" aria-hidden="true"><i></i></span>
-            减少动态
-          </button>
           <RouterLink class="service-link" :to="currentUser ? landingPage() : '/login'">
             {{ currentUser ? '个人门户' : '校园服务' }}
             <ArrowUpRight :size="16" />
@@ -162,7 +144,11 @@ function navigate(event: MouseEvent, id: string) {
       </div>
     </header>
     <main class="public-main" :class="{ 'reading-scene': route.path !== '/', 'homepage-main': route.path === '/' }">
-      <RouterView />
+      <RouterView v-slot="{ Component }">
+        <Transition :name="publicReducedMotion ? '' : 'public-page'" mode="out-in">
+          <component :is="Component" />
+        </Transition>
+      </RouterView>
     </main>
     <CampusAssistant v-if="route.path === '/campus/explore' && currentUser?.permissions.includes('agent:query')" />
     <footer v-if="route.path !== '/'" class="campus-footer page-width" aria-label="网站信息与链接">
@@ -172,6 +158,14 @@ function navigate(event: MouseEvent, id: string) {
         <nav class="footer-links" aria-label="页脚链接">
           <RouterLink to="/campus/explore">
             校园探索
+            <ArrowUpRight :size="12" />
+          </RouterLink>
+          <RouterLink to="/verify/certificate">
+            在校证明核验
+            <ArrowUpRight :size="12" />
+          </RouterLink>
+          <RouterLink :to="currentUser ? landingPage() : '/login'">
+            {{ currentUser ? '个人门户' : '校园服务' }}
             <ArrowUpRight :size="12" />
           </RouterLink>
           <a href="https://www.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">
@@ -185,42 +179,6 @@ function navigate(event: MouseEvent, id: string) {
 </template>
 
 <style scoped>
-.public-motion-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 0;
-  border-radius: 0;
-  padding: 10px 0;
-  background: none;
-  color: inherit;
-  font-size: 10px;
-  white-space: nowrap;
-}
-.motion-toggle-track {
-  display: block;
-  width: 25px;
-  height: 13px;
-  border: 1px solid currentColor;
-  border-radius: 10px;
-  opacity: 0.7;
-}
-.motion-toggle-track i {
-  display: block;
-  margin: 2px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  transition: transform 0.2s ease;
-}
-.public-motion-toggle[aria-pressed='true'] .motion-toggle-track i {
-  transform: translateX(12px);
-}
-.mobile-motion-toggle {
-  display: none;
-}
 .chapter-reading-progress {
   position: absolute;
   inset: auto 0 0;
@@ -243,6 +201,21 @@ function navigate(event: MouseEvent, id: string) {
 .public-site :deep(.explore-page) {
   animation: campus-arrival 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.public-page-enter-active,
+.public-page-leave-active {
+  transition: opacity 180ms var(--ease-campus);
+}
+.public-page-enter-from,
+.public-page-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-page-enter-active,
+  .public-page-leave-active {
+    transition: none;
+  }
+}
 
 @keyframes campus-arrival {
   from {
@@ -252,20 +225,6 @@ function navigate(event: MouseEvent, id: string) {
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@media (max-width: 1180px) {
-  .public-header-actions > .public-motion-toggle {
-    display: none;
-  }
-  .mobile-motion-toggle {
-    display: inline-flex;
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-    border-top: 1px solid #24455326;
-    padding-block: 16px;
-    margin-top: 3px;
   }
 }
 </style>

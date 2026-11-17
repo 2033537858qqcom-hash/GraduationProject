@@ -25,6 +25,7 @@ public final class AgentGoalToolCatalog {
   fields.put("startDate",date);fields.put("startTime",time);fields.put("endDate",date);fields.put("endTime",time);
   fields.put("category",choice(List.of("WATER","ELECTRICITY","NETWORK","FURNITURE","DOOR_WINDOW","EQUIPMENT","OTHER")));
   fields.put("title",text(100));fields.put("description",text(2000));fields.put("locationDetail",text(300));
+  fields.put("preferredArea",text(200));fields.put("materialNote",text(500));
   tools.add(tool("set_task_fields","从用户明确文字更新本地预览条件，不设置联系方式、身份或地点编号",Map.of("taskKey",key,"fields",object(fields,List.of())),"taskKey","fields"));
   tools.add(tool("prepare_task","先把用户目标与最新补充中已经明确的实际条件用set_task_fields写入；再检查依赖并准备业务预览。label不会自动填字段，缺联系方式等本地资料仍可准备后让本人填写。不会保存业务申请",Map.of("taskKey",key),"taskKey"));
   tools.add(tool("refresh_task","重新读取本地任务与原业务状态，核对用户的本地修改或确认结果",Map.of("taskKey",key),"taskKey"));

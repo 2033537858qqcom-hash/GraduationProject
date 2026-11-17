@@ -10,12 +10,14 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.*;
 import java.util.*;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Leased goal-level observe/decide/act loop. Models never run inside a database transaction. */
@@ -58,6 +60,13 @@ public class AgentGoalService {
  }
  private void consent(boolean agreed){if(!agreed)throw error(HttpStatus.BAD_REQUEST,"MODEL_CONSENT_REQUIRED","请确认将本次目标、补充文字、公开办理指南与候选、脱敏执行结果发送至DeepSeek");if(!model.ready())throw error(HttpStatus.SERVICE_UNAVAILABLE,"MODEL_NOT_CONFIGURED","自主目标规划需要连接DeepSeek；可使用原有本地草稿流程");}
  public View create(CampusPrincipal user,long session,Create input){
+  return create(user,session,input,null);
+ }
+ public SseEmitter streamCreate(CampusPrincipal user,long session,Create input){
+  sessions.session(user,session);
+  return AgentSse.stream("agent-goal-"+session,70_000L,"正在创建自主目标并校验权限…",progress->create(user,session,input,progress));
+ }
+ private View create(CampusPrincipal user,long session,Create input,Consumer<String> progress){
   sessions.session(user,session);String hash=hashes.hash(input);
   Claim claim=write(()->{
    sessions.session(user,session);var prior=jdbc.sql("SELECT * FROM agent_goal WHERE session_id=:s AND request_key=:k").param("s",session).param("k",input.requestKey()).query(this::row).optional();
@@ -69,9 +78,16 @@ public class AgentGoalService {
        .param("s",session).param("u",user.id()).param("key",input.requestKey()).param("hash",hash).param("goal",input.goal().trim()).param("security",user.securityVersion()).param("state",json.writeValueAsString(new State())).param("token",token).param("lease",now().plus(LEASE)).update(key,"id");
    String title="Agent目标："+input.goal().trim();jdbc.sql("UPDATE agent_session SET updated_at=CURRENT_TIMESTAMP,title=CASE WHEN title='新对话' THEN :title ELSE title END WHERE id=:id").param("title",title.substring(0,Math.min(title.length(),60))).param("id",session).update();
    return new Claim(load(user,session,key.getKey().longValue()),true);
-  });return claim.run?run(user,session,claim.row.id,claim.row.token):view(user,claim.row);
+  });return claim.run?run(user,session,claim.row.id,claim.row.token,progress):view(user,claim.row);
  }
  public View action(CampusPrincipal user,long session,long id,Action input){
+  return action(user,session,id,input,null);
+ }
+ public SseEmitter streamAction(CampusPrincipal user,long session,long id,Action input){
+  load(user,session,id);
+  return AgentSse.stream("agent-goal-act-"+id,70_000L,"正在核对目标状态与操作权限…",progress->action(user,session,id,input,progress));
+ }
+ private View action(CampusPrincipal user,long session,long id,Action input,Consumer<String> progress){
   Claim claim=write(()->{
    var row=load(user,session,id);String hash=hashes.hash(input);
    if(input.requestKey().equals(row.lastKey)){if(!hash.equals(row.lastHash))throw changed("重复操作请求与原内容不同");return new Claim(row,false);}
@@ -98,7 +114,7 @@ public class AgentGoalService {
   });
   if(input.action().equals("CANCEL")){tools.cancel(user,session,id,claim.row.state);return view(user,claim.row);}
   if(input.action().equals("CANCEL_TASK"))tools.cancelTask(user,session,id,tools.task(claim.row.state,input.taskKey()));
-  return claim.run?run(user,session,id,claim.row.token):view(user,claim.row);
+  return claim.run?run(user,session,id,claim.row.token,progress):view(user,claim.row);
  }
  private void remember(Row row,Action input,String hash){jdbc.sql("UPDATE agent_goal SET last_request_key=:key,last_request_hash=:hash WHERE id=:id").param("key",input.requestKey()).param("hash",hash).param("id",row.id).update();}
  private String taskKey(Call call){String key=call==null||call.arguments()==null?null:call.arguments().path("taskKey").asString(null);return key!=null&&key.matches("[a-z][a-z0-9_-]{0,39}")?key:null;}
@@ -107,7 +123,7 @@ public class AgentGoalService {
      .param("tool",toolName(call)).param("task",taskKey(call)).param("status",status).param("message",message.substring(0,Math.min(500,message.length()))).param("args",call==null?null:json.writeValueAsString(call.arguments())).param("observation",json.writeValueAsString(observation)).param("prompt",plan==null?null:plan.promptTokens()).param("completion",plan==null?null:plan.completionTokens()).param("id",id).param("step",number).update();}
  private void observe(State state,Map<String,Object> observation){state.observations.add(observation);while(state.observations.size()>12)state.observations.removeFirst();}
  private Map<String,Object> actualObservation(AgentGoalTools.Outcome result,Plan plan){var observation=new LinkedHashMap<String,Object>(result.observation());if(plan.calls().size()>1)observation.put("deferredTools",plan.calls().stream().skip(1).map(this::toolName).toList());return observation;}
- private View run(CampusPrincipal user,long session,long id,String token){
+ private View run(CampusPrincipal user,long session,long id,String token,Consumer<String> progress){
   long deadline=System.nanoTime()+BUDGET.toNanos();
   for(int iteration=0;iteration<STEPS_PER_RUN&&System.nanoTime()<deadline;iteration++){
    var before=load(user,session,id);if(!before.stage.equals("RUNNING")||!Objects.equals(before.token,token))return view(user,before);
@@ -117,10 +133,12 @@ public class AgentGoalService {
     jdbc.sql("UPDATE agent_goal SET step_count=:step,lease_until=:lease WHERE id=:id").param("step",next).param("lease",now().plus(LEASE)).param("id",id).update();return next;});
    Plan plan=null;Call call=null;
    try{
+    if(progress!=null)progress.accept("第 "+number+" 步：正在结合当前状态规划下一步…");
     var schemas=tools.schemas(user,session,before.state);
     plan=model.nextGoalStep(before.goal,schemas,tools.context(user,session,before.state));
     if(plan==null||plan.calls()==null||plan.calls().isEmpty()||plan.calls().size()>4||plan.calls().getFirst()==null)throw error(HttpStatus.BAD_GATEWAY,"GOAL_MODEL_ACTION_INVALID","模型必须提供有效的工具建议；本轮只执行首项，其他建议需等待实际结果后重新决策");
     call=plan.calls().getFirst();String chosen=call.name();if(chosen==null||schemas.stream().noneMatch(s->((Map<?,?>)s.get("function")).get("name").equals(chosen))||call.arguments()==null||!call.arguments().isObject())throw error(HttpStatus.BAD_GATEWAY,"GOAL_TOOL_REJECTED","模型动作不在当前工具范围内");
+    if(progress!=null)progress.accept("第 "+number+" 步：正在执行 "+goalStepLabel(chosen)+"…");
     lease(user,session,id,token);
     // Child task preparation is idempotent and local; never hold the goal lock across its executor.
     Plan decided=plan;Call executed=call;Row after;
@@ -185,6 +203,24 @@ public class AgentGoalService {
    persist(row,row.state,stage,null);
   }
   jdbc.sql("UPDATE agent_goal SET monitor_after=:next WHERE id=:id AND monitor_after IS NOT NULL").param("next",now().plusMinutes(1)).param("id",id).update();return changes;
+ }
+ private static String goalStepLabel(String tool){
+  return switch(tool){
+   case "read_guide"->"读取有效办理指南";
+   case "set_plan"->"组织多业务办理计划";
+   case "set_task_fields"->"提取并校验任务条件";
+   case "prepare_task"->"核对条件并准备预览";
+   case "refresh_task"->"刷新任务与原申请状态";
+   case "select_venue"->"从候选列表选择场地";
+   case "revise_reservation"->"调整场地查询方案";
+   case "await_user"->"等待本人补充或确认";
+   case "submit_task"->"按授权提交原申请";
+   case "verify_submission"->"回读核验提交结果";
+   case "watch_task"->"开启后台持久跟踪";
+   case "link_task_result"->"关联前置申请结果";
+   case "finish"->"完成目标收尾核验";
+   default->tool;
+  };
  }
  private ApiException changed(String message){return error(HttpStatus.CONFLICT,"GOAL_CHANGED",message);}
  private ApiException error(HttpStatus status,String code,String message){return new ApiException(status,code,message);}

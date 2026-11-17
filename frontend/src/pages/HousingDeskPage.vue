@@ -6,6 +6,9 @@ import { api, errorMessage } from '../lib/api';
 import BaseSelect from '../components/BaseSelect.vue';
 import HousingTransferDesk from './HousingTransferDesk.vue';
 import HousingImportPanel from '../components/HousingImportPanel.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
+import '../styles/repair-workflow.css';
+import '../styles/repair-settings.css';
 import {
   bedCanAssign,
   housingBedStatus,
@@ -27,6 +30,7 @@ const student = ref<HousingStudent | null>(null);
 const bedChoice = ref('');
 const reason = ref('');
 const checkoutReason = ref<Record<number, string>>({});
+const checkoutBedId = ref<number | null>(null);
 const loading = ref(true);
 const busy = ref(false);
 const importWorking = ref(false),
@@ -198,7 +202,7 @@ watch(username, () => {
     </ServicePageHeader>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
-    <p v-if="loading" role="status">正在读取负责楼栋…</p>
+    <SkeletonBlock v-if="loading" variant="cards" :rows="2" label="正在读取负责楼栋…" />
     <p v-else-if="!responsibilities?.scopes.length" class="empty-state">还没有分配楼栋，请联系管理员。</p>
     <template v-else>
       <p class="muted">
@@ -289,23 +293,42 @@ watch(username, () => {
             {{ bed.floorLabel }} · {{ bed.code
             }}{{ bed.enabled && bed.roomEnabled && bed.buildingEnabled ? '' : ' · 已停用' }}
           </p>
-          <p v-if="bed.occupantName">{{ bed.occupantName }} · {{ bed.occupantUsername }}</p>
-          <form v-if="bed.assignmentId" class="repair-card-actions" @submit.prevent="checkOut(bed)">
-            <label>
-              <div class="label-heading-row">
-                <span>退宿原因</span>
-                <small class="muted">必填</small>
+          <p v-if="bed.occupantName">
+            <strong>在住：</strong>
+            {{ bed.occupantName }} · {{ bed.occupantUsername }}
+          </p>
+          <div v-if="bed.assignmentId" class="repair-card-actions">
+            <button
+              v-if="checkoutBedId !== bed.id"
+              type="button"
+              class="button compact"
+              :disabled="deskBusy"
+              @click="checkoutBedId = bed.id"
+            >
+              办理退宿 ▾
+            </button>
+            <form v-else style="display: grid; gap: 10px; width: 100%" @submit.prevent="checkOut(bed)">
+              <label>
+                <div class="label-heading-row">
+                  <span>退宿原因</span>
+                  <small class="muted">必填</small>
+                </div>
+                <input
+                  v-model="checkoutReason[bed.id]"
+                  maxlength="200"
+                  required
+                  :disabled="deskBusy"
+                  placeholder="填写退宿办理原因"
+                />
+              </label>
+              <div class="form-actions">
+                <button class="button primary compact" :disabled="deskBusy">确认退宿</button>
+                <button type="button" class="button compact" :disabled="deskBusy" @click="checkoutBedId = null">
+                  取消
+                </button>
               </div>
-              <input
-                v-model="checkoutReason[bed.id]"
-                maxlength="200"
-                required
-                :disabled="deskBusy"
-                placeholder="填写退宿办理原因"
-              />
-            </label>
-            <button class="button compact" :disabled="deskBusy">确认退宿</button>
-          </form>
+            </form>
+          </div>
         </article>
       </section>
       <HousingTransferDesk @changed="afterImport" />

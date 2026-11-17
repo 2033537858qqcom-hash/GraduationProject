@@ -43,7 +43,10 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <argLine>-Dfile.encoding=UTF-8</argLine>
+          <argLine>-Dfile.encoding=UTF-8 -Xmx2048m</argLine>
+          <systemPropertyVariables>
+            <spring.test.context.cache.maxSize>6</spring.test.context.cache.maxSize>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
     </plugins>

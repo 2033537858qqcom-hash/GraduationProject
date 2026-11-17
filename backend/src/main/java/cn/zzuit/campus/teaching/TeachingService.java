@@ -20,7 +20,10 @@ import org.springframework.web.multipart.MultipartFile;
 public class TeachingService {
     private final JdbcClient jdbc;
     private final IdentityService identities;
-    public TeachingService(JdbcClient jdbc, IdentityService identities) { this.jdbc = jdbc; this.identities = identities; }
+    private final cn.zzuit.campus.notice.NoticeWriter notices;
+    public TeachingService(JdbcClient jdbc, IdentityService identities, cn.zzuit.campus.notice.NoticeWriter notices) {
+        this.jdbc = jdbc; this.identities = identities; this.notices = notices;
+    }
     private static final String CLASS_SELECT = """
         SELECT tc.id,tc.term_id,tc.course_id,tc.name,c.name course_name,c.credits,d.name department_name,
         (SELECT COUNT(*) FROM teaching_member m JOIN app_user u ON u.id=m.student_id AND u.enabled=TRUE
@@ -207,8 +210,7 @@ public class TeachingService {
         return detail(user,classId,"teacher").notices().stream().filter(n->n.id()==id).findFirst().orElseThrow(this::notFound);
     }
     public void notifyMembers(long classId,String title,String body) {
-        for (var member : people(classId,false)) jdbc.sql("INSERT INTO user_notice(user_id,title,body) VALUES(:u,:t,:b)")
-            .param("u",member.id()).param("t",title).param("b",body).update();
+        for (var member : people(classId,false)) notices.write(member.id(),title,"TEACHING",classId,"LEARN",body);
     }
     public void audit(long classId,long user,String action,long object,String detail) {
         jdbc.sql("INSERT INTO teaching_audit(class_id,actor_id,action,object_id,detail) VALUES(:c,:u,:a,:o,:d)")

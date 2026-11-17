@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { computed, onMounted, ref, watch, type Component } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
@@ -249,11 +250,7 @@ watch(
           </div>
         </form>
 
-        <div v-if="loading && !list.items.length" class="affairs-state" role="status">
-          <RefreshCw :size="25" aria-hidden="true" />
-          <h3>正在读取办理记录</h3>
-          <p>请稍候，你的申请进度即将显示。</p>
-        </div>
+        <SkeletonBlock v-if="loading && !list.items.length" variant="table" :rows="5" label="正在读取办理记录…" />
         <div v-else-if="error" class="affairs-state affairs-state-error" role="alert">
           <ClipboardList :size="27" aria-hidden="true" />
           <h3>暂时无法读取记录</h3>
@@ -338,7 +335,7 @@ watch(
           </table>
         </div>
 
-        <div v-if="!error" class="affairs-pagination">
+        <div v-if="!error && list.total > 0" class="affairs-pagination">
           <span>
             第 {{ list.page }} / {{ Math.max(1, Math.ceil(list.total / list.pageSize)) }} 页
             <span class="affairs-pagination-total">· 共 {{ loading ? '—' : list.total }} 条</span>
@@ -411,10 +408,10 @@ watch(
 
 <style scoped>
 .affairs-page {
-  color: #2b3e52;
+  color: var(--color-ink);
 }
 .affairs-eyebrow {
-  color: #526d88;
+  color: var(--color-text-secondary);
   font-size: var(--text-eyebrow);
   line-height: 1.8;
   letter-spacing: 0.08em;
@@ -434,8 +431,8 @@ watch(
   font-size: var(--text-supporting);
   line-height: 1.5;
   border-radius: var(--radius-md);
-  border-color: #d4dee8;
-  color: #415a73;
+  border-color: var(--color-border);
+  color: var(--color-heading);
   background: var(--color-white);
   box-shadow: none;
   transition:
@@ -443,11 +440,10 @@ watch(
     border-color 0.15s;
 }
 .affairs-page .button:hover:not(:disabled) {
-  background: #f3f6fa;
-  border-color: #91a7bf;
-  box-shadow: none;
-  transform: none;
-  filter: none;
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  box-shadow: 0 2px 6px rgb(41 62 52 / 6%);
+  transform: translateY(-1px);
 }
 .affairs-page .button.primary {
   color: var(--color-white);
@@ -455,8 +451,9 @@ watch(
   border-color: var(--color-brand);
 }
 .affairs-page .button.primary:hover:not(:disabled) {
-  background: #1d3f66;
-  border-color: #1d3f66;
+  background: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+  transform: translateY(-1px);
 }
 .affairs-page .affairs-mobile-new {
   display: none;
@@ -465,21 +462,22 @@ watch(
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 0;
-  margin: 0 0 24px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-white);
-  overflow: hidden;
+  margin: 0 0 28px;
+  border: 0;
+  border-block: 1px solid var(--line, var(--color-border));
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
 }
 .affairs-overview > div {
-  padding: 16px 24px 15px;
-  border-right: 1px solid #e7ecf1;
+  padding: 16px 22px 15px;
+  border-right: 1px solid var(--line, var(--color-border-subtle));
 }
 .affairs-overview > div:last-child {
   border-right: 0;
 }
 .affairs-overview dt {
-  color: #64768a;
+  color: var(--color-text-secondary);
   font-size: var(--text-supporting);
   line-height: 1.7;
 }
@@ -488,25 +486,28 @@ watch(
   align-items: baseline;
   gap: 7px;
   margin: 5px 0 0;
+  font-family: var(--campus-display-serif);
   font-size: 27px;
   line-height: 1.15;
-  font-weight: 500;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
-  color: #304963;
+  color: var(--color-heading);
 }
 .affairs-overview dd span {
+  font-family: var(--font-family-body);
   font-size: var(--text-meta);
   font-weight: 400;
-  color: #768698;
+  color: var(--color-text-tertiary);
 }
 .affairs-overview .overview-total {
-  background: #edf2f8;
+  background: transparent;
+  border-top: 2px solid var(--color-gold);
 }
 .affairs-overview .overview-total dd {
   color: var(--color-brand);
 }
 .affairs-overview .needs-attention {
-  background: #fff8ec;
+  background: rgb(161 98 7 / 5%);
 }
 .affairs-overview .needs-attention dd {
   color: #94641e;
@@ -515,14 +516,15 @@ watch(
   display: grid;
   grid-template-columns: minmax(0, 1fr) 288px;
   align-items: start;
-  gap: 22px;
+  gap: 28px;
 }
 .affairs-page .affairs-records {
   padding: 0;
   overflow: visible;
   min-width: 0;
-  border-radius: var(--radius-lg);
-  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--line, var(--color-border));
+  background: rgb(253 253 249 / 72%);
 }
 .affairs-records-heading {
   display: flex;
@@ -536,17 +538,17 @@ watch(
   line-height: 1.5;
   margin: 0 0 5px;
   font-weight: 600;
-  color: #263e57;
+  color: var(--color-ink);
 }
 .affairs-records-heading p {
   margin: 0;
   font-size: var(--text-supporting);
   line-height: 1.6;
-  color: #697b8d;
+  color: var(--color-text-secondary);
 }
 .affairs-result-count {
   flex-shrink: 0;
-  color: #526d88;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
@@ -556,8 +558,8 @@ watch(
   gap: 12px;
   margin: 0;
   padding: 16px 24px;
-  background: var(--color-surface);
-  border-block: 1px solid var(--color-border);
+  background: rgb(243 241 235 / 45%);
+  border-block: 1px solid var(--line, var(--color-border));
 }
 .affairs-filter-field {
   flex: 1 1 170px;
@@ -567,7 +569,7 @@ watch(
 .affairs-filter-field label {
   display: block;
   font-size: var(--text-meta);
-  color: #576d82;
+  color: var(--color-text-secondary);
   margin-bottom: 7px;
 }
 .affairs-filters :deep(.apple-select-trigger) {
@@ -585,7 +587,7 @@ watch(
 }
 .affairs-clear-filter {
   font-size: var(--text-supporting);
-  color: #586e83;
+  color: var(--color-text-secondary);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -600,9 +602,9 @@ watch(
 }
 .affairs-table th {
   padding: 12px 16px;
-  background: #fcfdfe;
-  border-bottom: 1px solid var(--color-border);
-  color: #6d7c8e;
+  background: rgb(243 241 235 / 35%);
+  border-bottom: 1px solid var(--line, var(--color-border));
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
   font-weight: 500;
   white-space: nowrap;
@@ -626,7 +628,7 @@ watch(
 }
 .affairs-table tbody > tr:not(.affair-timeline-row):hover,
 .affair-row-expanded {
-  background: #f8fafd;
+  background: var(--color-surface-soft);
 }
 .affair-name {
   display: flex;
@@ -644,15 +646,15 @@ watch(
   flex: 0 0 32px;
   width: 32px;
   height: 34px;
-  border: 1px solid #e6ecf3;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: #f5f8fb;
-  color: #577595;
+  background: var(--color-surface-soft);
+  color: var(--color-brand);
 }
 .affair-name strong {
   display: block;
   font-size: var(--text-supporting);
-  color: #2d435b;
+  color: var(--color-heading);
   font-weight: 500;
   line-height: 1.7;
   overflow-wrap: anywhere;
@@ -660,7 +662,7 @@ watch(
 .affair-name small {
   display: block;
   font-size: var(--text-meta);
-  color: #708195;
+  color: var(--color-text-tertiary);
   margin-top: 3px;
   line-height: 1.6;
 }
@@ -673,8 +675,8 @@ watch(
   font-size: var(--text-meta);
   line-height: 1.6;
   white-space: nowrap;
-  color: #68788a;
-  background: #f0f3f6;
+  color: var(--color-text-secondary);
+  background: var(--color-surface-soft);
 }
 .affair-status::before {
   content: '';
@@ -692,24 +694,24 @@ watch(
   [data-status='AWAITING_ASSIGNMENT'],
   [data-status='AWAITING_CHECKIN']
 ) {
-  color: #315f8d;
+  color: var(--color-brand);
   background: var(--color-surface-soft);
 }
 .affair-status[data-status='RETURNED'] {
-  color: #8e601d;
-  background: #fbf2e4;
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
 }
 .affair-status:is([data-status='APPROVED'], [data-status='COMPLETED']) {
-  color: #3d7161;
-  background: #edf5f0;
+  color: var(--color-success);
+  background: var(--color-success-soft);
 }
 .affair-status[data-status='REJECTED'] {
-  color: #9d5252;
-  background: #faeeee;
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
 .affair-updated time {
   display: block;
-  color: #586e84;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -717,7 +719,7 @@ watch(
 }
 .affair-updated small {
   display: block;
-  color: #7b8898;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
   margin-top: 2px;
 }
@@ -737,7 +739,7 @@ watch(
   white-space: nowrap;
 }
 .affair-detail-link {
-  color: #315e8c;
+  color: var(--color-brand);
   font-weight: 500;
 }
 .affair-progress-toggle {
@@ -745,12 +747,12 @@ watch(
   background: transparent;
   border: 0;
   border-radius: var(--radius-xs);
-  color: #6a7d90;
+  color: var(--color-text-secondary);
   cursor: pointer;
 }
 .affair-detail-link:hover,
 .affair-progress-toggle:hover {
-  color: #183c65;
+  color: var(--color-brand);
   text-decoration: underline;
   text-underline-offset: 3px;
 }
@@ -769,11 +771,11 @@ watch(
 }
 .affairs-page :deep(.affair-timeline) {
   padding: 22px 24px;
-  background: #f4f7fb;
-  border-color: #e2e9f1;
+  background: var(--color-surface-soft);
+  border-color: var(--color-border-subtle);
 }
 .affairs-page :deep(.timeline-current) {
-  border-left-color: #6a87a6;
+  border-top-color: var(--color-brand);
 }
 .affairs-pagination {
   display: flex;
@@ -784,7 +786,7 @@ watch(
   padding: 16px 24px;
   border-top: 1px solid var(--color-border);
   font-size: var(--text-supporting);
-  color: #64768a;
+  color: var(--color-text-secondary);
   font-variant-numeric: tabular-nums;
 }
 .affairs-pagination > div {
@@ -805,17 +807,17 @@ watch(
   min-height: 225px;
   padding: 30px 24px;
   text-align: center;
-  color: #7790a8;
+  color: var(--color-text-tertiary);
 }
 .affairs-state h3 {
   font-size: var(--text-body);
   font-weight: 500;
-  color: #49627b;
+  color: var(--color-heading);
   margin: 3px 0 0;
 }
 .affairs-state p {
   margin: 0;
-  color: #687d91;
+  color: var(--color-text-secondary);
   font-size: var(--text-supporting);
   line-height: 1.8;
   overflow-wrap: anywhere;
@@ -828,51 +830,52 @@ watch(
   top: 20px;
   scroll-margin-top: 20px;
   min-width: 0;
-  background: var(--color-white);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--line, var(--color-border));
+  border-radius: 0;
 }
 .affairs-services-heading {
-  padding: 20px 20px 17px;
-  border-bottom: 1px solid var(--color-border);
+  padding: 18px 4px 16px;
+  border-bottom: 1px solid var(--line, var(--color-border));
 }
 .affairs-services-heading h2 {
   font-family: var(--campus-display-serif);
   font-size: 21px;
   line-height: 1.4;
-  font-weight: 600;
+  font-weight: 400;
   margin: 5px 0 8px;
-  color: #2a4561;
+  color: var(--color-heading);
 }
 .affairs-services-heading p {
   margin: 0;
   font-size: var(--text-supporting);
-  color: #697c90;
+  color: var(--color-text-secondary);
   line-height: 1.7;
 }
 .affairs-service-list {
-  padding: 0 16px;
+  padding: 0;
 }
 .affairs-service-link {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 17px 3px;
-  border-bottom: 1px solid var(--color-border);
+  gap: 12px;
+  padding: 17px 4px;
+  border-bottom: 1px solid var(--line, var(--color-border));
 }
 .affairs-service-link:last-child {
   border-bottom: 0;
 }
 .affairs-service-icon {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 34px;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
-  background: #f0f4f8;
-  color: #416589;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-brand);
 }
 .affairs-service-copy {
   display: block;
@@ -881,40 +884,40 @@ watch(
 }
 .affairs-service-copy strong {
   display: block;
-  color: #304b66;
+  color: var(--color-heading);
   font-size: var(--text-supporting);
   font-weight: 500;
   line-height: 1.6;
 }
 .affairs-service-copy > span {
   display: block;
-  color: #6b7f92;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
   margin-top: 5px;
   line-height: 1.7;
 }
 .affairs-service-arrow {
-  color: #8b9bac;
+  color: var(--color-text-tertiary);
   flex-shrink: 0;
   transition: transform 0.15s;
 }
 .affairs-service-link:hover .affairs-service-copy strong {
-  color: #1e5286;
+  color: var(--color-brand);
 }
 .affairs-service-link:hover .affairs-service-arrow {
-  color: #315f8b;
+  color: var(--color-brand);
   transform: translateX(2px);
 }
 .affairs-calendar {
-  margin: 0 19px;
-  padding: 16px 0;
-  border-top: 1px solid var(--color-border);
+  margin: 0;
+  padding: 16px 4px;
+  border-top: 1px solid var(--line, var(--color-border));
 }
 .affairs-calendar a {
   display: flex;
   align-items: center;
   gap: 9px;
-  color: #41668b;
+  color: var(--color-heading);
   font-size: var(--text-supporting);
 }
 .affairs-calendar a span {
@@ -923,22 +926,22 @@ watch(
 .affairs-calendar p {
   margin: 8px 0 0;
   font-size: var(--text-meta);
-  color: #738397;
+  color: var(--color-text-tertiary);
   line-height: 1.8;
 }
 .affairs-services-note {
   margin: 0;
-  padding: 15px 20px;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  border-top: 1px solid var(--color-border);
-  background: var(--color-surface);
+  padding: 14px 4px;
+  border-radius: 0;
+  border-top: 1px solid var(--line, var(--color-border));
+  background: transparent;
   font-size: var(--text-meta);
   line-height: 1.9;
-  color: #657a8e;
+  color: var(--color-text-secondary);
 }
 .affairs-data-note {
   padding: 18px 2px 0;
-  color: #6b7f92;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
   line-height: 1.9;
 }
@@ -976,6 +979,7 @@ watch(
     display: none;
   }
   .affairs-filters {
+    flex-wrap: wrap;
     gap: 10px;
   }
   .affairs-filter-actions {
@@ -1032,7 +1036,7 @@ watch(
   }
   .affairs-overview .overview-drafts,
   .affairs-overview .overview-finished {
-    border-top: 1px solid #e7ecf1;
+    border-top: 1px solid var(--color-border-subtle);
   }
   .affairs-overview dd {
     font-size: 23px;
@@ -1137,13 +1141,13 @@ watch(
     align-items: baseline;
     flex-wrap: wrap;
     gap: 6px;
-    color: #6d7f91;
+    color: var(--color-text-secondary);
     font-size: var(--text-meta);
   }
   .affair-updated time::before {
     content: '最近更新';
     margin-right: 3px;
-    color: #7a8999;
+    color: var(--color-text-tertiary);
     font-size: var(--text-meta);
   }
   .affair-updated small {

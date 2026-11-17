@@ -3,7 +3,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { Building2, History, Plus, Search, ShieldCheck, Users } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import BaseSelect from '../components/BaseSelect.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
 import ResponsibilityPanel from '../components/ResponsibilityPanel.vue';
 import ManagedPasswordReset from '../components/ManagedPasswordReset.vue';
 import { currentUser } from '../stores/auth';
@@ -551,11 +553,11 @@ onBeforeUnmount(() => {
         </div>
       </form>
     </dialog>
-    <div class="manager-heading">
-      <span class="portal-context">管理员服务</span>
-      <h1>账号与组织管理</h1>
-      <p class="muted">维护校园人员、学院专业和行政班，查看身份与归属的修改记录。</p>
-    </div>
+    <ServicePageHeader
+      context="管理员服务"
+      title="账号与组织管理"
+      description="维护校园人员、学院专业和行政班，查看身份与归属的修改记录。"
+    />
     <nav ref="foundationNavRef" class="learning-tabs" aria-label="基础管理栏目">
       <RouterLink :to="{ path: root, query: { tab: 'accounts' } }" :class="{ selected: tab === 'accounts' }">
         <Users :size="16" />
@@ -583,20 +585,87 @@ onBeforeUnmount(() => {
     <p v-if="loading && !catalog" class="loading-state" role="status">正在读取管理信息…</p>
     <button v-else-if="!catalog" class="button compact" @click="load">重新读取管理信息</button>
     <template v-else-if="catalog && tab === 'accounts'">
-      <section v-if="impact && impactAccount" class="portal-panel">
+      <section v-if="accountOpen && !selected" class="portal-panel foundation-editor">
         <div class="section-heading">
-          <h2 id="responsibility-heading">{{ impactAccount.fullName }} · 岗位交接检查</h2>
-          <button
-            class="text-button"
-            @click="
-              impact = null;
-              impactAccount = null;
-            "
-          >
-            收起
-          </button>
+          <div>
+            <span class="eyebrow">管理员建档</span>
+            <h2 id="account-form-heading">新建校园账号</h2>
+            <p class="muted">身份与组织由管理员维护。角色或归属变更后，该人员需要重新登录。</p>
+          </div>
+          <button type="button" class="button compact" :disabled="busy" @click="closeForms">收起表单 ×</button>
         </div>
-        <ResponsibilityPanel :impact="impact" />
+        <form class="editor-form" @submit.prevent="saveAccount">
+          <fieldset :disabled="busy" class="foundation-fields">
+            <div class="form-grid">
+              <label>
+                登录账号
+                <input
+                  v-model="form.username"
+                  required
+                  pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}"
+                  maxlength="64"
+                  autocomplete="off"
+                />
+              </label>
+              <label>
+                姓名
+                <input v-model="form.fullName" required maxlength="100" />
+              </label>
+              <label>
+                学号 / 工号
+                <input v-model="form.identityNumber" required maxlength="64" />
+              </label>
+              <label>
+                所属校区
+                <BaseSelect v-model="form.campusId" :options="formCampusOptions" />
+              </label>
+            </div>
+            <fieldset class="role-choices">
+              <legend>
+                <ShieldCheck :size="15" />
+                身份与岗位
+              </legend>
+              <label v-for="r in catalog.roles" :key="r.code" class="role-choice">
+                <input v-model="form.roles" type="checkbox" :value="r.code" />
+                <span>
+                  <strong>{{ r.name }}</strong>
+                  <small>{{ r.scope }}</small>
+                </span>
+              </label>
+            </fieldset>
+            <div class="form-grid">
+              <label>
+                所属学院 / 部门
+                <BaseSelect v-model="form.departmentId" :options="formDepartmentOptions" />
+              </label>
+              <label v-if="student">
+                所属行政班
+                <BaseSelect v-model="form.classGroupId" :options="formClassGroupOptions" />
+                <small class="muted">仅显示所选学院下的行政班</small>
+              </label>
+            </div>
+            <label>
+              初始密码
+              <input
+                v-model="form.initialPassword"
+                type="password"
+                required
+                minlength="10"
+                maxlength="72"
+                autocomplete="new-password"
+              />
+              <small class="muted">
+                至少十位，包含字母和数字，最多 72 个 UTF-8 字节；仅用于首次建档，不在页面或记录中回显。
+              </small>
+            </label>
+          </fieldset>
+          <div class="form-actions">
+            <button class="button primary compact" :disabled="busy">
+              {{ busy ? '正在保存…' : '创建账号' }}
+            </button>
+            <button type="button" class="button compact" :disabled="busy" @click="closeForms">取消编辑</button>
+          </div>
+        </form>
       </section>
       <section class="portal-panel">
         <div class="section-heading">
@@ -643,148 +712,173 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="a in accounts.items" :key="a.id">
-                <td>
-                  <strong>{{ a.fullName }}</strong>
-                  <small>账号 {{ a.username }}</small>
-                  <small>学工号 {{ a.identityNumber }}</small>
-                </td>
-                <td>
-                  {{ a.departmentName ?? '未设置' }}
-                  <small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small>
-                </td>
-                <td>
-                  <span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span>
-                </td>
-                <td>
-                  <span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span>
-                  <small v-if="a.passwordChangeRequired">下次登录须改密</small>
-                </td>
-                <td>
-                  <div class="foundation-row-actions">
-                    <button class="text-button" :disabled="busy || loading" @click="inspectResponsibilities(a)">
-                      交接检查
-                    </button>
-                    <button class="text-button" :disabled="busy" @click="openAccount(a)">编辑账号</button>
-                    <button
-                      class="text-button"
-                      :disabled="busy || accountOpen || a.id === currentUser?.id"
-                      :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined"
-                      @click="changeState(a)"
-                    >
-                      {{ a.enabled ? '停用' : '启用' }}
-                    </button>
-                    <button
-                      class="text-button"
-                      :disabled="busy || !a.enabled || a.id === currentUser?.id"
-                      @click="openPasswordReset(a)"
-                    >
-                      重置密码
-                    </button>
-                    <button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button>
-                  </div>
-                </td>
-              </tr>
+              <template v-for="a in accounts.items" :key="a.id">
+                <tr
+                  :class="{
+                    'resource-selected':
+                      (accountOpen && selected?.id === a.id) || (impact && impactAccount?.id === a.id),
+                  }"
+                >
+                  <td>
+                    <strong>{{ a.fullName }}</strong>
+                    <small>账号 {{ a.username }}</small>
+                    <small>学工号 {{ a.identityNumber }}</small>
+                  </td>
+                  <td>
+                    {{ a.departmentName ?? '未设置' }}
+                    <small>{{ a.className ?? '无行政班' }} · {{ a.campusName ?? '未设置校区' }}</small>
+                  </td>
+                  <td>
+                    <span v-for="r in a.roles" :key="r" class="status-label">{{ roleName(r) }}</span>
+                  </td>
+                  <td>
+                    <span class="status-label" :class="{ read: !a.enabled }">{{ a.enabled ? '启用' : '停用' }}</span>
+                    <small v-if="a.passwordChangeRequired">下次登录须改密</small>
+                  </td>
+                  <td>
+                    <div class="foundation-row-actions">
+                      <button
+                        class="text-button"
+                        :disabled="busy || loading"
+                        @click="
+                          impact && impactAccount?.id === a.id
+                            ? ((impact = null), (impactAccount = null))
+                            : inspectResponsibilities(a, false)
+                        "
+                      >
+                        {{ impact && impactAccount?.id === a.id ? '收起交接 ▴' : '交接检查 ▾' }}
+                      </button>
+                      <button
+                        class="text-button"
+                        :disabled="busy"
+                        @click="accountOpen && selected?.id === a.id ? closeForms() : openAccount(a)"
+                      >
+                        {{ accountOpen && selected?.id === a.id ? '收起编辑 ▴' : '编辑账号 ▾' }}
+                      </button>
+                      <button
+                        class="text-button"
+                        :disabled="busy || accountOpen || a.id === currentUser?.id"
+                        :title="a.id === currentUser?.id ? '当前登录管理员不能停用自己' : undefined"
+                        @click="changeState(a)"
+                      >
+                        {{ a.enabled ? '停用' : '启用' }}
+                      </button>
+                      <button
+                        class="text-button"
+                        :disabled="busy || !a.enabled || a.id === currentUser?.id"
+                        @click="openPasswordReset(a)"
+                      >
+                        重置密码
+                      </button>
+                      <button class="text-button" :disabled="busy" @click="showAudit('USER', a.id)">修改记录</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="impact && impactAccount?.id === a.id" class="table-folio-row">
+                  <td colspan="5" class="table-folio-cell">
+                    <section class="portal-panel service-inline-folio">
+                      <div class="section-heading">
+                        <h2 id="responsibility-heading">{{ impactAccount.fullName }} · 岗位交接检查</h2>
+                        <button
+                          class="button compact"
+                          @click="
+                            impact = null;
+                            impactAccount = null;
+                          "
+                        >
+                          收起 ×
+                        </button>
+                      </div>
+                      <ResponsibilityPanel :impact="impact" />
+                    </section>
+                  </td>
+                </tr>
+                <tr v-if="accountOpen && selected?.id === a.id" class="table-folio-row">
+                  <td colspan="5" class="table-folio-cell">
+                    <section class="portal-panel foundation-editor service-inline-folio" style="margin-top: 0">
+                      <div class="section-heading">
+                        <div>
+                          <span class="eyebrow">{{ selected.username }}</span>
+                          <h2 id="account-form-heading">编辑人员账号 · {{ selected.fullName }}</h2>
+                          <p class="muted">身份与组织由管理员维护。角色或归属变更后，该人员需要重新登录。</p>
+                        </div>
+                        <button type="button" class="button compact" :disabled="busy" @click="closeForms">
+                          收起编辑 ×
+                        </button>
+                      </div>
+                      <form class="editor-form" @submit.prevent="saveAccount">
+                        <fieldset :disabled="busy" class="foundation-fields">
+                          <div class="form-grid">
+                            <label>
+                              姓名
+                              <input v-model="form.fullName" required maxlength="100" />
+                            </label>
+                            <label>
+                              学号 / 工号
+                              <input v-model="form.identityNumber" required maxlength="64" />
+                            </label>
+                            <label>
+                              所属校区
+                              <BaseSelect v-model="form.campusId" :options="formCampusOptions" />
+                            </label>
+                          </div>
+                          <fieldset class="role-choices">
+                            <legend>
+                              <ShieldCheck :size="15" />
+                              身份与岗位
+                            </legend>
+                            <label v-for="r in catalog.roles" :key="r.code" class="role-choice">
+                              <input
+                                v-model="form.roles"
+                                type="checkbox"
+                                :value="r.code"
+                                :disabled="selected?.id === currentUser?.id && r.code === 'ADMIN'"
+                              />
+                              <span>
+                                <strong>{{ r.name }}</strong>
+                                <small>{{ r.scope }}</small>
+                              </span>
+                            </label>
+                          </fieldset>
+                          <div class="form-grid">
+                            <label>
+                              所属学院 / 部门
+                              <BaseSelect v-model="form.departmentId" :options="formDepartmentOptions" />
+                            </label>
+                            <label v-if="student">
+                              所属行政班
+                              <BaseSelect v-model="form.classGroupId" :options="formClassGroupOptions" />
+                              <small class="muted">仅显示所选学院下的行政班</small>
+                            </label>
+                          </div>
+                          <label>
+                            变更原因
+                            <textarea
+                              v-model="form.reason"
+                              required
+                              maxlength="200"
+                              rows="2"
+                              placeholder="说明人员资料、归属或岗位调整的原因"
+                            />
+                          </label>
+                        </fieldset>
+                        <div class="form-actions">
+                          <button class="button primary compact" :disabled="busy">
+                            {{ busy ? '正在保存…' : '保存修改' }}
+                          </button>
+                          <button type="button" class="button compact" :disabled="busy" @click="closeForms">
+                            取消编辑
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
         <p v-else class="empty-state">没有符合条件的账号，请调整搜索或筛选条件。</p>
-      </section>
-      <section v-if="accountOpen" class="portal-panel foundation-editor">
-        <div class="section-heading">
-          <div>
-            <span class="eyebrow">{{ selected ? selected.username : '管理员建档' }}</span>
-            <h2 id="account-form-heading">{{ selected ? '编辑人员账号' : '新建校园账号' }}</h2>
-            <p class="muted">身份与组织由管理员维护。角色或归属变更后，该人员需要重新登录。</p>
-          </div>
-        </div>
-        <form class="editor-form" @submit.prevent="saveAccount">
-          <fieldset :disabled="busy" class="foundation-fields">
-            <div class="form-grid">
-              <label v-if="!selected">
-                登录账号
-                <input
-                  v-model="form.username"
-                  required
-                  pattern="[A-Za-z0-9][A-Za-z0-9_.-]{2,63}"
-                  maxlength="64"
-                  autocomplete="off"
-                />
-              </label>
-              <label>
-                姓名
-                <input v-model="form.fullName" required maxlength="100" />
-              </label>
-              <label>
-                学号 / 工号
-                <input v-model="form.identityNumber" required maxlength="64" />
-              </label>
-              <label>
-                所属校区
-                <BaseSelect v-model="form.campusId" :options="formCampusOptions" />
-              </label>
-            </div>
-            <fieldset class="role-choices">
-              <legend>
-                <ShieldCheck :size="15" />
-                身份与岗位
-              </legend>
-              <label v-for="r in catalog.roles" :key="r.code" class="role-choice">
-                <input
-                  v-model="form.roles"
-                  type="checkbox"
-                  :value="r.code"
-                  :disabled="selected?.id === currentUser?.id && r.code === 'ADMIN'"
-                />
-                <span>
-                  <strong>{{ r.name }}</strong>
-                  <small>{{ r.scope }}</small>
-                </span>
-              </label>
-            </fieldset>
-            <div class="form-grid">
-              <label>
-                所属学院 / 部门
-                <BaseSelect v-model="form.departmentId" :options="formDepartmentOptions" />
-              </label>
-              <label v-if="student">
-                所属行政班
-                <BaseSelect v-model="form.classGroupId" :options="formClassGroupOptions" />
-                <small class="muted">仅显示所选学院下的行政班</small>
-              </label>
-            </div>
-            <label v-if="!selected">
-              初始密码
-              <input
-                v-model="form.initialPassword"
-                type="password"
-                required
-                minlength="10"
-                maxlength="72"
-                autocomplete="new-password"
-              />
-              <small class="muted">
-                至少十位，包含字母和数字，最多 72 个 UTF-8 字节；仅用于首次建档，不在页面或记录中回显。
-              </small>
-            </label>
-            <label v-else>
-              变更原因
-              <textarea
-                v-model="form.reason"
-                required
-                maxlength="200"
-                rows="2"
-                placeholder="说明人员资料、归属或岗位调整的原因"
-              />
-            </label>
-          </fieldset>
-          <div class="form-actions">
-            <button class="button primary compact" :disabled="busy">
-              {{ busy ? '正在保存…' : selected ? '保存修改' : '创建账号' }}
-            </button>
-            <button type="button" class="text-button" :disabled="busy" @click="closeForms">取消编辑</button>
-          </div>
-        </form>
       </section>
       <details class="foundation-role-guide">
         <summary>查看岗位职责与权限说明</summary>
@@ -800,6 +894,33 @@ onBeforeUnmount(() => {
       </details>
     </template>
     <template v-else-if="catalog && tab === 'organization'">
+      <section v-if="orgOpen && !orgId" class="portal-panel foundation-editor" style="margin-top: 0">
+        <div class="section-heading">
+          <h2 id="organization-form-heading">新建{{ orgType === 'departments' ? '学院或部门' : orgLabel }}</h2>
+          <button type="button" class="button compact" :disabled="busy" @click="closeForms">收起表单 ×</button>
+        </div>
+        <p class="muted">已有人员或班级关联时，所属关系的调整会先进行校验。</p>
+        <form class="editor-form" @submit.prevent="saveOrganization">
+          <fieldset :disabled="busy" class="foundation-fields">
+            <label>
+              名称
+              <input v-model="organization.name" required maxlength="100" />
+            </label>
+            <label v-if="orgType === 'departments'">
+              组织类型
+              <BaseSelect v-model="organization.kind" :options="orgKindOptions" />
+            </label>
+            <label v-else>
+              所属{{ orgType === 'majors' ? '学院' : '专业' }}
+              <BaseSelect v-model="organization.parentId" :options="orgParentOptions" />
+            </label>
+          </fieldset>
+          <div class="form-actions">
+            <button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存组织信息' }}</button>
+            <button type="button" class="button compact" :disabled="busy" @click="closeForms">取消编辑</button>
+          </div>
+        </form>
+      </section>
       <section class="portal-panel">
         <div class="section-heading">
           <div>
@@ -839,57 +960,78 @@ onBeforeUnmount(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in organizationRows" :key="row.id">
-                <td>{{ row.name }}</td>
-                <td>{{ organizationParent(row) }}</td>
-                <td>
-                  <div class="foundation-row-actions">
-                    <button class="text-button" :disabled="busy" @click="openOrganization(row)">编辑</button>
-                    <button
-                      class="text-button"
-                      :disabled="busy"
-                      @click="
-                        showAudit(
-                          orgType === 'departments' ? 'DEPARTMENT' : orgType === 'majors' ? 'MAJOR' : 'CLASS_GROUP',
-                          row.id,
-                        )
-                      "
-                    >
-                      修改记录
-                    </button>
-                  </div>
-                </td>
-              </tr>
+              <template v-for="row in organizationRows" :key="row.id">
+                <tr :class="{ 'resource-selected': orgOpen && orgId === row.id }">
+                  <td>{{ row.name }}</td>
+                  <td>{{ organizationParent(row) }}</td>
+                  <td>
+                    <div class="foundation-row-actions">
+                      <button
+                        class="text-button"
+                        :disabled="busy"
+                        @click="orgOpen && orgId === row.id ? closeForms() : openOrganization(row)"
+                      >
+                        {{ orgOpen && orgId === row.id ? '收起编辑 ▴' : '编辑 ▾' }}
+                      </button>
+                      <button
+                        class="text-button"
+                        :disabled="busy"
+                        @click="
+                          showAudit(
+                            orgType === 'departments' ? 'DEPARTMENT' : orgType === 'majors' ? 'MAJOR' : 'CLASS_GROUP',
+                            row.id,
+                          )
+                        "
+                      >
+                        修改记录
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="orgOpen && orgId === row.id" class="table-folio-row">
+                  <td colspan="3" class="table-folio-cell">
+                    <section class="portal-panel foundation-editor service-inline-folio" style="margin-top: 0">
+                      <div class="section-heading">
+                        <h2 id="organization-form-heading">
+                          编辑{{ orgType === 'departments' ? '学院或部门' : orgLabel }} · {{ row.name }}
+                        </h2>
+                        <button type="button" class="button compact" :disabled="busy" @click="closeForms">
+                          收起 ×
+                        </button>
+                      </div>
+                      <p class="muted">已有人员或班级关联时，所属关系的调整会先进行校验。</p>
+                      <form class="editor-form" @submit.prevent="saveOrganization">
+                        <fieldset :disabled="busy" class="foundation-fields">
+                          <label>
+                            名称
+                            <input v-model="organization.name" required maxlength="100" />
+                          </label>
+                          <label v-if="orgType === 'departments'">
+                            组织类型
+                            <BaseSelect v-model="organization.kind" :options="orgKindOptions" />
+                          </label>
+                          <label v-else>
+                            所属{{ orgType === 'majors' ? '学院' : '专业' }}
+                            <BaseSelect v-model="organization.parentId" :options="orgParentOptions" />
+                          </label>
+                        </fieldset>
+                        <div class="form-actions">
+                          <button class="button primary compact" :disabled="busy">
+                            {{ busy ? '正在保存…' : '保存组织信息' }}
+                          </button>
+                          <button type="button" class="button compact" :disabled="busy" @click="closeForms">
+                            取消编辑
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
         </div>
         <p v-else class="empty-state">尚未维护{{ orgLabel }}，可从上方新建。</p>
-      </section>
-      <section v-if="orgOpen" class="portal-panel foundation-editor">
-        <h2 id="organization-form-heading">
-          {{ orgId ? '编辑' : '新建' }}{{ orgType === 'departments' ? '学院或部门' : orgLabel }}
-        </h2>
-        <p class="muted">已有人员或班级关联时，所属关系的调整会先进行校验。</p>
-        <form class="editor-form" @submit.prevent="saveOrganization">
-          <fieldset :disabled="busy" class="foundation-fields">
-            <label>
-              名称
-              <input v-model="organization.name" required maxlength="100" />
-            </label>
-            <label v-if="orgType === 'departments'">
-              组织类型
-              <BaseSelect v-model="organization.kind" :options="orgKindOptions" />
-            </label>
-            <label v-else>
-              所属{{ orgType === 'majors' ? '学院' : '专业' }}
-              <BaseSelect v-model="organization.parentId" :options="orgParentOptions" />
-            </label>
-          </fieldset>
-          <div class="form-actions">
-            <button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存组织信息' }}</button>
-            <button type="button" class="text-button" :disabled="busy" @click="closeForms">取消编辑</button>
-          </div>
-        </form>
       </section>
     </template>
     <section v-else-if="catalog && tab === 'responsibility'" class="portal-panel">
@@ -950,7 +1092,7 @@ onBeforeUnmount(() => {
           </div>
           <p class="preserve-lines">{{ record.summary }}</p>
           <p class="muted">原因：{{ record.reason }}</p>
-          <small>{{ record.actorName }} · {{ record.createdAt.slice(0, 16).replace('T', ' ') }}</small>
+          <small>{{ record.actorName }} · {{ formatDateTime(record.createdAt) }}</small>
         </article>
       </div>
     </section>
@@ -1014,11 +1156,11 @@ onBeforeUnmount(() => {
   gap: 16px;
   padding: 16px;
   border: 1px solid var(--line, var(--color-border));
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xs);
 }
 .responsibility-exception.warning {
-  border-left: 3px solid #b57c28;
-  background: #fffcf5;
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-soft);
 }
 .responsibility-exception p {
   margin: 6px 0 0;

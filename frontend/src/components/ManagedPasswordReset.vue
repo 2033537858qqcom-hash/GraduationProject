@@ -50,7 +50,7 @@ async function submit() {
       · {{ account.username }}
     </p>
     <p class="muted">
-      请先核验本人身份。重置后原有会话立即失效，该人员下次登录必须修改初始密码。系统不会回显或在修改记录中保存密码。
+      请先核验本人身份。重置后原设备登录状态将立即失效，该人员下次登录必须修改临时密码。系统不会回显或在修改记录中保存密码。
     </p>
     <form class="editor-form" @submit.prevent="submit">
       <fieldset :disabled="busy" class="reset-fields">
@@ -90,7 +90,7 @@ async function submit() {
       <p v-if="error" class="alert" role="alert">{{ error }}</p>
       <div class="form-actions">
         <button class="button primary compact" :disabled="busy">
-          {{ busy ? '正在重置…' : '确认重置并使旧会话失效' }}
+          {{ busy ? '正在重置…' : '确认重置并退出原登录' }}
         </button>
         <button type="button" class="button compact" :disabled="busy" @click="close">取消</button>
       </div>
@@ -105,10 +105,10 @@ async function submit() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   padding: 26px;
-  color: var(--ink, #203650);
+  color: var(--color-ink);
 }
 .password-reset-dialog::backdrop {
-  background: rgb(20 35 55 / 40%);
+  background: rgb(33 60 53 / 40%);
 }
 .reset-fields {
   border: 0;

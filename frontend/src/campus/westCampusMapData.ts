@@ -35,7 +35,7 @@ export const eastCampusMeta: CampusMeta = {
   address: '河南省郑州市新郑市学院路16号',
   center: [113.7576, 34.4126],
   defaultZoom: 16.2,
-  description: '新郑市学院路16号 · 认识校园楼宇与公共空间，支持高德底图与3D沙盘漫游。',
+  description: '新郑市学院路16号 · 认识校园楼宇与公共空间，支持高德底图与 3D 沙盘漫游。',
   badge: '主校区',
 }
 

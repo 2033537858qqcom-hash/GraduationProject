@@ -1,14 +1,23 @@
 package cn.zzuit.campus.identity;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Set;
 import cn.zzuit.campus.common.ApiException;
 import cn.zzuit.campus.common.storage.AvatarStorageService;
+import cn.zzuit.campus.common.storage.TencentCosAvatarStorageService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.CacheControl;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -82,5 +91,24 @@ public class UserAvatarController {
         var updated = identities.removeAvatar(user.id());
         log.info("[AVATAR | 头像] 已恢复系统默认头像 | 用户: {} (ID: {})", user.username(), user.id());
         return updated;
+    }
+
+    @GetMapping("/api/public/avatars/{filename}")
+    public ResponseEntity<byte[]> readLocalAvatar(@PathVariable String filename) throws IOException {
+        if (!(storageService instanceof TencentCosAvatarStorageService local)) {
+            return ResponseEntity.notFound().build();
+        }
+        Path path = local.resolveLocalAvatar(filename);
+        if (path == null || !Files.isRegularFile(path)) {
+            return ResponseEntity.notFound().build();
+        }
+        MediaType type = filename.endsWith(".png") ? MediaType.IMAGE_PNG
+            : filename.endsWith(".webp") ? MediaType.parseMediaType("image/webp")
+            : MediaType.IMAGE_JPEG;
+        return ResponseEntity.ok()
+            .contentType(type)
+            .header(HttpHeaders.CACHE_CONTROL, CacheControl.maxAge(java.time.Duration.ofDays(1)).cachePublic().getHeaderValue())
+            .header("X-Content-Type-Options", "nosniff")
+            .body(Files.readAllBytes(path));
     }
 }

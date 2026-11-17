@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { confirmDialog } from '../composables/useConfirm';
+import { useLeaveGuard } from '../composables/useEditProtection';
 import ServicePageHeader from '../components/ServicePageHeader.vue';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import QRCode from 'qrcode';
 import { api, ApiError, errorMessage } from '../lib/api';
+import { formatDateTime, formatMoney as money, shanghaiToday } from '../lib/format';
 import DownloadLink from '../components/DownloadLink.vue';
 import BaseSelect from '../components/BaseSelect.vue';
 import DormRechargePanel from '../components/DormRechargePanel.vue';
@@ -52,7 +54,6 @@ const qrImage = ref(''),
   refundReason = ref(''),
   showRefund = ref(false),
   refundKey = ref(crypto.randomUUID());
-const money = (cents: number) => '¥' + (cents / 100).toFixed(2);
 const outstanding = computed(() =>
   bills.value.filter(bill => bill.workflowStatus === 'PUBLISHED' && bill.status === 'UNPAID' && !bill.dormRecharge),
 );
@@ -80,10 +81,7 @@ const canPay = (bill: PaymentBill) =>
 const canRefund = (bill: PaymentBill) =>
   bill.status === 'PAID' && !bill.pendingRequestId && ['NONE', 'REJECTED'].includes(bill.refundStatus);
 const overdue = (bill: PaymentBill) =>
-  bill.status === 'UNPAID' &&
-  bill.workflowStatus === 'PUBLISHED' &&
-  bill.dueDate &&
-  bill.dueDate < new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+  bill.status === 'UNPAID' && bill.workflowStatus === 'PUBLISHED' && bill.dueDate && bill.dueDate < shanghaiToday();
 watch(refundReason, () => {
   refundKey.value = crypto.randomUUID();
 });
@@ -128,6 +126,16 @@ async function load() {
 }
 async function openBill(bill: PaymentBill) {
   await router.replace({ query: { id: String(bill.id), tab: 'details' } });
+}
+async function closeBill() {
+  await router.replace({ query: {} });
+}
+function billTone(bill: PaymentBill) {
+  if (['VOIDED', 'WAIVED'].includes(bill.workflowStatus) || bill.refundStatus === 'REFUNDED') return 'muted';
+  if (bill.status === 'PAID') return 'success';
+  if (overdue(bill)) return 'danger';
+  if (bill.status === 'UNPAID') return 'warning';
+  return 'default';
 }
 async function pay(bill: PaymentBill) {
   busy.value = true;
@@ -205,18 +213,9 @@ async function refund() {
   }
 }
 const refundDirty = computed(() => showRefund.value && Boolean(refundReason.value.trim()));
-async function confirmLeave() {
-  if (busy.value) return false;
-  return !refundDirty.value || (await confirmDialog('退款原因尚未提交，确定离开并放弃？'));
-}
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (busy.value || refundDirty.value) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-}
-onBeforeRouteLeave(confirmLeave);
-onBeforeRouteUpdate((to, from) => to.query.id === from.query.id || confirmLeave());
+useLeaveGuard(busy, refundDirty, '退款原因尚未提交，确定离开并放弃？', {
+  routeUpdate: (to, from) => to.query.id === from.query.id,
+});
 watch(
   () => route.query.id,
   (id, previousId) => {
@@ -233,11 +232,7 @@ watch(
   },
   { immediate: true },
 );
-onMounted(() => window.addEventListener('beforeunload', beforeUnload));
-onBeforeUnmount(() => {
-  stopPolling();
-  window.removeEventListener('beforeunload', beforeUnload);
-});
+onBeforeUnmount(stopPolling);
 </script>
 
 <template>
@@ -254,7 +249,6 @@ onBeforeUnmount(() => {
     <p class="finance-note">当前账单和支付宝支付用于毕业设计沙箱演示。缴费凭证为演示记录，不是学校正式收费票据。</p>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <p v-if="message" class="finance-success" role="status">{{ message }}</p>
-    <DormRechargePanel ref="dormRecharge" @created="rechargeCreated" />
     <section class="finance-metrics" aria-label="本人缴费概况">
       <div>
         <span>应缴金额</span>
@@ -283,99 +277,12 @@ onBeforeUnmount(() => {
         <small>以支付平台确认结果为准</small>
       </div>
     </section>
+    <DormRechargePanel ref="dormRecharge" @created="rechargeCreated" />
     <section v-if="qrImage" class="portal-panel finance-panel payment-qr" aria-live="polite">
       <h2>使用支付宝沙箱 App 扫码支付</h2>
       <img :src="qrImage" width="240" height="240" alt="支付宝沙箱付款二维码" />
       <p class="muted">支付后会自动核验结果。关闭二维码后仍可在账单中查看支付状态。</p>
       <button class="button" @click="closeQr">关闭二维码</button>
-    </section>
-
-    <section v-if="selected" class="portal-panel finance-panel" aria-labelledby="bill-detail-heading">
-      <div class="finance-heading">
-        <div>
-          <span class="finance-badge">
-            {{ selected.categoryName }} · {{ paymentWorkflowText(selected.workflowStatus) }} ·
-            {{ paymentSettlementText(selected) }}
-          </span>
-          <h2 id="bill-detail-heading">{{ selected.title }}</h2>
-          <p class="muted">{{ selected.billingPeriod }}</p>
-        </div>
-        <strong class="finance-total">{{ money(selected.amountCents) }}</strong>
-      </div>
-      <dl class="finance-facts">
-        <div>
-          <dt>缴费截止</dt>
-          <dd>
-            {{ selected.dueDate || (selected.dormRecharge ? '预充值订单' : '历史账单未设置') }}
-            <span v-if="overdue(selected)" class="finance-warning">逾期待缴</span>
-          </dd>
-        </div>
-        <div>
-          <dt>收费标准与数量</dt>
-          <dd>{{ selected.standardName || '财务手工核定' }} · {{ selected.quantity }}</dd>
-        </div>
-        <div class="finance-wide">
-          <dt>收费依据</dt>
-          <dd>{{ selected.basis }}</dd>
-        </div>
-        <div class="finance-wide">
-          <dt>订单号</dt>
-          <dd>{{ selected.orderNo }}</dd>
-        </div>
-        <div v-if="selected.tradeNo" class="finance-wide">
-          <dt>交易号</dt>
-          <dd>{{ selected.tradeNo }}</dd>
-        </div>
-      </dl>
-      <p v-if="selected.lastSyncError" class="finance-warning">{{ selected.lastSyncError }}</p>
-      <p v-if="selected.pendingRequestId" class="finance-note">
-        该账单有财务申请正在处理中。退款和账单调整尚未完成时，以当前确认状态为准。
-      </p>
-      <div class="finance-actions">
-        <button v-if="canPay(selected)" class="button primary" :disabled="busy" @click="pay(selected)">
-          前往沙箱支付
-        </button>
-        <DownloadLink
-          v-if="selected.status === 'PAID'"
-          :href="`/api/payments/mine/${selected.id}/receipt`"
-          expected-type="application/pdf"
-          class="button compact"
-        >
-          下载缴费凭证
-        </DownloadLink>
-        <button v-if="canRefund(selected)" class="button compact" :disabled="busy" @click="showRefund = !showRefund">
-          申请全额退款
-        </button>
-      </div>
-      <form v-if="showRefund && canRefund(selected)" class="finance-form finance-subsection" @submit.prevent="refund">
-        <label>
-          退款原因
-          <textarea
-            v-model="refundReason"
-            required
-            minlength="5"
-            maxlength="500"
-            rows="3"
-            :disabled="busy"
-            placeholder="请说明需要退款的原因，财务人员将进行复核"
-          />
-        </label>
-        <div class="finance-actions">
-          <button class="button primary" :disabled="busy">提交退款申请</button>
-          <button type="button" class="button" :disabled="busy" @click="showRefund = false">取消</button>
-        </div>
-      </form>
-      <section class="finance-subsection">
-        <h3>办理记录</h3>
-        <ol class="finance-history">
-          <li v-for="event in history" :key="event.id">
-            <strong>{{ paymentActionLabels[event.action] || event.action }}</strong>
-            <span>{{ event.actorName }} · {{ event.createdAt.slice(0, 16).replace('T', ' ') }}</span>
-            <p>{{ event.reason }}</p>
-          </li>
-        </ol>
-        <p v-if="!history.length" class="muted">历史账单尚无新增办理记录。</p>
-      </section>
     </section>
 
     <section class="portal-panel finance-panel">
@@ -402,41 +309,314 @@ onBeforeUnmount(() => {
           <span>{{ filterPaymentBills(bills, category.code).length }}</span>
         </button>
       </nav>
-      <p v-if="loading" role="status">正在读取本人账单…</p>
+
+      <section
+        v-if="selected && !filtered.some(item => item.id === selected?.id)"
+        class="finance-folio"
+        aria-labelledby="bill-detail-heading"
+      >
+        <div class="finance-folio-bar">
+          <div class="finance-folio-title">
+            <span class="finance-folio-kicker">
+              {{ selected.categoryName }} · {{ paymentWorkflowText(selected.workflowStatus) }} ·
+              {{ paymentSettlementText(selected) }}
+            </span>
+            <h2 id="bill-detail-heading">{{ selected.title }}</h2>
+          </div>
+          <div class="finance-folio-bar-end">
+            <strong class="finance-total">{{ money(selected.amountCents) }}</strong>
+            <button type="button" class="button compact" :disabled="busy" @click="closeBill">收起卷宗 ×</button>
+          </div>
+        </div>
+        <div class="finance-folio-grid">
+          <div class="finance-folio-main">
+            <dl class="finance-facts">
+              <div>
+                <dt>收费账期</dt>
+                <dd>{{ selected.billingPeriod }}</dd>
+              </div>
+              <div>
+                <dt>缴费截止</dt>
+                <dd>
+                  {{ selected.dueDate || (selected.dormRecharge ? '预充值订单' : '历史账单未设置') }}
+                  <span v-if="overdue(selected)" class="finance-warning">逾期待缴</span>
+                </dd>
+              </div>
+              <div class="finance-wide">
+                <dt>收费标准与数量</dt>
+                <dd>{{ selected.standardName || '财务手工核定' }} · 数量 {{ selected.quantity }}</dd>
+              </div>
+              <div class="finance-wide">
+                <dt>收费依据</dt>
+                <dd>{{ selected.basis }}</dd>
+              </div>
+              <div :class="{ 'finance-wide': !selected.tradeNo }">
+                <dt>订单号</dt>
+                <dd>{{ selected.orderNo }}</dd>
+              </div>
+              <div v-if="selected.tradeNo">
+                <dt>交易号</dt>
+                <dd>{{ selected.tradeNo }}</dd>
+              </div>
+            </dl>
+            <p v-if="selected.lastSyncError" class="finance-warning">{{ selected.lastSyncError }}</p>
+            <p v-if="selected.pendingRequestId" class="finance-note">
+              该账单有财务申请正在处理中。退款和账单调整尚未完成时，以当前确认状态为准。
+            </p>
+          </div>
+          <div class="finance-folio-side">
+            <div class="finance-folio-console">
+              <div class="finance-folio-console-head">
+                <h3>缴费与凭证操作</h3>
+                <span class="finance-badge">{{ paymentSettlementText(selected) }}</span>
+              </div>
+              <div class="finance-actions">
+                <button v-if="canPay(selected)" class="button primary compact" :disabled="busy" @click="pay(selected)">
+                  前往沙箱支付
+                </button>
+                <DownloadLink
+                  v-if="selected.status === 'PAID'"
+                  :href="`/api/payments/mine/${selected.id}/receipt`"
+                  expected-type="application/pdf"
+                  class="button compact"
+                >
+                  下载缴费凭证
+                </DownloadLink>
+                <button
+                  v-if="canRefund(selected)"
+                  class="button compact"
+                  :disabled="busy"
+                  @click="showRefund = !showRefund"
+                >
+                  申请全额退款
+                </button>
+              </div>
+              <form v-if="showRefund && canRefund(selected)" class="finance-confirm" @submit.prevent="refund">
+                <label>
+                  退款原因
+                  <textarea
+                    v-model="refundReason"
+                    required
+                    minlength="5"
+                    maxlength="500"
+                    rows="2"
+                    :disabled="busy"
+                    placeholder="请说明需要退款的原因，财务人员将进行复核"
+                  />
+                </label>
+                <div class="finance-actions">
+                  <button class="button primary compact" :disabled="busy">提交退款申请</button>
+                  <button type="button" class="button compact" :disabled="busy" @click="showRefund = false">
+                    取消
+                  </button>
+                </div>
+              </form>
+            </div>
+            <section class="finance-subsection">
+              <h3>办理记录（{{ history.length }}）</h3>
+              <ol class="finance-history">
+                <li v-for="event in history" :key="event.id">
+                  <strong>{{ paymentActionLabels[event.action] || event.action }}</strong>
+                  <span>{{ event.actorName }} · {{ formatDateTime(event.createdAt) }}</span>
+                  <p>{{ event.reason }}</p>
+                </li>
+              </ol>
+              <p v-if="!history.length" class="muted">历史账单尚无新增办理记录。</p>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <SkeletonBlock v-if="loading" variant="list" :rows="4" label="正在读取本人账单…" />
       <p v-else-if="!bills.length && !error" class="empty-state">
         目前没有已发布账单。有新的应缴费用时，会通过站内消息通知你。
       </p>
       <p v-else-if="!filtered.length && !error" class="empty-state">
         当前分类和状态下暂无账单，可切换筛选查看其他记录。
       </p>
-      <article v-for="bill in loading ? [] : filtered" :key="bill.id" class="finance-record">
-        <div>
-          <span class="finance-badge">{{ bill.categoryName }}</span>
-          <h3>{{ bill.title }}</h3>
-          <p>
-            {{ bill.billingPeriod }}
-            <template v-if="bill.dueDate">· 截止 {{ bill.dueDate }}</template>
-            <span v-if="overdue(bill)" class="payment-overdue">逾期待缴</span>
-          </p>
-          <small class="muted">
-            {{
-              ['VOIDED', 'WAIVED'].includes(bill.workflowStatus)
-                ? paymentWorkflowText(bill.workflowStatus)
-                : paymentSettlementText(bill)
-            }}
-            <template v-if="bill.pendingRequestId">· 财务申请办理中</template>
-          </small>
-        </div>
-        <div class="finance-record-end">
-          <strong>{{ money(bill.amountCents) }}</strong>
-          <div class="finance-actions">
-            <button class="button compact" :disabled="busy" @click="openBill(bill)">查看详情</button>
+
+      <div v-if="!loading && filtered.length" class="finance-ledger-head" aria-hidden="true">
+        <span>收费分类 / 账单名称</span>
+        <span>收费账期 / 标准</span>
+        <span>缴费状态 / 截止限期</span>
+        <span class="is-right">应缴金额</span>
+        <span class="is-right">卷宗操作</span>
+      </div>
+
+      <div
+        v-for="bill in loading ? [] : filtered"
+        :key="bill.id"
+        class="finance-ledger-group"
+        :class="{ 'is-expanded': selected?.id === bill.id }"
+      >
+        <article
+          class="finance-record finance-record--ledger"
+          :class="{ 'finance-selected': selected?.id === bill.id }"
+        >
+          <div class="finance-col-main">
+            <div class="finance-title-line">
+              <span class="finance-badge">{{ bill.categoryName }}</span>
+              <h3>{{ bill.title }}</h3>
+            </div>
+            <small v-if="bill.orderNo" class="finance-order-meta">单号 {{ bill.orderNo }}</small>
+          </div>
+          <div class="finance-col-party">
+            <strong>{{ bill.billingPeriod }}</strong>
+            <span>{{ bill.standardName || '核定账单' }} · 数量 {{ bill.quantity }}</span>
+          </div>
+          <div class="finance-col-status">
+            <span class="finance-status-tag" :data-tone="billTone(bill)">
+              {{
+                ['VOIDED', 'WAIVED'].includes(bill.workflowStatus)
+                  ? paymentWorkflowText(bill.workflowStatus)
+                  : paymentSettlementText(bill)
+              }}
+              <template v-if="bill.pendingRequestId">· 财务办理中</template>
+            </span>
+            <small class="muted">
+              {{ bill.dueDate ? `截止 ${bill.dueDate}` : '未设截止日期' }}
+              <span v-if="overdue(bill)" class="payment-overdue">逾期待缴</span>
+            </small>
+          </div>
+          <div class="finance-col-amount">
+            <strong>{{ money(bill.amountCents) }}</strong>
+          </div>
+          <div class="finance-col-actions">
+            <button
+              class="button compact"
+              :class="{ primary: selected?.id === bill.id }"
+              :disabled="busy"
+              @click="selected?.id === bill.id ? closeBill() : openBill(bill)"
+            >
+              {{ selected?.id === bill.id ? '收起详情 ▴' : '查看详情 ▾' }}
+            </button>
             <button v-if="canPay(bill)" class="button primary compact" :disabled="busy" @click="pay(bill)">
               前往沙箱支付
             </button>
           </div>
-        </div>
-      </article>
+        </article>
+
+        <section v-if="selected && selected.id === bill.id" class="finance-folio" aria-labelledby="bill-detail-heading">
+          <div class="finance-folio-bar">
+            <div class="finance-folio-title">
+              <span class="finance-folio-kicker">
+                {{ selected.categoryName }} · {{ paymentWorkflowText(selected.workflowStatus) }} ·
+                {{ paymentSettlementText(selected) }}
+              </span>
+              <h2 id="bill-detail-heading">{{ selected.title }}</h2>
+            </div>
+            <div class="finance-folio-bar-end">
+              <strong class="finance-total">{{ money(selected.amountCents) }}</strong>
+              <button type="button" class="button compact" :disabled="busy" @click="closeBill">收起详情 ×</button>
+            </div>
+          </div>
+
+          <div class="finance-folio-grid">
+            <div class="finance-folio-main">
+              <dl class="finance-facts">
+                <div>
+                  <dt>收费账期</dt>
+                  <dd>{{ selected.billingPeriod }}</dd>
+                </div>
+                <div>
+                  <dt>缴费截止</dt>
+                  <dd>
+                    {{ selected.dueDate || (selected.dormRecharge ? '预充值订单' : '历史账单未设置') }}
+                    <span v-if="overdue(selected)" class="finance-warning">逾期待缴</span>
+                  </dd>
+                </div>
+                <div class="finance-wide">
+                  <dt>收费标准与数量</dt>
+                  <dd>{{ selected.standardName || '财务手工核定' }} · 数量 {{ selected.quantity }}</dd>
+                </div>
+                <div class="finance-wide">
+                  <dt>收费依据</dt>
+                  <dd>{{ selected.basis }}</dd>
+                </div>
+                <div :class="{ 'finance-wide': !selected.tradeNo }">
+                  <dt>订单号</dt>
+                  <dd>{{ selected.orderNo }}</dd>
+                </div>
+                <div v-if="selected.tradeNo">
+                  <dt>交易号</dt>
+                  <dd>{{ selected.tradeNo }}</dd>
+                </div>
+              </dl>
+              <p v-if="selected.lastSyncError" class="finance-warning">{{ selected.lastSyncError }}</p>
+              <p v-if="selected.pendingRequestId" class="finance-note">
+                该账单有财务申请正在处理中。退款和账单调整尚未完成时，以当前确认状态为准。
+              </p>
+            </div>
+
+            <div class="finance-folio-side">
+              <div class="finance-folio-console">
+                <div class="finance-folio-console-head">
+                  <h3>缴费与凭证操作</h3>
+                  <span class="finance-badge">{{ paymentSettlementText(selected) }}</span>
+                </div>
+                <div class="finance-actions">
+                  <button
+                    v-if="canPay(selected)"
+                    class="button primary compact"
+                    :disabled="busy"
+                    @click="pay(selected)"
+                  >
+                    前往沙箱支付
+                  </button>
+                  <DownloadLink
+                    v-if="selected.status === 'PAID'"
+                    :href="`/api/payments/mine/${selected.id}/receipt`"
+                    expected-type="application/pdf"
+                    class="button compact"
+                  >
+                    下载缴费凭证
+                  </DownloadLink>
+                  <button
+                    v-if="canRefund(selected)"
+                    class="button compact"
+                    :disabled="busy"
+                    @click="showRefund = !showRefund"
+                  >
+                    申请全额退款
+                  </button>
+                </div>
+                <form v-if="showRefund && canRefund(selected)" class="finance-confirm" @submit.prevent="refund">
+                  <label>
+                    退款原因
+                    <textarea
+                      v-model="refundReason"
+                      required
+                      minlength="5"
+                      maxlength="500"
+                      rows="2"
+                      :disabled="busy"
+                      placeholder="请说明需要退款的原因，财务人员将进行复核"
+                    />
+                  </label>
+                  <div class="finance-actions">
+                    <button class="button primary compact" :disabled="busy">提交退款申请</button>
+                    <button type="button" class="button compact" :disabled="busy" @click="showRefund = false">
+                      取消
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <section class="finance-subsection">
+                <h3>办理记录（{{ history.length }}）</h3>
+                <ol class="finance-history">
+                  <li v-for="event in history" :key="event.id">
+                    <strong>{{ paymentActionLabels[event.action] || event.action }}</strong>
+                    <span>{{ event.actorName }} · {{ formatDateTime(event.createdAt) }}</span>
+                    <p>{{ event.reason }}</p>
+                  </li>
+                </ol>
+                <p v-if="!history.length" class="muted">历史账单尚无新增办理记录。</p>
+              </section>
+            </div>
+          </div>
+        </section>
+      </div>
     </section>
   </div>
 </template>
@@ -455,8 +635,8 @@ onBeforeUnmount(() => {
 .payment-overdue {
   display: inline-block;
   margin-left: 10px;
-  color: #936023;
-  font-size: 0.8rem;
+  color: var(--color-warning);
+  font-size: var(--text-meta);
 }
 .finance-form .finance-actions {
   margin-top: 16px;
@@ -477,6 +657,8 @@ onBeforeUnmount(() => {
   align-items: stretch;
   gap: 22px;
   overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
   margin: 20px 0 14px;
   border-bottom: 1px solid var(--color-border);
 }
@@ -490,10 +672,13 @@ onBeforeUnmount(() => {
   border-bottom: 2px solid transparent;
   border-radius: 0;
   background: transparent;
-  color: #7b886f;
+  color: var(--color-text-tertiary);
   font: inherit;
   font-size: var(--text-supporting);
   cursor: pointer;
+  transition:
+    color 0.16s ease,
+    border-color 0.16s ease;
 }
 .payment-category-tabs button span {
   font-size: var(--text-meta);

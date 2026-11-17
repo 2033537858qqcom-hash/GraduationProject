@@ -46,7 +46,8 @@ public class AgentTools {
         Map.entry("my_exams","查看本人已发布考试"),Map.entry("my_affairs","查看本人办事进度"),Map.entry("my_notice_summary","查看本人未读消息"),Map.entry("my_review_pending","查看岗位待办"),
         Map.entry("application_status","查看当前申请"),Map.entry("my_repairs","查看本人报修进度"),Map.entry("repair_dispatch_queue","查看派单范围报修"),
         Map.entry("repair_work_queue","查看当前维修任务"),Map.entry("repair_status","查看当前报修"),Map.entry("my_housing","查看本人住宿"),Map.entry("my_housing_transfers","查看本人调宿进度"),
-        Map.entry("housing_transfer_status","查看当前调宿"),Map.entry("campus_navigation","校园导览与路线查询"));
+        Map.entry("housing_transfer_status","查看当前调宿"),Map.entry("campus_navigation","校园导览与路线查询"),
+        Map.entry("staff_triage_advice","岗位分诊与审核参考建议"),Map.entry("platform_digest","岗位运行与待办简报"));
     public List<Capability> capabilities(CampusPrincipal user) {
         identities.requirePermission(user,"agent:query");
         var p=identities.permissions(user.id()); var names=new ArrayList<>(List.of("search_guides","my_notice_summary","campus_navigation"));
@@ -54,7 +55,9 @@ public class AgentTools {
         if(p.contains("learning:read")) names.addAll(List.of("my_grades","my_exams"));
         if(p.contains("portal:read")) names.addAll(List.of("my_affairs","my_schedule"));
         if(p.contains("reservation:apply")) names.addAll(List.of("my_reservations","find_available_venues"));
-        if(p.stream().anyMatch(x->List.of("leave:review","certificate:review","reservation:review","housing:review","housing:assign","repair:dispatch","repair:work","content:review").contains(x))) names.add("my_review_pending");
+        if(p.stream().anyMatch(x->List.of("leave:review","certificate:review","reservation:review","housing:review","housing:assign","repair:dispatch","repair:work","content:review","payment:manage","payment:review","payment:source").contains(x))) names.add("my_review_pending");
+        if(p.stream().anyMatch(x->List.of("repair:dispatch","leave:review","certificate:review","housing:review","reservation:review").contains(x))) names.add("staff_triage_advice");
+        if(p.contains("foundation:manage") || p.contains("teaching:manage")) names.add("platform_digest");
         if(p.stream().anyMatch(x->List.of("leave:apply","leave:review","certificate:apply","certificate:review").contains(x))) names.add("application_status");
         if(p.contains("repair:apply")) names.add("my_repairs");
         if(p.contains("repair:dispatch")) names.add("repair_dispatch_queue");
@@ -80,7 +83,7 @@ public class AgentTools {
                 case "housing_transfer_status" -> properties.put("id",Map.of("type","integer","minimum",1,"description","本人调宿申请编号；省略时使用当前调宿页面上下文"));
                 case "repair_status" -> { properties.put("id",Map.of("type","integer","minimum",1,"description","只取用户明确给出的工单编号；省略时使用本地页面上下文")); properties.put("view",Map.of("type","string","enum",List.of("MINE","DISPATCH","WORK"),"description","省略时采用页面上下文")); }
                 case "campus_navigation" -> {
-                    properties.put("destination",Map.of("type","string","description","目的地名称，如：图书馆、毓秀楼、静逸楼、锦绣餐厅、红体馆等"));
+                    properties.put("destination",Map.of("type","string","description","目的地名称，支持东校区（如图书馆、毓秀楼、静逸楼、锦绣餐厅、红体馆）及西校区（如西校区明德楼、西校区图书馆、诚毅楼、郑工餐厅、4号公寓楼等）"));
                     properties.put("origin",Map.of("type","string","description","出发地，默认南门"));
                 }
                 default -> { }
@@ -145,6 +148,8 @@ public class AgentTools {
                 yield repairApplication(user,view,id);
             }
             case "campus_navigation" -> navigation(text(a,"destination",null,80),text(a,"origin","南门",80));
+            case "staff_triage_advice" -> staffAdvice(user);
+            case "platform_digest" -> platformDigest(user);
             default -> throw invalid();
         };
     }
@@ -265,6 +270,8 @@ public class AgentTools {
                     case "repairDispatch" -> "报修分诊";
                     case "repairWork" -> "维修任务";
                     case "content" -> "官网审核";
+                    case "payment" -> "财务收费";
+                    case "paymentSource" -> "收费依据";
                     default -> entry.getKey();
                 };
                 String path = switch (entry.getKey()) {
@@ -276,6 +283,8 @@ public class AgentTools {
                     case "repairDispatch" -> "/logistics/repairs/dispatch";
                     case "repairWork" -> "/logistics/repairs/tasks";
                     case "content" -> "/admin/content";
+                    case "payment" -> "/finance/payments";
+                    case "paymentSource" -> "/payment-bases";
                     default -> "/workbench";
                 };
                 items.add(new Fact("review:" + entry.getKey(), name + "待办", entry.getValue() + " 条待处理", path));
@@ -290,59 +299,142 @@ public class AgentTools {
         }
         return result("my_review_pending", "OK", "当前共有 " + summary.totalPending() + " 项待处理业务；退回或已结束的不计入待办。", summary.totalPending(), items, List.of(), "/workbench");
     }
-    private record NavTarget(String id, String name, String category, String guide, List<String> aliases) {}
+    private record NavTarget(String id, String campus, String name, String category, String guide, List<String> aliases) {}
     private static final List<NavTarget> NAV_TARGETS = List.of(
-        new NavTarget("east-library", "图书馆", "学习资源", "位于中环路核心环抱形建筑，南向开敞内庭。示意路线：从南门沿人文大道向北可达（场景不用于实地导航，距离未实测）。", List.of("图书馆", "图书大厦", "借书", "自习室", "阅览室")),
-        new NavTarget("east-jinxiu", "毓秀楼", "学生公寓", "东校区学生公寓，位于文华楼组团东侧、临近东侧水系（秋月塘）西岸。示意路线：从南门向北沿人文大道，在文华楼东侧右转可达（不用于实地导航）。", List.of("毓秀楼", "毓秀")),
-        new NavTarget("east-fenghua", "风华楼", "学生公寓", "东校区学生公寓，位于毓秀楼南侧、紧邻水系西岸。示意路线：从南门进入后向东北方向文华楼东侧可达（不用于实地导航）。", List.of("风华楼", "风华")),
-        new NavTarget("east-shuhua", "书华楼", "学生公寓", "东校区学生公寓，位于中环路北侧、致远楼西侧。示意路线：从南门沿中环路西北方向可达（不用于实地导航）。", List.of("书华楼", "书华")),
-        new NavTarget("east-zhiyuan", "致远楼", "学生公寓", "东校区学生公寓，位于书华楼东侧、静逸楼北侧，中环路北段。示意路线：从南门穿过中环路北行可达（不用于实地导航）。", List.of("致远楼", "致远")),
-        new NavTarget("east-jingyi", "静逸楼", "学生公寓", "东校区学生公寓，位于中环路北侧、致远楼南侧，与锦绣餐厅由校内道路独立分隔。示意路线：从南门沿中环路向北可达（不用于实地导航）。", List.of("静逸楼", "静逸")),
-        new NavTarget("east-jinxiu-dining", "锦绣餐厅", "生活餐饮", "东校区主要师生食堂（高德地图收录为锦绣食府），与静逸楼由道路自然分隔。从中环路西北侧步行即可抵达。", List.of("锦绣餐厅", "锦绣食府", "锦绣食堂", "北食堂", "锦绣")),
-        new NavTarget("east-canteen-wenhua", "文华餐厅", "生活餐饮", "位于西南生活服务区、行政楼西侧。从南门进入沿人文大道向左侧生活区步行可达。", List.of("文华餐厅", "文华食堂", "南食堂", "食堂", "餐厅")),
-        new NavTarget("east-gym", "红体馆", "文体场馆", "位于校园西北、英才大道西段，具有标志性近圆形屋顶。示意路线：从南门向西北经英才大道可达文体区（不用于实地导航；公开卫星未单独确认西门落点）。", List.of("红体馆", "弘德体育馆", "体育馆", "篮球馆", "球馆")),
-        new NavTarget("east-swimming", "游泳馆", "文体场馆", "紧邻红体馆东南侧，英才大道南侧。从南门向西北方向文体区步行可达。", List.of("游泳馆", "游泳池")),
-        new NavTarget("east-sports", "西侧体育场", "文体场馆", "包含标准田径场与成组球场。从南门向西经英才大道抵达体育区。", List.of("西侧体育场", "体育场", "操场", "田径场", "足球场", "跑道")),
-        new NavTarget("east-admin", "行政楼", "综合办公", "位于人文大道中轴北端、文华餐厅东侧、学术报告厅西侧，为全校行政办公枢纽。", List.of("行政楼", "行政管理中心", "办公楼", "校办")),
-        new NavTarget("east-auditorium", "学术报告厅", "公共建筑", "位于行政管理中心东侧、外环东路与水系西岸，用于学术交流与大型会议。", List.of("学术报告厅", "报告厅", "礼堂", "大礼堂")),
-        new NavTarget("east-square", "英才广场", "校园景观", "位于图书馆西侧、体育区与艺术楼之间开阔铺装区域。", List.of("英才广场", "广场", "升旗台")),
-        new NavTarget("east-xinke", "信科楼组团", "学院楼宇", "位于图书馆西南侧、人文大道西侧，包含计算机与软件学院、大数据管理中心。", List.of("信科楼", "信息工程学院", "软件学院", "大数据", "计算机学院")),
-        new NavTarget("east-jiangong", "建工楼", "学院楼宇", "位于信科楼南侧、人文大道西侧，建筑工程教学核心场所。", List.of("建工楼")),
-        new NavTarget("east-construction-training", "建工实训中心", "实验实训", "位于文华餐厅南侧、建工学院北侧，为工程技术实训基地。", List.of("建工实训中心", "实训中心", "实训基地", "车间")),
-        new NavTarget("east-construction", "建工学院", "学院楼宇", "位于人文大道西南侧、建工实训中心南侧。", List.of("建工学院", "建筑工程学院")),
-        new NavTarget("east-wenhua", "文华楼组团", "学院楼宇", "位于图书馆东南侧、中环路与人文大道交汇东侧，包含商学院、外国语学院、管理学院。", List.of("文华楼", "商学院", "外国语学院", "外语学院", "管理学院")),
-        new NavTarget("east-art", "美术、音乐楼组团", "学院楼宇", "位于艺馨路西侧、游泳馆东侧，包含艺术设计学院与音乐学院。", List.of("美术楼", "音乐楼", "艺术楼", "艺术设计学院", "音乐学院")),
-        new NavTarget("east-medical", "医学院、药学院组团", "学院楼宇", "位于南部人文大道东侧、邻外环东路，包含药学院与医学院教学区。", List.of("医学院", "药学院", "医学楼")),
-        new NavTarget("east-clinic", "医务室", "医疗服务", "校园基础医疗健康服务点，位于校区服务保障区。", List.of("医务室", "校医院", "卫生所", "看病", "校医")),
-        new NavTarget("east-affairs", "学生综合事务服务中心", "综合服务", "位于外环东路侧，提供一站式学生综合事务办理。", List.of("学生综合事务服务中心", "综合事务服务中心", "学生事务中心", "事务中心")),
-        new NavTarget("east-water", "东侧水系", "校园水系", "东校区纵向景观水系（公开文本常称秋月塘），沿岸设滨水步道与绿化景观。", List.of("东侧水系", "秋月塘", "水系", "景观湖", "湖边", "东湖")),
-        new NavTarget("east-gate", "东门", "出入口", "校园东侧出入口，邻近万福路。", List.of("东门", "东大门", "万福路门")),
-        new NavTarget("south-gate", "南门", "出入口", "学院路北侧校园主入口，人文大道南起点。", List.of("南门", "正门", "主校门", "南大门", "大门", "学校大门")),
-        new NavTarget("north-gate", "北门", "出入口", "外环北路北侧校园出入口。", List.of("北门", "北大门")),
-        new NavTarget("east-h8", "H8", "学生公寓", "东校区学生公寓，位于外环北路南侧、书华楼西北侧。示意路线：从南门向北经中环路可达北侧生活区（不用于实地导航）。", List.of("H8", "H8楼", "H8主楼", "H8副楼")),
-        new NavTarget("east-h1", "H1", "学生公寓", "东校区学生公寓，位于体育场东侧、信科楼组团西侧（分布图位置点，楼体轮廓待对应）。示意导览不用于实地导航。", List.of("H1", "H1楼")),
-        new NavTarget("east-h2", "H2", "学生公寓", "东校区学生公寓，位于H1南侧、文华餐厅西北侧（分布图位置点，楼体轮廓待对应）。示意导览不用于实地导航。", List.of("H2", "H2楼"))
+        new NavTarget("east-library", "EAST", "图书馆", "学习资源", "位于东校区中环路核心环抱形建筑，南向开敞内庭。示意路线：从南门沿人文大道向北可达（场景不用于实地导航，距离未实测）。", List.of("图书馆", "图书大厦", "借书", "自习室", "阅览室")),
+        new NavTarget("east-jinxiu", "EAST", "毓秀楼", "学生公寓", "东校区学生公寓，位于文华楼组团东侧、临近东侧水系（秋月塘）西岸。示意路线：从南门向北沿人文大道，在文华楼东侧右转可达（不用于实地导航）。", List.of("毓秀楼", "毓秀")),
+        new NavTarget("east-fenghua", "EAST", "风华楼", "学生公寓", "东校区学生公寓，位于毓秀楼南侧、紧邻水系西岸。示意路线：从南门进入后向东北方向文华楼东侧可达（不用于实地导航）。", List.of("风华楼", "风华")),
+        new NavTarget("east-shuhua", "EAST", "书华楼", "学生公寓", "东校区学生公寓，位于中环路北侧、致远楼西侧。示意路线：从南门沿中环路西北方向可达（不用于实地导航）。", List.of("书华楼", "书华")),
+        new NavTarget("east-zhiyuan", "EAST", "致远楼", "学生公寓", "东校区学生公寓，位于书华楼东侧、静逸楼北侧，中环路北段。示意路线：从南门穿过中环路北行可达（不用于实地导航）。", List.of("致远楼", "致远")),
+        new NavTarget("east-jingyi", "EAST", "静逸楼", "学生公寓", "东校区学生公寓，位于中环路北侧、致远楼南侧，与锦绣餐厅由校内道路独立分隔。示意路线：从南门沿中环路向北可达（不用于实地导航）。", List.of("静逸楼", "静逸")),
+        new NavTarget("east-jinxiu-dining", "EAST", "锦绣餐厅", "生活餐饮", "东校区主要师生食堂（高德地图收录为锦绣食府），与静逸楼由道路自然分隔。从中环路西北侧步行即可抵达。", List.of("锦绣餐厅", "锦绣食府", "锦绣食堂", "北食堂", "锦绣")),
+        new NavTarget("east-canteen-wenhua", "EAST", "文华餐厅", "生活餐饮", "位于东校区西南生活服务区、行政楼西侧。从南门进入沿人文大道向左侧生活区步行可达。", List.of("文华餐厅", "文华食堂", "南食堂", "食堂", "餐厅")),
+        new NavTarget("east-gym", "EAST", "红体馆", "文体场馆", "位于东校区西北、英才大道西段，具有标志性近圆形屋顶。示意路线：从南门向西北经英才大道可达文体区（不用于实地导航；公开卫星未单独确认西门落点）。", List.of("红体馆", "弘德体育馆", "体育馆", "篮球馆", "球馆")),
+        new NavTarget("east-swimming", "EAST", "游泳馆", "文体场馆", "紧邻东校区红体馆东南侧，英才大道南侧。从南门向西北方向文体区步行可达。", List.of("游泳馆", "游泳池")),
+        new NavTarget("east-sports", "EAST", "西侧体育场", "文体场馆", "位于东校区西侧，包含标准田径场与成组球场。从南门向西经英才大道抵达体育区。", List.of("西侧体育场", "体育场", "操场", "田径场", "足球场", "跑道")),
+        new NavTarget("east-admin", "EAST", "行政楼", "综合办公", "位于东校区人文大道中轴北端、文华餐厅东侧、学术报告厅西侧，为全校行政办公枢纽。", List.of("行政楼", "行政管理中心", "办公楼", "校办")),
+        new NavTarget("east-auditorium", "EAST", "学术报告厅", "公共建筑", "位于东校区行政管理中心东侧、外环东路与水系西岸，用于学术交流与大型会议。", List.of("学术报告厅", "报告厅", "礼堂", "大礼堂")),
+        new NavTarget("east-square", "EAST", "英才广场", "校园景观", "位于东校区图书馆西侧、体育区与艺术楼之间开阔铺装区域。", List.of("英才广场", "广场", "升旗台")),
+        new NavTarget("east-xinke", "EAST", "信科楼组团", "学院楼宇", "位于东校区图书馆西南侧、人文大道西侧，包含计算机与软件学院、大数据管理中心。", List.of("信科楼", "信息工程学院", "软件学院", "大数据", "计算机学院")),
+        new NavTarget("east-jiangong", "EAST", "建工楼", "学院楼宇", "位于东校区信科楼南侧、人文大道西侧，建筑工程教学核心场所。", List.of("建工楼")),
+        new NavTarget("east-construction-training", "EAST", "建工实训中心", "实验实训", "位于东校区文华餐厅南侧、建工学院北侧，为工程技术实训基地。", List.of("建工实训中心", "实训中心", "实训基地", "车间")),
+        new NavTarget("east-construction", "EAST", "建工学院", "学院楼宇", "位于东校区人文大道西南侧、建工实训中心南侧。", List.of("建工学院", "建筑工程学院")),
+        new NavTarget("east-wenhua", "EAST", "文华楼组团", "学院楼宇", "位于东校区图书馆东南侧、中环路与人文大道交汇东侧，包含商学院、外国语学院、管理学院。", List.of("文华楼", "商学院", "外国语学院", "外语学院", "管理学院")),
+        new NavTarget("east-art", "EAST", "美术、音乐楼组团", "学院楼宇", "位于东校区艺馨路西侧、游泳馆东侧，包含艺术设计学院与音乐学院。", List.of("美术楼", "音乐楼", "艺术楼", "艺术设计学院", "音乐学院")),
+        new NavTarget("east-medical", "EAST", "医学院、药学院组团", "学院楼宇", "位于东校区南部人文大道东侧、邻外环东路，包含药学院与医学院教学区。", List.of("医学院", "药学院", "医学楼")),
+        new NavTarget("east-clinic", "EAST", "医务室", "医疗服务", "东校区基础医疗健康服务点，位于校区服务保障区。", List.of("医务室", "校医院", "卫生所", "看病", "校医")),
+        new NavTarget("east-affairs", "EAST", "学生综合事务服务中心", "综合服务", "位于东校区外环东路侧，提供一站式学生综合事务办理。", List.of("学生综合事务服务中心", "综合事务服务中心", "学生事务中心", "事务中心")),
+        new NavTarget("east-water", "EAST", "东侧水系", "校园水系", "东校区纵向景观水系（公开文本常称秋月塘），沿岸设滨水步道与绿化景观。", List.of("东侧水系", "秋月塘", "水系", "景观湖", "湖边", "东湖")),
+        new NavTarget("east-gate", "EAST", "东门", "出入口", "东校区东侧出入口，邻近万福路。", List.of("东门", "东大门", "万福路门")),
+        new NavTarget("south-gate", "EAST", "南门", "出入口", "东校区学院路北侧主入口，人文大道南起点。", List.of("南门", "正门", "主校门", "南大门", "大门", "学校大门")),
+        new NavTarget("north-gate", "EAST", "北门", "出入口", "东校区外环北路北侧出入口。", List.of("北门", "北大门")),
+        new NavTarget("east-h8", "EAST", "H8", "学生公寓", "东校区学生公寓，位于外环北路南侧、书华楼西北侧。示意路线：从南门向北经中环路可达北侧生活区（不用于实地导航）。", List.of("H8", "H8楼", "H8主楼", "H8副楼")),
+        new NavTarget("east-h1", "EAST", "H1", "学生公寓", "东校区学生公寓，位于体育场东侧、信科楼组团西侧（分布图位置点，楼体轮廓待对应）。示意导览不用于实地导航。", List.of("H1", "H1楼")),
+        new NavTarget("east-h2", "EAST", "H2", "学生公寓", "东校区学生公寓，位于H1南侧、文华餐厅西北侧（分布图位置点，楼体轮廓待对应）。示意导览不用于实地导航。", List.of("H2", "H2楼")),
+        // 西校区主要楼宇与生活设施（与 westCampusData / westCampusMapData 对齐）
+        new NavTarget("west-mingde", "WEST", "西校区明德楼", "学院楼宇", "西校区主要教学办公楼宇（明德楼），可在西校区地图与沙盘中查看位置。", List.of("西校区明德楼", "西校区明德讲堂", "明德讲堂", "明德楼", "明德")),
+        new NavTarget("west-library", "WEST", "西校区图书馆", "学习资源", "西校区图书馆，位于西校区核心教学区旁，可供自习与查阅文献。", List.of("西校区图书馆", "西区图书馆", "西校图书馆")),
+        new NavTarget("west-chengyi", "WEST", "诚毅楼", "学院楼宇", "西校区诚毅楼，位于西校区教学建筑群中。", List.of("诚毅楼", "诚毅", "西校区诚毅楼")),
+        new NavTarget("west-information", "WEST", "信息楼", "学院楼宇", "西校区信息楼，位于西校区中轴教学区域。", List.of("信息楼", "西校区信息楼")),
+        new NavTarget("west-tech-center", "WEST", "工程训练与创新中心", "实验实训", "西校区工程训练与创新中心，承担工程实训与创新实践任务。", List.of("工程训练与创新中心", "工程训练中心", "创新中心", "西校区实训中心")),
+        new NavTarget("west-experiment-building", "WEST", "西校区实验楼", "实验实训", "西校区实验楼，位于诚毅楼与信息楼附近。", List.of("西校区实验楼", "实验楼")),
+        new NavTarget("west-lab-3", "WEST", "叁号实验楼", "实验实训", "西校区叁号实验楼，位于桃园路与万庄路交叉口西北方向。", List.of("叁号实验楼", "三号实验楼")),
+        new NavTarget("west-teaching-1", "WEST", "1号楼（东院）", "学院楼宇", "西校区东院1号楼（与创业孵化园1号楼位置不同）。", List.of("1号楼（东院）", "西校区1号楼", "东院1号楼")),
+        new NavTarget("west-teaching-2", "WEST", "2号楼", "学院楼宇", "西校区2号楼，位于西校区教学区。", List.of("西校区2号楼", "2号楼")),
+        new NavTarget("west-incubator", "WEST", "大学生创业孵化园", "创新创业", "西校区大学生创业孵化园，位于西校区西北角。", List.of("大学生创业孵化园", "创业孵化园", "孵化园")),
+        new NavTarget("west-auto-training", "WEST", "汽车实训中心", "实验实训", "西校区汽车实训中心，位于西校区实训区。", List.of("汽车实训中心", "汽车实训")),
+        new NavTarget("west-rail-training", "WEST", "轨道交通实训中心", "实验实训", "西校区轨道交通实训中心，位于西校区实训区。", List.of("轨道交通实训中心", "轨道实训中心")),
+        new NavTarget("west-canteen", "WEST", "郑工餐厅", "生活餐饮", "西校区郑工餐厅，位于叁号实验楼附近。", List.of("郑工餐厅", "西校区餐厅", "西区餐厅", "西校区食堂", "西区食堂")),
+        new NavTarget("west-steel-canteen", "WEST", "钢结构餐厅", "生活餐饮", "西校区钢结构餐厅，服务西校区师生用餐。", List.of("钢结构餐厅")),
+        new NavTarget("west-siyuan-canteen", "WEST", "思源餐厅", "生活餐饮", "西校区思源餐厅，服务西校区生活区用餐。", List.of("思源餐厅", "思源食府", "思源食堂", "思源")),
+        new NavTarget("west-dorm-4", "WEST", "4号公寓楼", "学生公寓", "西校区4号公寓楼。", List.of("4号公寓楼", "西校区4号楼", "4号公寓")),
+        new NavTarget("west-dorm-5", "WEST", "5号宿舍楼", "学生公寓", "西校区5号宿舍楼，位于万庄路与107国道交叉口东北方向。", List.of("5号宿舍楼", "西校区5号楼")),
+        new NavTarget("west-dorm-7", "WEST", "7号宿舍楼", "学生公寓", "西校区7号宿舍楼，位于育才路与桃园路交叉口西北方向。", List.of("7号宿舍楼", "西校区7号楼")),
+        new NavTarget("west-sports-ground", "WEST", "西校区体育场", "文体场馆", "西校区田径运动场地，位于西校区生活与教学区之间。", List.of("西校区体育场", "西区体育场", "西校区操场", "西区操场")),
+        new NavTarget("west-flag-square", "WEST", "国旗广场", "校园景观", "西校区国旗广场。", List.of("国旗广场", "西校区国旗广场"))
     );
     private NavTarget resolveNavTarget(String text) {
         if(text==null || text.isBlank()) return null;
-        String clean=text.trim();
+        String clean=text.trim().toLowerCase(Locale.ROOT);
+        boolean preferWest=clean.contains("西校区") || clean.contains("西区");
+        boolean preferEast=clean.contains("东校区") || clean.contains("东区");
+        NavTarget best=null; int bestScore=-1; int bestPos=-1;
         for(var t:NAV_TARGETS) {
+            int campusBonus=(preferWest && "WEST".equals(t.campus())) || (preferEast && "EAST".equals(t.campus())) ? 80 : 0;
             for(var alias:t.aliases()) {
-                if(clean.equalsIgnoreCase(alias) || clean.contains(alias) || alias.contains(clean)) return t;
+                String a=alias.toLowerCase(Locale.ROOT);
+                int score=0, pos=-1;
+                if(clean.equals(a)) { score=1000+a.length()+campusBonus; pos=0; }
+                else if((pos=clean.lastIndexOf(a))>=0) { score=100+a.length()*4+campusBonus; }
+                else if(clean.length()>=2 && a.contains(clean)) { score=20+clean.length()+campusBonus; pos=0; }
+                if(score>bestScore || (score==bestScore && pos>bestPos)) {
+                    bestScore=score; bestPos=pos; best=t;
+                }
             }
         }
-        return null;
+        return bestScore>0 ? best : null;
     }
     private ToolResult navigation(String destination,String origin) {
-        String from=(origin==null || origin.isBlank())?"南门":origin.trim();
+        String rawOrigin=(origin==null || origin.isBlank())?"南门":origin.trim();
+        NavTarget start=resolveNavTarget(rawOrigin);
         NavTarget target=resolveNavTarget(destination);
         if(target==null) {
-            return result("campus_navigation","NEEDS_INPUT","未找到指定校园地点。支持查询图书馆、毓秀楼、静逸楼、锦绣餐厅、红体馆、行政楼等 30 处主要场所。",0,List.of(),List.of(),"/campus/explore");
+            return result("campus_navigation","NEEDS_INPUT","未找到指定校园地点。支持查询东校区（图书馆、毓秀楼、锦绣餐厅、红体馆等）与西校区（明德楼、西校区图书馆、诚毅楼、郑工餐厅等）50 处主要场所。",0,List.of(),List.of(),"/campus/explore");
         }
-        String path="/campus/explore?navigate="+target.id();
-        Fact fact=new Fact("nav:"+target.id(),target.name()+"（"+target.category()+"）",target.guide(),path);
-        String msg=String.format("已给出从【%s】前往【%s】的示意导览。点击查看 3D 校园全景与高亮漫游（场景不用于实地导航，距离未实测）。",from,target.name());
+        String from=start!=null?start.name():rawOrigin;
+        String path="WEST".equals(target.campus()) ? "/campus/explore?campus=WEST&navigate="+target.id() : "/campus/explore?navigate="+target.id();
+        String guideText=target.guide();
+        if(start!=null) {
+            if(start.id().equals(target.id())) {
+                guideText="你当前已在【"+target.name()+"】附近。"+target.guide();
+            } else if(!start.campus().equals(target.campus())) {
+                String startCampus="WEST".equals(start.campus())?"西校区（新村镇107国道路东）":"东校区（学院路16号）";
+                String endCampus="WEST".equals(target.campus())?"西校区（新村镇107国道路东）":"东校区（学院路16号）";
+                guideText="【"+start.name()+"】位于"+startCampus+"，【"+target.name()+"】位于"+endCampus+"，两地属于跨校区行程，建议结合校区间交通前往。"+target.guide();
+            } else {
+                var shortest=AgentNavGraph.shortestRoute(start.id(),target.id());
+                if(shortest.isPresent()) {
+                    var r=shortest.get();
+                    guideText="步行推荐路线："+String.join(" → ",r.waypoints())+"（估算距离约 "+r.estimatedMeters()+" 米，步行约 "+r.estimatedMinutes()+" 分钟；校内示意图供参考）。"+target.guide();
+                } else if("WEST".equals(target.campus())) {
+                    guideText="从西校区【"+start.name()+"】（"+start.category()+"）出发，沿西校区校内道路（桃园路 / 育才路 / 万庄路）前往【"+target.name()+"】（"+target.category()+"）。"+target.guide();
+                } else {
+                    guideText="从东校区【"+start.name()+"】（"+start.category()+"）出发，沿校内主干道（中环路 / 人文大道 / 英才大道）前往【"+target.name()+"】（"+target.category()+"）。"+target.guide();
+                }
+            }
+        }
+        Fact fact=new Fact("nav:"+target.id(),target.name()+"（"+("WEST".equals(target.campus())?"西校区":"东校区")+" · "+target.category()+"）",guideText,path);
+        String msg=String.format("已给出从【%s】前往【%s】的步行路线与 3D 校园导览（场景不用于实地导航，距离为图路网估算）。",from,target.name());
         return result("campus_navigation","OK",msg,1,List.of(fact),List.of(),path);
+    }
+    private ToolResult staffAdvice(CampusPrincipal user) {
+        var summary=taskAggregator.aggregate(user);
+        var items=new ArrayList<Fact>();
+        if(identities.permissions(user.id()).contains("repair:dispatch")) {
+            var submitted=repairs.list(user,"dispatch","SUBMITTED",1,50);
+            var active=repairs.list(user,"dispatch","ASSIGNED",1,50);
+            var techCounts=new LinkedHashMap<String,Long>();
+            for(var item:active.items()) {
+                String tech=item.technicianName()==null||item.technicianName().isBlank()?"待指派":item.technicianName();
+                techCounts.merge(tech,1L,Long::sum);
+            }
+            String loadHint=techCounts.isEmpty()?"暂无在途已派单任务":"当前已派单人数/任务分布："+techCounts.entrySet().stream().limit(5).map(e->e.getKey()+" "+e.getValue()+"单").reduce((a,b)->a+"、"+b).orElse("");
+            items.add(new Fact("advice:dispatch","后勤分诊负载参考","待分诊 "+submitted.total()+" 条；"+loadHint+"。建议优先分配当前待修积压较少的人员，进入派单页核对并操作。", "/logistics/repairs/dispatch"));
+        }
+        if(identities.permissions(user.id()).stream().anyMatch(x->List.of("leave:review","certificate:review","housing:review","reservation:review").contains(x))) {
+            long reviewTotal=summary.domainCounts().getOrDefault("leave",0L)+summary.domainCounts().getOrDefault("certificate",0L)+summary.domainCounts().getOrDefault("housingReview",0L)+summary.domainCounts().getOrDefault("reservation",0L);
+            items.add(new Fact("advice:review","审核与规范退回参考","当前共有 "+reviewTotal+" 项待审核申请。规范退回话术参考：「请补充清晰事由/证明材料并核对起止时间或地点后重新提交」。助手不代替审批。", "/workbench"));
+        }
+        return result("staff_triage_advice",items.isEmpty()?"NO_DATA":"OK","已按当前岗位生成只读分诊与审核参考建议（不自动派单或审批）。",items.size(),items,List.of(),"/workbench");
+    }
+    private ToolResult platformDigest(CampusPrincipal user) {
+        var summary=taskAggregator.aggregate(user);
+        var facts=new ArrayList<Fact>();
+        facts.add(new Fact("digest:pending","当前岗权全部待办汇总","共计 "+summary.totalPending()+" 项未办事项"+(summary.complete()?"（全部域读取完整）":"（部分业务读取待重试）"),"/workbench"));
+        summary.domainCounts().forEach((k,v)->{
+            if(v>0) facts.add(new Fact("digest:"+k,"业务待办 · "+k,v+" 条待处理","/workbench"));
+        });
+        return result("platform_digest","OK","已生成只读岗位运行简报，完整明细请在工作台查看。",facts.size(),facts,List.of(),"/workbench");
     }
     public ToolResult failure(String name,ApiException ex) {
         return result(name,ex.status().value()==403?"DENIED":ex.status().value()==404?"NOT_FOUND":ex.code().equals("TERM_SELECTION_REQUIRED")?"NEEDS_INPUT":"ERROR",ex.getMessage(),0,List.of(),List.of(),null);

@@ -56,8 +56,16 @@ onUnmounted(() => registerConfirmHost(false));
   color: var(--color-ink);
   box-shadow: var(--shadow-panel);
 }
+.confirm-dialog[open] {
+  animation: confirm-dialog-in 0.22s var(--ease-campus);
+}
 .confirm-dialog::backdrop {
-  background: rgb(33 60 53 / 40%);
+  background: rgb(33 60 53 / 42%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.confirm-dialog[open]::backdrop {
+  animation: confirm-backdrop-in 0.2s ease-out;
 }
 .confirm-dialog-body {
   display: grid;
@@ -125,5 +133,32 @@ onUnmounted(() => registerConfirmHost(false));
 .confirm-dialog-actions button:focus-visible {
   outline: none;
   box-shadow: var(--focus-ring);
+}
+
+@keyframes confirm-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes confirm-backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-dialog[open],
+  .confirm-dialog[open]::backdrop {
+    animation: none;
+  }
 }
 </style>

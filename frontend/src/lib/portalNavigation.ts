@@ -21,6 +21,7 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
       'leave:review',
       'certificate:review',
       'reservation:review',
+      'reservation:manage',
       'housing:review',
       'housing:assign',
       'housing:configure',
@@ -61,7 +62,6 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     ['academic:manage', '/academic', '教务信息维护', 'notebook'],
     ['leave:review', '/student-affairs/leave', '班级请假处理', 'check'],
     ['certificate:review', '/student-affairs/certificates', '学院证明处理', 'file'],
-    ['reservation:review', '/student-affairs/reservations', '借用审批', 'reservation'],
     ['housing:review', '/student-affairs/housing', '学院调宿初审', 'bed'],
     ['housing:assign', '/housing/assignments', '住宿办理', 'bed'],
     ['repair:dispatch', '/logistics/repairs/dispatch', '后勤分诊派单', 'wrench'],
@@ -69,6 +69,12 @@ export function portalNavigation(permissions: readonly string[]): PortalNavGroup
     ['repair:work', '/logistics/repairs/tasks', '我的维修任务', 'wrench'],
   ]
   for (const [permission, to, label, icon] of workEntries) if (can(permission)) work.push({ to, label, icon })
+  if (can('reservation:review') || can('reservation:manage'))
+    work.push({
+      to: '/student-affairs/reservations',
+      label: can('reservation:review') ? '借用审批' : '场地资源管理',
+      icon: 'reservation',
+    })
   if (can('payment:manage') || can('payment:review'))
     work.push({ to: '/finance/payments', label: '财务收费', icon: 'file' })
   if (can('payment:source')) work.push({ to: '/payment-bases', label: '收费依据', icon: 'clipboard' })

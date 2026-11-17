@@ -42,4 +42,17 @@ public final class AgentModels {
     public record Capability(String name,String title) {}
     public record Capabilities(boolean deepseekReady,String model,List<Capability> tools,String message) {}
     public record Answer(String runId,Mode mode,boolean modelUsed,String summary,List<ToolResult> results,LocalDateTime queriedAt,Integer promptTokens,Integer completionTokens) {}
+    public record FeedbackInput(@NotBlank @Pattern(regexp="UP|DOWN") String rating,@Size(max=300) String comment) {}
+    public record FeedbackSummary(String runId,String rating,String comment,LocalDateTime updatedAt) {}
+    public record RunMetrics(long totalRuns,long successRuns,long partialRuns,long failedRuns,long refusedRuns,long avgDurationMs,long totalPromptTokens,long totalCompletionTokens,List<String> topTools,long upFeedbacks,long downFeedbacks) {
+        public RunMetrics(long totalRuns,long successRuns,long partialRuns,long failedRuns,long refusedRuns,long avgDurationMs,long totalPromptTokens,long totalCompletionTokens,List<String> topTools) {
+            this(totalRuns,successRuns,partialRuns,failedRuns,refusedRuns,avgDurationMs,totalPromptTokens,totalCompletionTokens,topTools,0L,0L);
+        }
+    }
+    public record OverviewMetrics(long totalRuns,long successRuns,long partialRuns,long failedRuns,long refusedRuns,long avgDurationMs,long totalPromptTokens,long totalCompletionTokens,long activeUsers,long upFeedbacks,long downFeedbacks,List<String> topTools,long p95DurationMs,java.util.Map<String,Long> outcomeCounts,List<String> negativeReasons) {
+        public OverviewMetrics(long totalRuns,long successRuns,long partialRuns,long failedRuns,long refusedRuns,long avgDurationMs,long totalPromptTokens,long totalCompletionTokens,long activeUsers,long upFeedbacks,long downFeedbacks,List<String> topTools) {
+            this(totalRuns,successRuns,partialRuns,failedRuns,refusedRuns,avgDurationMs,totalPromptTokens,totalCompletionTokens,activeUsers,upFeedbacks,downFeedbacks,topTools,avgDurationMs,java.util.Map.of(),List.of());
+        }
+    }
+    public record Briefing(long unreadNotices,long pendingReviews,String housingExpiringNote,List<String> suggestions) {}
 }

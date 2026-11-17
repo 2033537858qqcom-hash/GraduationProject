@@ -22,6 +22,7 @@ public final class AgentGoalModels {
      public RepairFields repairFields;
      public LeaveFields leaveFields;
      public CertificateFields certificateFields;
+     public HousingFields housingFields;
      public boolean cancelled,submissionVerified,watching,trackingComplete;
      public String submissionHash,lastBusinessStatus;
      public Integer submittedVersion;

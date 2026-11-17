@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { History, MapPin, Plus, RefreshCw, UsersRound } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime } from '../lib/format';
 import { currentUser } from '../stores/auth';
 import {
   repairCapabilities,
@@ -14,6 +15,10 @@ import {
 import type { RepairAudit, RepairCatalog, RepairLocation, RepairScope } from '../repairSettings';
 import type { Paged } from '../foundation';
 import BaseSelect from '../components/BaseSelect.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
+import '../styles/repair-workflow.css';
+import '../styles/repair-settings.css';
 const root = '/admin/repair-settings';
 const catalog = ref<RepairCatalog | null>(null);
 const locations = ref<Paged<RepairLocation>>({ items: [], total: 0, page: 1, pageSize: 20 });
@@ -486,17 +491,18 @@ onBeforeRouteUpdate(allowLeave);
         </div>
       </form>
     </dialog>
-    <div class="page-heading-row">
-      <div>
-        <span class="portal-context">后勤服务配置</span>
-        <h1>报修地点与人员范围</h1>
-        <p class="muted">维护开放地点，配置后勤和维修人员负责的校区、类别及具体地点。</p>
-      </div>
-      <button class="button compact" :disabled="loading || busy" @click="refresh">
-        <RefreshCw :size="15" />
-        刷新配置
-      </button>
-    </div>
+    <ServicePageHeader
+      context="后勤服务配置"
+      title="报修地点与人员范围"
+      description="维护开放地点，配置后勤和维修人员负责的校区、类别及具体地点。"
+    >
+      <template #actions>
+        <button class="button compact" :disabled="loading || busy" @click="refresh">
+          <RefreshCw :size="15" />
+          刷新配置
+        </button>
+      </template>
+    </ServicePageHeader>
     <p v-if="error && !stateTarget" class="alert" role="alert">{{ error }}</p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
     <div class="repair-tabs" role="group" aria-label="报修配置分类">
@@ -518,7 +524,7 @@ onBeforeRouteUpdate(allowLeave);
         {{ tab === 'LOCATION' ? '添加地点' : '添加负责范围' }}
       </button>
     </div>
-    <p v-if="loading" role="status">正在读取地点和人员配置…</p>
+    <SkeletonBlock v-if="loading" variant="cards" :rows="4" label="正在读取地点和人员配置…" />
     <template v-else>
       <p v-if="tab === 'LOCATION' && !locations.items.length" class="empty-state">
         还没有开放报修地点。可关联已完善的教室，或配置校园公共区域。
@@ -526,53 +532,443 @@ onBeforeRouteUpdate(allowLeave);
       <p v-if="tab === 'SCOPE' && !scopes.items.length" class="empty-state">
         还没有负责范围。请先在账号与组织管理中赋予后勤或维修岗位。
       </p>
+      <section v-if="editing && selectedId === null" class="portal-panel repair-editor" style="margin-bottom: 18px">
+        <div class="section-heading">
+          <h2 id="repair-editor-heading">添加{{ tab === 'LOCATION' ? '报修地点' : '人员负责范围' }}</h2>
+          <button class="button compact" type="button" :disabled="busy" @click="refresh">收起表单 ×</button>
+        </div>
+        <form class="editor-form repair-editor-form" @submit.prevent="save">
+          <label>
+            负责校区
+            <BaseSelect v-model="form.campusId" :options="campusOptions" :disabled="busy" />
+          </label>
+          <template v-if="tab === 'LOCATION'">
+            <label>
+              地点类型
+              <BaseSelect v-model="form.kind" :options="kindOptions" :disabled="busy" />
+            </label>
+            <label>
+              地点编号
+              <input
+                v-model="form.code"
+                required
+                maxlength="64"
+                pattern="[A-Za-z0-9_-]+"
+                :disabled="busy"
+                placeholder="例如 PUBLIC-EAST-01"
+              />
+            </label>
+            <label>
+              地点名称
+              <input
+                v-model="form.name"
+                required
+                maxlength="100"
+                :disabled="busy"
+                placeholder="填写便于识别的地点名称"
+              />
+            </label>
+            <label v-if="form.kind === 'CLASSROOM'">
+              关联教室
+              <BaseSelect v-model="form.classroomResourceId" :options="sourceRoomOptions" :disabled="busy" />
+            </label>
+            <label v-if="['CLASSROOM', 'BUILDING_COMMON'].includes(form.kind)">
+              {{ form.kind === 'BUILDING_COMMON' ? '关联楼栋' : '关联楼栋（可选）' }}
+              <BaseSelect v-model="form.buildingId" :options="sourceBuildingOptions" :disabled="busy" />
+            </label>
+            <p v-if="form.kind === 'BUILDING_COMMON' && !sourceBuildings.length" class="muted repair-form-wide">
+              当前校区没有已建档楼栋，可先关联教室或配置校园公共区域。
+            </p>
+            <label v-if="form.kind === 'DORM_ROOM'">
+              关联宿舍房间
+              <BaseSelect v-model="form.dormRoomId" :options="sourceDormRoomOptions" :disabled="busy" />
+            </label>
+            <p v-if="form.kind === 'DORM_ROOM'" class="muted repair-form-wide">
+              仅当前入住该房间的学生可选择此地点。{{
+                sourceDormRooms.length
+                  ? '变更入住后，旧工单保留历史并停止维修办理。'
+                  : '暂无可用房间，请先在住宿资源配置中建档。'
+              }}来源选择最多显示前 1000 条已建档房间。
+            </p>
+            <label>
+              资料标记
+              <BaseSelect v-model="form.provenance" :options="provenanceOptions" :disabled="busy" />
+            </label>
+            <label class="repair-form-wide">
+              <div class="label-heading-row">
+                <span>位置提示</span>
+                <small class="muted">选填 · 最多 300 字</small>
+              </div>
+              <textarea
+                v-model="form.detailHint"
+                maxlength="300"
+                rows="3"
+                :disabled="busy"
+                placeholder="例如出入口、楼层或明显标识（便于报修人员快速定位）"
+              />
+            </label>
+          </template>
+          <template v-else>
+            <label>
+              岗位职责
+              <BaseSelect v-model="form.capability" :options="capabilityOptions" :disabled="busy" />
+            </label>
+            <label>
+              负责人员
+              <BaseSelect v-model="form.userId" :options="peopleOptions" :disabled="busy" />
+            </label>
+            <label>
+              故障类别
+              <BaseSelect v-model="form.category" :options="categoryOptions" :disabled="busy" />
+            </label>
+            <label class="repair-form-wide">
+              查找具体地点
+              <input
+                v-model="scopeSearch"
+                maxlength="100"
+                :disabled="busy"
+                placeholder="按地点名称或编号搜索，可留空"
+              />
+              <button class="text-button" type="button" :disabled="busy || scopeLoading" @click="loadScopeLocations">
+                搜索地点
+              </button>
+            </label>
+            <label class="repair-form-wide">
+              具体地点（可选）
+              <BaseSelect
+                v-model="form.locationId"
+                :options="scopeLocationOptions"
+                :disabled="busy || scopeLoading"
+                @change="
+                  selectedLocationName = scopeLocations.find(item => item.id === Number(form.locationId))?.name ?? ''
+                "
+              />
+              <small v-if="scopeTotal > 100">
+                共找到 {{ scopeTotal }} 个地点，当前显示前 100 个，请输入名称缩小范围。
+              </small>
+            </label>
+          </template>
+          <label class="repair-form-wide">
+            <div class="label-heading-row">
+              <span>配置原因</span>
+              <small class="muted">必填 · 最多 200 字</small>
+            </div>
+            <textarea
+              v-model="form.reason"
+              required
+              maxlength="200"
+              rows="3"
+              :disabled="busy"
+              placeholder="说明本次地点建档或负责范围变更的具体原因"
+            />
+          </label>
+          <div class="form-actions repair-form-wide">
+            <button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存配置' }}</button>
+            <button class="button compact" type="button" :disabled="busy" @click="refresh">取消编辑</button>
+          </div>
+        </form>
+      </section>
+
       <div v-if="tab === 'LOCATION'" class="repair-card-grid">
-        <article v-for="item in locations.items" :key="item.id" class="portal-panel repair-config-card">
-          <div class="section-heading">
-            <h2>{{ item.name }}</h2>
-            <span class="repair-status" :class="{ inactive: !item.available }">
-              {{ item.available ? '已开放' : '暂不可用' }}
-            </span>
-          </div>
-          <p class="repair-card-main">{{ item.campusName }} · {{ repairKinds[item.kind] }}</p>
-          <p class="muted">{{ item.sourceName ? '关联：' + item.sourceName : item.detailHint || '校园公共区域' }}</p>
-          <p class="repair-meta">
-            {{ repairProvenance[item.provenance] }}
-            <span v-if="item.buildingVerificationStatus && item.buildingVerificationStatus !== 'VERIFIED'">
-              · 楼栋资料待核验
-            </span>
-          </p>
-          <p v-if="!item.available" class="repair-meta">{{ item.availabilityMessage }}</p>
-          <div class="repair-card-actions">
-            <button class="text-button" :disabled="busy" @click="edit(item)">编辑地点</button>
-            <button class="text-button" :disabled="busy" @click="changeState(item)">
-              {{ item.enabled ? '停用地点' : '启用地点' }}
-            </button>
-            <button class="text-button" :disabled="busy" @click="showHistory(item)">修改记录</button>
-          </div>
-        </article>
+        <template v-for="item in locations.items" :key="item.id">
+          <article
+            class="portal-panel repair-config-card"
+            :class="{
+              'is-selected':
+                selectedId === item.id || (historyTarget?.type === 'LOCATION' && historyTarget.id === item.id),
+            }"
+          >
+            <div class="section-heading">
+              <h2>{{ item.name }}</h2>
+              <span class="repair-status" :class="{ inactive: !item.available }">
+                {{ item.available ? '已开放' : '暂不可用' }}
+              </span>
+            </div>
+            <p class="repair-card-main">{{ item.campusName }} · {{ repairKinds[item.kind] }}</p>
+            <p class="muted">{{ item.sourceName ? '关联：' + item.sourceName : item.detailHint || '校园公共区域' }}</p>
+            <p class="repair-meta">
+              {{ repairProvenance[item.provenance] }}
+              <span v-if="item.buildingVerificationStatus && item.buildingVerificationStatus !== 'VERIFIED'">
+                · 楼栋资料待核验
+              </span>
+            </p>
+            <p v-if="!item.available" class="repair-meta">{{ item.availabilityMessage }}</p>
+            <div class="repair-card-actions">
+              <button
+                class="text-button"
+                :disabled="busy"
+                @click="editing && selectedId === item.id ? refresh() : edit(item)"
+              >
+                {{ editing && selectedId === item.id ? '收起编辑 ▴' : '编辑地点 ▾' }}
+              </button>
+              <button class="text-button" :disabled="busy" @click="changeState(item)">
+                {{ item.enabled ? '停用地点' : '启用地点' }}
+              </button>
+              <button
+                class="text-button"
+                :disabled="busy"
+                @click="
+                  historyTarget?.type === 'LOCATION' && historyTarget.id === item.id
+                    ? (historyTarget = null)
+                    : showHistory(item)
+                "
+              >
+                {{ historyTarget?.type === 'LOCATION' && historyTarget.id === item.id ? '收起记录 ▴' : '修改记录 ▾' }}
+              </button>
+            </div>
+          </article>
+          <section v-if="editing && selectedId === item.id" class="portal-panel repair-editor repair-inline-folio">
+            <div class="section-heading">
+              <h2 id="repair-editor-heading">编辑报修地点 · {{ item.name }}</h2>
+              <button class="button compact" type="button" :disabled="busy" @click="refresh">收起 ×</button>
+            </div>
+            <form class="editor-form repair-editor-form" @submit.prevent="save">
+              <label>
+                负责校区
+                <BaseSelect v-model="form.campusId" :options="campusOptions" disabled />
+              </label>
+              <label>
+                地点类型
+                <BaseSelect v-model="form.kind" :options="kindOptions" disabled />
+              </label>
+              <label>
+                地点编号
+                <input v-model="form.code" required maxlength="64" pattern="[A-Za-z0-9_-]+" disabled />
+              </label>
+              <label>
+                地点名称
+                <input
+                  v-model="form.name"
+                  required
+                  maxlength="100"
+                  :disabled="busy"
+                  placeholder="填写便于识别的地点名称"
+                />
+              </label>
+              <label>
+                资料标记
+                <BaseSelect v-model="form.provenance" :options="provenanceOptions" :disabled="busy" />
+              </label>
+              <label class="repair-form-wide">
+                <div class="label-heading-row">
+                  <span>位置提示</span>
+                  <small class="muted">选填 · 最多 300 字</small>
+                </div>
+                <textarea
+                  v-model="form.detailHint"
+                  maxlength="300"
+                  rows="3"
+                  :disabled="busy"
+                  placeholder="例如出入口、楼层或明显标识（便于报修人员快速定位）"
+                />
+              </label>
+              <label class="repair-form-wide">
+                <div class="label-heading-row">
+                  <span>配置原因</span>
+                  <small class="muted">必填 · 最多 200 字</small>
+                </div>
+                <textarea
+                  v-model="form.reason"
+                  required
+                  maxlength="200"
+                  rows="3"
+                  :disabled="busy"
+                  placeholder="说明本次地点建档或负责范围变更的具体原因"
+                />
+              </label>
+              <div class="form-actions repair-form-wide">
+                <button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存配置' }}</button>
+                <button class="button compact" type="button" :disabled="busy" @click="refresh">取消编辑</button>
+              </div>
+            </form>
+          </section>
+          <section
+            v-if="historyTarget?.type === 'LOCATION' && historyTarget.id === item.id"
+            class="portal-panel repair-history repair-inline-folio"
+          >
+            <div class="section-heading">
+              <h2>
+                <History :size="17" />
+                {{ historyTarget.name }} · 修改记录
+              </h2>
+              <button class="button compact" type="button" @click="historyTarget = null">收起记录 ×</button>
+            </div>
+            <ol class="repair-history-list">
+              <li v-for="record in history.items" :key="record.id">
+                <strong>{{ record.actorName }} · {{ formatDateTime(record.createdAt) }}</strong>
+                <p>{{ record.summary }}</p>
+                <small>原因：{{ record.reason }}</small>
+              </li>
+            </ol>
+            <div v-if="history.total > 0" class="repair-pagination">
+              <button
+                class="button compact"
+                :disabled="busy || history.page <= 1"
+                @click="historyPage(history.page - 1)"
+              >
+                上一页
+              </button>
+              <span>第 {{ history.page }} 页 · 共 {{ history.total }} 条</span>
+              <button
+                class="button compact"
+                :disabled="busy || history.page * history.pageSize >= history.total"
+                @click="historyPage(history.page + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </section>
+        </template>
       </div>
       <div v-else class="repair-card-grid">
-        <article v-for="item in scopes.items" :key="item.id" class="portal-panel repair-config-card">
-          <div class="section-heading">
-            <h2>{{ item.userName }}</h2>
-            <span class="repair-status" :class="{ inactive: !item.effective }">{{ item.effectivenessMessage }}</span>
-          </div>
-          <p class="repair-card-main">
-            {{ repairCapabilities[item.capability] }} ·
-            {{ catalog?.categories.find(c => c.code === item.category)?.name }}
-          </p>
-          <p class="muted">{{ item.campusName }} · {{ item.locationName ?? '该校区全部开放地点' }}</p>
-          <div class="repair-card-actions">
-            <button class="text-button" :disabled="busy" @click="edit(item)">编辑负责范围</button>
-            <button class="text-button" :disabled="busy" @click="changeState(item)">
-              {{ item.enabled ? '停用范围' : '启用范围' }}
-            </button>
-            <button class="text-button" :disabled="busy" @click="showHistory(item)">修改记录</button>
-          </div>
-        </article>
+        <template v-for="item in scopes.items" :key="item.id">
+          <article
+            class="portal-panel repair-config-card"
+            :class="{
+              'is-selected':
+                selectedId === item.id || (historyTarget?.type === 'SCOPE' && historyTarget.id === item.id),
+            }"
+          >
+            <div class="section-heading">
+              <h2>{{ item.userName }}</h2>
+              <span class="repair-status" :class="{ inactive: !item.effective }">{{ item.effectivenessMessage }}</span>
+            </div>
+            <p class="repair-card-main">
+              {{ repairCapabilities[item.capability] }} ·
+              {{ catalog?.categories.find(c => c.code === item.category)?.name }}
+            </p>
+            <p class="muted">{{ item.campusName }} · {{ item.locationName ?? '该校区全部开放地点' }}</p>
+            <div class="repair-card-actions">
+              <button
+                class="text-button"
+                :disabled="busy"
+                @click="editing && selectedId === item.id ? refresh() : edit(item)"
+              >
+                {{ editing && selectedId === item.id ? '收起编辑 ▴' : '编辑负责范围 ▾' }}
+              </button>
+              <button class="text-button" :disabled="busy" @click="changeState(item)">
+                {{ item.enabled ? '停用范围' : '启用范围' }}
+              </button>
+              <button
+                class="text-button"
+                :disabled="busy"
+                @click="
+                  historyTarget?.type === 'SCOPE' && historyTarget.id === item.id
+                    ? (historyTarget = null)
+                    : showHistory(item)
+                "
+              >
+                {{ historyTarget?.type === 'SCOPE' && historyTarget.id === item.id ? '收起记录 ▴' : '修改记录 ▾' }}
+              </button>
+            </div>
+          </article>
+          <section v-if="editing && selectedId === item.id" class="portal-panel repair-editor repair-inline-folio">
+            <div class="section-heading">
+              <h2 id="repair-editor-heading">编辑人员负责范围 · {{ item.userName }}</h2>
+              <button class="button compact" type="button" :disabled="busy" @click="refresh">收起 ×</button>
+            </div>
+            <form class="editor-form repair-editor-form" @submit.prevent="save">
+              <label>
+                负责校区
+                <BaseSelect v-model="form.campusId" :options="campusOptions" :disabled="busy" />
+              </label>
+              <label>
+                岗位职责
+                <BaseSelect v-model="form.capability" :options="capabilityOptions" :disabled="busy" />
+              </label>
+              <label>
+                负责人员
+                <BaseSelect v-model="form.userId" :options="peopleOptions" :disabled="busy" />
+              </label>
+              <label>
+                故障类别
+                <BaseSelect v-model="form.category" :options="categoryOptions" :disabled="busy" />
+              </label>
+              <label class="repair-form-wide">
+                查找具体地点
+                <input
+                  v-model="scopeSearch"
+                  maxlength="100"
+                  :disabled="busy"
+                  placeholder="按地点名称或编号搜索，可留空"
+                />
+                <button class="text-button" type="button" :disabled="busy || scopeLoading" @click="loadScopeLocations">
+                  搜索地点
+                </button>
+              </label>
+              <label class="repair-form-wide">
+                具体地点（可选）
+                <BaseSelect
+                  v-model="form.locationId"
+                  :options="scopeLocationOptions"
+                  :disabled="busy || scopeLoading"
+                  @change="
+                    selectedLocationName = scopeLocations.find(loc => loc.id === Number(form.locationId))?.name ?? ''
+                  "
+                />
+                <small v-if="scopeTotal > 100">
+                  共找到 {{ scopeTotal }} 个地点，当前显示前 100 个，请输入名称缩小范围。
+                </small>
+              </label>
+              <label class="repair-form-wide">
+                <div class="label-heading-row">
+                  <span>配置原因</span>
+                  <small class="muted">必填 · 最多 200 字</small>
+                </div>
+                <textarea
+                  v-model="form.reason"
+                  required
+                  maxlength="200"
+                  rows="3"
+                  :disabled="busy"
+                  placeholder="说明本次地点建档或负责范围变更的具体原因"
+                />
+              </label>
+              <div class="form-actions repair-form-wide">
+                <button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存配置' }}</button>
+                <button class="button compact" type="button" :disabled="busy" @click="refresh">取消编辑</button>
+              </div>
+            </form>
+          </section>
+          <section
+            v-if="historyTarget?.type === 'SCOPE' && historyTarget.id === item.id"
+            class="portal-panel repair-history repair-inline-folio"
+          >
+            <div class="section-heading">
+              <h2>
+                <History :size="17" />
+                {{ historyTarget.name }} · 修改记录
+              </h2>
+              <button class="button compact" type="button" @click="historyTarget = null">收起记录 ×</button>
+            </div>
+            <ol class="repair-history-list">
+              <li v-for="record in history.items" :key="record.id">
+                <strong>{{ record.actorName }} · {{ formatDateTime(record.createdAt) }}</strong>
+                <p>{{ record.summary }}</p>
+                <small>原因：{{ record.reason }}</small>
+              </li>
+            </ol>
+            <div v-if="history.total > 0" class="repair-pagination">
+              <button
+                class="button compact"
+                :disabled="busy || history.page <= 1"
+                @click="historyPage(history.page - 1)"
+              >
+                上一页
+              </button>
+              <span>第 {{ history.page }} 页 · 共 {{ history.total }} 条</span>
+              <button
+                class="button compact"
+                :disabled="busy || history.page * history.pageSize >= history.total"
+                @click="historyPage(history.page + 1)"
+              >
+                下一页
+              </button>
+            </div>
+          </section>
+        </template>
       </div>
-      <div class="repair-pagination">
+      <div v-if="(tab === 'LOCATION' ? locations.total : scopes.total) > 0" class="repair-pagination">
         <span>共 {{ tab === 'LOCATION' ? locations.total : scopes.total }} 条</span>
         <button
           class="button compact"
@@ -596,172 +992,6 @@ onBeforeRouteUpdate(allowLeave);
         </button>
       </div>
     </template>
-    <section v-if="editing" class="portal-panel repair-editor">
-      <h2 id="repair-editor-heading">
-        {{ selectedId ? '编辑' : '添加' }}{{ tab === 'LOCATION' ? '报修地点' : '人员负责范围' }}
-      </h2>
-      <form class="editor-form repair-editor-form" @submit.prevent="save">
-        <label>
-          负责校区
-          <BaseSelect
-            v-model="form.campusId"
-            :options="campusOptions"
-            :disabled="busy || (tab === 'LOCATION' && selectedId !== null)"
-          />
-        </label>
-        <template v-if="tab === 'LOCATION'">
-          <label>
-            地点类型
-            <BaseSelect v-model="form.kind" :options="kindOptions" :disabled="busy || selectedId !== null" />
-          </label>
-          <label>
-            地点编号
-            <input
-              v-model="form.code"
-              required
-              maxlength="64"
-              pattern="[A-Za-z0-9_-]+"
-              :disabled="busy || selectedId !== null"
-              placeholder="例如 PUBLIC-EAST-01"
-            />
-          </label>
-          <label>
-            地点名称
-            <input v-model="form.name" required maxlength="100" :disabled="busy" placeholder="填写便于识别的地点名称" />
-          </label>
-          <label v-if="form.kind === 'CLASSROOM'">
-            关联教室
-            <BaseSelect
-              v-model="form.classroomResourceId"
-              :options="sourceRoomOptions"
-              :disabled="busy || selectedId !== null"
-            />
-          </label>
-          <label v-if="['CLASSROOM', 'BUILDING_COMMON'].includes(form.kind)">
-            {{ form.kind === 'BUILDING_COMMON' ? '关联楼栋' : '关联楼栋（可选）' }}
-            <BaseSelect
-              v-model="form.buildingId"
-              :options="sourceBuildingOptions"
-              :disabled="busy || selectedId !== null"
-            />
-          </label>
-          <p v-if="form.kind === 'BUILDING_COMMON' && !sourceBuildings.length" class="muted repair-form-wide">
-            当前校区没有已建档楼栋，可先关联教室或配置校园公共区域。
-          </p>
-          <label v-if="form.kind === 'DORM_ROOM'">
-            关联宿舍房间
-            <BaseSelect
-              v-model="form.dormRoomId"
-              :options="sourceDormRoomOptions"
-              :disabled="busy || selectedId !== null"
-            />
-          </label>
-          <p v-if="form.kind === 'DORM_ROOM'" class="muted repair-form-wide">
-            仅当前入住该房间的学生可选择此地点。{{
-              sourceDormRooms.length
-                ? '变更入住后，旧工单保留历史并停止维修办理。'
-                : '暂无可用房间，请先在住宿资源配置中建档。'
-            }}来源选择最多显示前 1000 条已建档房间。
-          </p>
-          <label>
-            资料标记
-            <BaseSelect v-model="form.provenance" :options="provenanceOptions" :disabled="busy" />
-          </label>
-          <label class="repair-form-wide">
-            <div class="label-heading-row">
-              <span>位置提示</span>
-              <small class="muted">选填 · 最多 300 字</small>
-            </div>
-            <textarea
-              v-model="form.detailHint"
-              maxlength="300"
-              rows="3"
-              :disabled="busy"
-              placeholder="例如出入口、楼层或明显标识（便于报修人员快速定位）"
-            />
-          </label>
-        </template>
-        <template v-else>
-          <label>
-            岗位职责
-            <BaseSelect v-model="form.capability" :options="capabilityOptions" :disabled="busy" />
-          </label>
-          <label>
-            负责人员
-            <BaseSelect v-model="form.userId" :options="peopleOptions" :disabled="busy" />
-          </label>
-          <label>
-            故障类别
-            <BaseSelect v-model="form.category" :options="categoryOptions" :disabled="busy" />
-          </label>
-          <label class="repair-form-wide">
-            查找具体地点
-            <input v-model="scopeSearch" maxlength="100" :disabled="busy" placeholder="按地点名称或编号搜索，可留空" />
-            <button class="text-button" type="button" :disabled="busy || scopeLoading" @click="loadScopeLocations">
-              搜索地点
-            </button>
-          </label>
-          <label class="repair-form-wide">
-            具体地点（可选）
-            <BaseSelect
-              v-model="form.locationId"
-              :options="scopeLocationOptions"
-              :disabled="busy || scopeLoading"
-              @change="
-                selectedLocationName = scopeLocations.find(item => item.id === Number(form.locationId))?.name ?? ''
-              "
-            />
-            <small v-if="scopeTotal > 100">
-              共找到 {{ scopeTotal }} 个地点，当前显示前 100 个，请输入名称缩小范围。
-            </small>
-          </label>
-        </template>
-        <label class="repair-form-wide">
-          <div class="label-heading-row">
-            <span>配置原因</span>
-            <small class="muted">必填 · 最多 200 字</small>
-          </div>
-          <textarea
-            v-model="form.reason"
-            required
-            maxlength="200"
-            rows="3"
-            :disabled="busy"
-            placeholder="说明本次地点建档或负责范围变更的具体原因"
-          />
-        </label>
-        <div class="form-actions repair-form-wide">
-          <button class="button primary compact" :disabled="busy">{{ busy ? '正在保存…' : '保存配置' }}</button>
-          <button class="button compact" type="button" :disabled="busy" @click="refresh">取消编辑</button>
-        </div>
-      </form>
-    </section>
-    <section v-if="historyTarget" class="portal-panel repair-history">
-      <h2>
-        <History :size="17" />
-        {{ historyTarget.name }} · 修改记录
-      </h2>
-      <ol class="repair-history-list">
-        <li v-for="record in history.items" :key="record.id">
-          <strong>{{ record.actorName }} · {{ record.createdAt.slice(0, 16).replace('T', ' ') }}</strong>
-          <p>{{ record.summary }}</p>
-          <small>原因：{{ record.reason }}</small>
-        </li>
-      </ol>
-      <div class="repair-pagination">
-        <button class="button compact" :disabled="busy || history.page <= 1" @click="historyPage(history.page - 1)">
-          上一页
-        </button>
-        <span>第 {{ history.page }} 页 · 共 {{ history.total }} 条</span>
-        <button
-          class="button compact"
-          :disabled="busy || history.page * history.pageSize >= history.total"
-          @click="historyPage(history.page + 1)"
-        >
-          下一页
-        </button>
-      </div>
-    </section>
     <p class="data-note">
       地点关联按明确资源配置；房间文字名称不代表已关联校园楼栋。管理员配置本身不赋予私有工单和联系资料的访问权。
     </p>

@@ -195,10 +195,10 @@ async function save() {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   padding: clamp(20px, 3vw, 30px);
-  color: var(--ink, #203650);
+  color: var(--color-ink);
 }
 .venue-create-dialog::backdrop {
-  background: rgb(20 35 55 / 40%);
+  background: rgb(33 60 53 / 40%);
 }
 .venue-create-fields {
   border: 0;

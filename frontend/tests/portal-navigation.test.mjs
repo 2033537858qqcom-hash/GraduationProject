@@ -79,6 +79,11 @@ test('content, housing and resource capabilities retain their original destinati
   assert.ok(!paths(groups).includes('/admin/foundation'))
 })
 
+test('reservation:manage without reservation:review still exposes the venue management route', () => {
+  const groups = portalNavigation(['reservation:manage'])
+  assert.ok(paths(groups).includes('/student-affairs/reservations'))
+})
+
 test('the active link follows the most specific route and request-page aliases', () => {
   const groups = portalNavigation(['portal:read', 'housing:read'])
   for (const [path, target] of [

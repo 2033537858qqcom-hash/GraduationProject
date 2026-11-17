@@ -13,7 +13,12 @@ public final class AgentSessionModels {
     public record CreateSession(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey) {}
     public record Session(long id,String title,LocalDateTime createdAt,LocalDateTime updatedAt) {}
     public record Page<T>(List<T> items,long total,int page,int pageSize) {}
-    public record Turn(long id,String question,Mode mode,Context context,String status,String runId,LocalDateTime createdAt) {}
+    public record TurnLink(String label,String path) {}
+    public record Turn(long id,String question,Mode mode,Context context,String status,String runId,LocalDateTime createdAt,String answerSummary,List<TurnLink> links) {
+        public Turn(long id,String question,Mode mode,Context context,String status,String runId,LocalDateTime createdAt) {
+            this(id,question,mode,context,status,runId,createdAt,null,List.of());
+        }
+    }
     public record SessionDetail(Session session,List<Turn> turns,List<TaskSummary> tasks,boolean hasOlder) {}
     public record SessionQuery(@NotBlank @Pattern(regexp="[A-Za-z0-9_-]{8,80}") String requestKey,@NotNull @Valid Query input) {}
     public record QueryResult(Turn turn,Answer answer,boolean repeated,AgentGoalModels.View goal) {

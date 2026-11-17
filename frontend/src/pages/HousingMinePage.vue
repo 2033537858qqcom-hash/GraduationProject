@@ -6,6 +6,9 @@ import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vu
 import { BedDouble, Clock, History, Info, RefreshCw, Users, Wrench } from '@lucide/vue';
 import HousingTransferMaterials from '../components/HousingTransferMaterials.vue';
 import ServiceJourney from '../components/ServiceJourney.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
+import '../styles/repair-workflow.css';
+import '../styles/repair-settings.css';
 import { api, errorMessage } from '../lib/api';
 import { housingRequestKey, housingWhen, transferStatus, type HousingMine, type HousingTransfer } from '../housing';
 import { currentUser } from '../stores/auth';
@@ -55,7 +58,7 @@ const success = ref('');
 
 // 调宿表单与编辑状态
 const form = ref({ reason: '', preferredArea: '', materialNote: '' });
-const comment = ref('');
+const comments = ref<Record<number, string>>({});
 const editing = ref<HousingTransfer | null>(null);
 let key = housingRequestKey();
 let sequence = 0;
@@ -244,8 +247,9 @@ async function act(item: HousingTransfer, action: string) {
     error.value = '请先保存资料修改，并上传或清除所选材料。';
     return;
   }
-  if (!comment.value.trim() && !['submit', 'supplement'].includes(action)) {
-    error.value = '请填写说明';
+  const note = (comments.value[item.id] ?? '').trim();
+  if (!note && !['submit', 'supplement', 'delete'].includes(action)) {
+    error.value = '请填写说明。';
     return;
   }
   busy.value = true;
@@ -262,14 +266,16 @@ async function act(item: HousingTransfer, action: string) {
             preferredArea: item.preferredArea,
             materialNote: item.materialNote,
           }
-        : { requestKey: key, version: item.version, comment: comment.value.trim() || '提交' };
+        : { requestKey: key, version: item.version, comment: note || (action === 'delete' ? '删除草稿' : '提交') };
     await api(path, { method: 'POST', body: JSON.stringify(body) });
     key = housingRequestKey();
-    comment.value = '';
-    success.value = '已记录本次处理。';
+    comments.value[item.id] = '';
+    success.value = action === 'delete' ? '草稿已删除。' : '已记录本次处理。';
     await load();
-    await nextTick();
-    document.getElementById('transfer-' + item.id)?.scrollIntoView({ block: 'start' });
+    if (action !== 'delete') {
+      await nextTick();
+      document.getElementById('transfer-' + item.id)?.scrollIntoView({ block: 'start' });
+    }
   } catch (cause) {
     error.value = errorMessage(cause);
     key = housingRequestKey();
@@ -353,7 +359,7 @@ onBeforeUnmount(() => {
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
 
     <!-- 加载中指示 -->
-    <p v-if="loading" role="status">正在读取住宿与调宿数据…</p>
+    <SkeletonBlock v-if="loading" variant="cards" :rows="2" label="正在读取住宿与调宿数据…" />
 
     <template v-else>
       <!-- TAB 1: 我的住宿与档案 -->
@@ -669,6 +675,34 @@ onBeforeUnmount(() => {
               >
                 请求取消
               </button>
+              <button
+                v-if="item.allowedActions.includes('delete')"
+                class="text-button"
+                type="button"
+                :disabled="busy || materialBusy"
+                @click="act(item, 'delete')"
+              >
+                删除草稿
+              </button>
+            </div>
+
+            <div
+              v-if="item.allowedActions.some(action => ['withdraw', 'cancel-request'].includes(action))"
+              style="margin-top: 12px"
+            >
+              <label>
+                <div class="label-heading-row">
+                  <span>处理说明</span>
+                  <small class="muted">撤回申请或请求取消时填写（最多 200 字）</small>
+                </div>
+                <textarea
+                  v-model="comments[item.id]"
+                  maxlength="200"
+                  rows="2"
+                  :disabled="busy || materialBusy"
+                  placeholder="在此填写撤回或请求取消的说明原因…"
+                />
+              </label>
             </div>
 
             <!-- 材料上传与管理附件组件 -->
@@ -683,25 +717,6 @@ onBeforeUnmount(() => {
             />
           </article>
         </div>
-
-        <!-- 撤回/取消处理说明输入 -->
-        <label
-          v-if="transferItems.some(item => item.allowedActions.length)"
-          class="repair-editor"
-          style="margin-top: 18px"
-        >
-          <div class="label-heading-row">
-            <span>处理说明</span>
-            <small class="muted">最多 200 字</small>
-          </div>
-          <textarea
-            v-model="comment"
-            maxlength="200"
-            rows="3"
-            :disabled="busy || materialBusy"
-            placeholder="撤回申请或请求取消时填写说明原因"
-          />
-        </label>
       </section>
     </template>
   </div>
@@ -715,25 +730,27 @@ onBeforeUnmount(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 18px;
-  height: 18px;
+  min-width: 16px;
+  height: 16px;
   padding: 0 5px;
   margin-left: 6px;
-  font-size: var(--text-meta);
+  font-size: var(--text-eyebrow);
   font-weight: 600;
-  border-radius: var(--radius-pill);
-  background: var(--color-info);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  border-radius: var(--radius-xs);
+  background: var(--color-brand);
   color: var(--color-white);
 }
 .housing-stay-hero {
   border: 1px solid var(--color-border-strong);
   background: linear-gradient(180deg, var(--color-white) 0%, var(--color-surface) 100%);
-  box-shadow: 0 4px 16px rgb(15, 23, 42, 0.04);
+  box-shadow: 0 4px 16px rgb(49, 82, 68, 0.05);
 }
 .housing-bed-highlight {
   font-size: 16px;
   font-weight: 650;
-  color: #0f172a;
+  color: var(--color-ink);
   margin: 10px 0 14px;
   letter-spacing: -0.01em;
 }
@@ -755,11 +772,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #f0fdfa;
-  border: 1px solid #ccfbf1;
-  color: #0f766e;
+  background: #f3f7f4;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-brand);
   padding: 12px 16px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xs);
   margin-bottom: 20px;
   font-size: 13.5px;
   line-height: 1.5;
@@ -772,7 +789,7 @@ onBeforeUnmount(() => {
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
   padding: 12px 16px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-xs);
   margin-bottom: 20px;
   font-size: var(--text-supporting);
 }

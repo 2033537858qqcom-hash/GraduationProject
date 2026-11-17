@@ -3,6 +3,7 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick, getCurrentInstance, t
 export interface SlidingIndicatorOptions {
   activeSelector?: string
   scrollContainer?: boolean
+  axis?: 'x' | 'y'
 }
 
 export function useSlidingIndicator(
@@ -11,16 +12,26 @@ export function useSlidingIndicator(
   options: SlidingIndicatorOptions = {},
 ) {
   const activeSelector = options.activeSelector ?? '.selected, .active, [aria-selected="true"]'
+  const axis = options.axis ?? 'x'
   let isInitialized = false
   let unmountPending = false
   let mounted = false
 
-  const indicatorStyle = ref<Record<string, string | number>>({
-    transform: 'translateX(0px)',
-    width: '0px',
-    opacity: 0,
-    transition: 'none',
-  })
+  const indicatorStyle = ref<Record<string, string | number>>(
+    axis === 'y'
+      ? {
+          transform: 'translateY(0px)',
+          height: '0px',
+          opacity: 0,
+          transition: 'none',
+        }
+      : {
+          transform: 'translateX(0px)',
+          width: '0px',
+          opacity: 0,
+          transition: 'none',
+        },
+  )
 
   let resizeObserver: ResizeObserver | null = null
   let pendingUpdate = false
@@ -42,20 +53,34 @@ export function useSlidingIndicator(
     const containerRect = container.getBoundingClientRect()
     const activeRect = activeEl.getBoundingClientRect()
 
-    const left = activeRect.left - containerRect.left + (container.scrollLeft || 0)
-    const width = activeRect.width
+    const offset =
+      axis === 'y'
+        ? activeRect.top - containerRect.top + (container.scrollTop || 0)
+        : activeRect.left - containerRect.left + (container.scrollLeft || 0)
+    const size = axis === 'y' ? activeRect.height : activeRect.width
 
-    if (width <= 0) {
+    if (size <= 0) {
       hideIndicator()
       return
     }
 
+    const nextGeometry: Record<string, string | number> =
+      axis === 'y'
+        ? {
+            transform: `translateY(${Math.round(offset)}px)`,
+            height: `${Math.round(size)}px`,
+            opacity: 1,
+          }
+        : {
+            transform: `translateX(${Math.round(offset)}px)`,
+            width: `${Math.round(size)}px`,
+            opacity: 1,
+          }
+
     if (!isInitialized) {
       // First placement: snap directly without fly-in from (0,0) or opacity fade flicker
       indicatorStyle.value = {
-        transform: `translateX(${Math.round(left)}px)`,
-        width: `${Math.round(width)}px`,
-        opacity: 1,
+        ...nextGeometry,
         transition: 'none',
       }
       isInitialized = true
@@ -79,9 +104,7 @@ export function useSlidingIndicator(
     } else {
       // Subsequent tab switches: animated smooth glide
       indicatorStyle.value = {
-        transform: `translateX(${Math.round(left)}px)`,
-        width: `${Math.round(width)}px`,
-        opacity: 1,
+        ...nextGeometry,
         transition: '',
       }
     }

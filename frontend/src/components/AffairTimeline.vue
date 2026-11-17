@@ -4,6 +4,7 @@ import { Clock3, RefreshCw } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
 import { affairTimelinePath, type AffairTimeline } from '../lib/affairTimeline';
 import { affairStatus } from '../lib/affairs';
+import { formatDateTimeSeconds } from '../lib/format';
 const props = defineProps<{ kind: string; requestId: number }>();
 const data = ref<AffairTimeline | null>(null),
   loading = ref(true),
@@ -11,7 +12,7 @@ const data = ref<AffairTimeline | null>(null),
 let sequence = 0;
 let controller: AbortController | null = null;
 function when(value: string) {
-  return value.replace('T', ' ').slice(0, 19);
+  return formatDateTimeSeconds(value);
 }
 async function load(page = 1) {
   const request = ++sequence,
@@ -137,9 +138,12 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .timeline-current {
-  border-left: 2px solid var(--brand);
-  padding-left: 12px;
-  margin: 20px 0;
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--brand);
+  background: var(--color-surface-soft);
+  padding: 12px 16px;
+  border-radius: var(--radius-xs);
+  margin: 18px 0;
 }
 .timeline-current p {
   margin: 6px 0;
@@ -159,7 +163,7 @@ onBeforeUnmount(() => {
 .timeline-events li {
   position: relative;
   padding: 0 0 22px 20px;
-  border-left: 1px solid #d5dfe9;
+  border-left: 1px solid var(--color-border);
   min-width: 0;
 }
 .timeline-events li::before {
@@ -167,7 +171,7 @@ onBeforeUnmount(() => {
   content: '';
   width: 7px;
   height: 7px;
-  background: #8199af;
+  background: var(--color-brand);
   border: 2px solid var(--color-surface);
   border-radius: 50%;
   top: 5px;
@@ -185,6 +189,7 @@ onBeforeUnmount(() => {
 .timeline-event-heading time {
   font-size: var(--text-meta);
   color: var(--muted);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
   line-height: 1.8;
 }

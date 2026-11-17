@@ -13,19 +13,27 @@ import cn.zzuit.campus.housing.HousingTransferService;
 import cn.zzuit.campus.housing.HousingTransferModels;
 import cn.zzuit.campus.repair.RepairModels;
 import cn.zzuit.campus.repair.RepairService;
+import java.io.IOException;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.json.JsonMapper;
 
 @Service
@@ -99,6 +107,43 @@ public class AgentSessions {
         require(user); return new SessionDetail(owner,List.copyOf(turns),tasks,older);
     }
     public QueryResult query(CampusPrincipal user,long id,SessionQuery input) {
+        return executeQuery(user,id,input,null,null);
+    }
+    public SseEmitter streamQuery(CampusPrincipal user,long id,SessionQuery input) {
+        session(user,id);
+        var emitter=new SseEmitter(60_000L);
+        var closed=new AtomicBoolean(false);
+        emitter.onCompletion(()->closed.set(true));
+        emitter.onTimeout(()->{ closed.set(true); emitter.complete(); });
+        emitter.onError(ex->closed.set(true));
+        Thread.ofVirtual().name("assistant-sse-"+id).start(()->{
+            try {
+                emitSse(emitter,closed,"step",Map.of("message","正在校验会话状态与上下文…"));
+                var result=executeQuery(user,id,input,step->emitSse(emitter,closed,"step",Map.of("message",step)),delta->emitSse(emitter,closed,"delta",Map.of("text",delta)));
+                emitSse(emitter,closed,"result",result);
+                if(!closed.get()) emitter.complete();
+            } catch(ApiException ex) {
+                emitSse(emitter,closed,"error",Map.of("code",ex.code(),"message",ex.getMessage(),"status",ex.status().value()));
+                if(!closed.get()) emitter.complete();
+            } catch(RuntimeException ex) {
+                emitSse(emitter,closed,"error",Map.of("code","QUERY_FAILED","message","查询处理失败，请稍后重试","status",500));
+                if(!closed.get()) emitter.complete();
+            }
+        });
+        return emitter;
+    }
+    private void emitSse(SseEmitter emitter,AtomicBoolean closed,String event,Object payload) {
+        if(closed.get()) return;
+        synchronized(emitter) {
+            if(closed.get()) return;
+            try {
+                emitter.send(SseEmitter.event().name(event).data(payload,MediaType.APPLICATION_JSON));
+            } catch(IOException | IllegalStateException ex) {
+                closed.set(true);
+            }
+        }
+    }
+    private QueryResult executeQuery(CampusPrincipal user,long id,SessionQuery input,Consumer<String> progress,Consumer<String> onDelta) {
         session(user,id);
         if(!operations.add(user.id())) throw running();
         Long turnId=null;
@@ -108,6 +153,7 @@ public class AgentSessions {
             if(prior.isPresent()) {
                 var requestedContext=jdbc.sql("SELECT context_type,context_id FROM agent_turn WHERE session_id=:id AND request_key=:key").param("id",id).param("key",input.requestKey()).query((r,n)->r.getString(1)==null?null:new Context(r.getString(1),r.getLong(2))).optional().orElse(null);
                 var old=prior.get(); if(!old.question().equals(query.message().trim()) || old.mode()!=query.mode() || !Objects.equals(requestedContext,query.context())) throw conflict("重复请求与原问题不同，请新建一次查询");
+                if(progress!=null) progress.accept("已命中历史查询记录");
                 return new QueryResult(old,null,true,goal(user,id,input.requestKey()));
             }
             turnId=write(()->{
@@ -118,17 +164,69 @@ public class AgentSessions {
                 touch(id,query.message().trim()); return key.getKey().longValue();
             });
             activeTurns.put(user.id(),turnId);
-            var resolved=paymentQueries.followUp(user,id,query);var continuation=paymentQueries.continueQuote(id,query);
-            var answer=agent.queryWithLocalContinuation(user,resolved,continuation); long completeId=turnId;
+            var resolved=paymentQueries.followUp(user,id,query);var rawContinuation=paymentQueries.continueQuote(id,query);
+            var continuation=rawContinuation!=null?rawContinuation:(resolved.context()==null?resolveGeneralFollowUp(user,id,resolved):null);
+            var answerQuery=continuation==null?enrichDeepSeekFollowUp(id,resolved):resolved;
+            var answer=agent.queryWithLocalContinuation(user,answerQuery,continuation,progress,onDelta); long completeId=turnId;
             var started=answer.results().stream().filter(result->"start_goal".equals(result.name()) && "START_GOAL".equals(result.status())).findFirst();
             var goal=started.map(result->goals.getObject().create(user,id,new AgentGoalModels.Create(input.requestKey(),result.message(),true))).orElse(null);
-            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs,payment_quote_json=:quote,resolved_context_type=:type,resolved_context_id=:context WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("quote",paymentQueries.pendingQuote(answer,query,continuation)).param("type",resolved.context()==null?null:resolved.context().type()).param("context",resolved.context()==null?null:resolved.context().id()).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false,goal); });
+            String safeSummary=safeTurnSummary(answer.summary());
+            String safeLinks=safeTurnLinksJson(answer);
+            return write(()->{ session(user,id); jdbc.sql("UPDATE agent_turn SET status='SUCCESS',run_id=:run,payment_refs_json=:refs,payment_quote_json=:quote,resolved_context_type=:type,resolved_context_id=:context,answer_summary=:summary,answer_links_json=:links WHERE id=:id").param("run",answer.runId()).param("refs",paymentQueries.references(answer)).param("quote",paymentQueries.pendingQuote(answer,query,continuation)).param("type",resolved.context()==null?null:resolved.context().type()).param("context",resolved.context()==null?null:resolved.context().id()).param("summary",safeSummary).param("links",safeLinks).param("id",completeId).update(); touch(id,query.message().trim()); return new QueryResult(turn(user,completeId),answer,false,goal); });
         } catch(RuntimeException ex) {
             if(turnId!=null) { long failedId=turnId; write(()->jdbc.sql("UPDATE agent_turn SET status='FAILED' WHERE id=:id").param("id",failedId).update()); }
             throw ex;
         } finally { activeTurns.remove(user.id()); operations.remove(user.id()); }
     }
     private Turn turn(CampusPrincipal user,long id) { return jdbc.sql("SELECT * FROM agent_turn WHERE id=:id").param("id",id).query((r,n)->turnRow(r,user)).single(); }
+    private Query enrichDeepSeekFollowUp(long sessionId,Query query) {
+        if(query.mode()!=Mode.DEEPSEEK) return query;
+        String text=query.message().trim();
+        if(!text.matches(".*(避开|刚才|上面|上一条|之前那个|结合上面|顺便把|换成刚才|按刚才|基于上一步).*")) return query;
+        var prior=jdbc.sql("SELECT question FROM agent_turn WHERE session_id=:s AND status='SUCCESS' ORDER BY id DESC LIMIT 1")
+            .param("s",sessionId).query(String.class).optional().orElse(null);
+        if(prior==null || prior.isBlank()) return query;
+        String topic=prior.replaceAll("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+","[邮箱]").replaceAll("\\d{6,}","[编号]");
+        if(topic.length()>120) topic=topic.substring(0,120);
+        String combined="（同会话上轮问题主题："+topic+"）\n当前问题："+text;
+        return new Query(combined.length()>1000?combined.substring(0,1000):combined,query.mode(),query.externalConsent(),query.context());
+    }
+    private Call resolveGeneralFollowUp(CampusPrincipal user,long sessionId,Query query) {
+        String clean=query.message().trim().replaceAll("[？?。!！，,\\s]","");
+        if(clean.length()>16) return null;
+        var lastTools=jdbc.sql("""
+            SELECT r.tool_names FROM agent_turn t JOIN agent_run r ON r.id=t.run_id
+            WHERE t.session_id=:s AND t.status='SUCCESS' AND r.user_id=:u
+            ORDER BY t.id DESC LIMIT 1
+            """).param("s",sessionId).param("u",user.id()).query((r,n)->r.getString(1)).optional();
+        if(lastTools.isEmpty() || lastTools.get()==null || lastTools.get().isBlank()) return null;
+        var used=Set.of(lastTools.get().split(","));
+        LocalDate today=LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        if(clean.matches("(?:那)?(?:下周|下礼拜|下星期)(?:的)?(?:呢)?")) {
+            LocalDate next=today.plusWeeks(1);
+            if(used.contains("my_timetable")) return new Call("my_timetable",json.valueToTree(Map.of("week",next.toString())));
+            if(used.contains("my_schedule")) return new Call("my_schedule",json.valueToTree(Map.of("date",next.with(DayOfWeek.MONDAY).toString(),"range","WEEK")));
+        }
+        if(clean.matches("(?:那)?(?:本周|这周)(?:的)?(?:呢)?")) {
+            if(used.contains("my_timetable")) return new Call("my_timetable",json.valueToTree(Map.of("week",today.toString())));
+            if(used.contains("my_schedule")) return new Call("my_schedule",json.valueToTree(Map.of("date",today.toString(),"range","WEEK")));
+        }
+        if(clean.matches("(?:那)?(?:明天|明日)(?:的)?(?:呢)?") && used.contains("my_schedule")) {
+            return new Call("my_schedule",json.valueToTree(Map.of("date",today.plusDays(1).toString(),"range","DAY")));
+        }
+        if(clean.matches("(?:那)?(?:今天|今日)(?:的)?(?:呢)?") && used.contains("my_schedule")) {
+            return new Call("my_schedule",json.valueToTree(Map.of("date",today.toString(),"range","DAY")));
+        }
+        if(clean.matches("(?:那)?(?:办理|申请)?(?:规则|流程|指南|怎么办理|怎么申请|要什么材料|需要什么材料)(?:呢)?")) {
+            String guideQuery=used.contains("my_repairs")?"报修":used.contains("my_housing")||used.contains("my_housing_transfers")?"调宿"
+                :used.contains("my_reservations")||used.contains("find_available_venues")?"场地预约"
+                :used.contains("my_payments")||used.contains("my_dorm_utilities")?"缴费"
+                :used.contains("my_grades")||used.contains("my_exams")||used.contains("my_timetable")?"学习"
+                :used.contains("my_affairs")?"请假 证明":null;
+            if(guideQuery!=null) return new Call("search_guides",json.valueToTree(Map.of("query",guideQuery)));
+        }
+        return null;
+    }
     private AgentGoalModels.View goal(CampusPrincipal user,long session,String requestKey) { return goals.getObject().byRequestKey(user,session,requestKey).orElse(null); }
     public TaskView createTask(CampusPrincipal user,long sessionId,CreateTask input) {
         return write(()->{
@@ -214,11 +312,32 @@ public class AgentSessions {
     }
     private void editable(Task task,int version,String kind) { if(!task.kind().equals(kind)) throw missing(); if(!task.stage().equals("PREVIEW")) throw conflict("任务已关联业务申请，请进入原申请办理或新建准备任务"); if(task.version()!=version) throw conflict("任务进度已在其他窗口更新，请重新恢复后继续"); }
     private Session sessionRow(ResultSet r,int n) throws SQLException { return new Session(r.getLong("id"),r.getString("title"),r.getTimestamp("created_at").toLocalDateTime(),r.getTimestamp("updated_at").toLocalDateTime()); }
+    private String safeTurnSummary(String summary) {
+        if(summary==null || summary.isBlank()) return null;
+        String clean=summary.replaceAll("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+","[邮箱]").replaceAll("(?<!\\d)1[3-9]\\d{9}(?!\\d)","[手机]").trim();
+        return clean.length()>500?clean.substring(0,500):clean;
+    }
+    private String safeTurnLinksJson(Answer answer) {
+        if(answer==null || answer.results()==null) return null;
+        var list=new ArrayList<TurnLink>();
+        for(var r:answer.results()) {
+            if(r.targetPath()!=null && r.targetPath().startsWith("/")) {
+                list.add(new TurnLink(r.title(),r.targetPath()));
+            }
+            if(list.size()>=4) break;
+        }
+        return list.isEmpty()?null:encode(list);
+    }
     private Turn turnRow(ResultSet r,CampusPrincipal user) throws SQLException {
         String type=r.getString("resolved_context_type"),status=r.getString("status");long context=r.getLong("resolved_context_id");
         if(type==null){type=r.getString("context_type");context=r.getLong("context_id");}
         if(status.equals("RUNNING") && !Objects.equals(activeTurns.get(user.id()),r.getLong("id"))) status="INTERRUPTED";
-        return new Turn(r.getLong("id"),r.getString("question"),Mode.valueOf(r.getString("mode")),type==null?null:new Context(type,context),status,r.getString("run_id"),r.getTimestamp("created_at").toLocalDateTime());
+        String rawLinks=r.getString("answer_links_json");
+        List<TurnLink> links=List.of();
+        if(rawLinks!=null && !rawLinks.isBlank()) {
+            try { links=List.of(json.readValue(rawLinks,TurnLink[].class)); } catch(Exception ignored) {}
+        }
+        return new Turn(r.getLong("id"),r.getString("question"),Mode.valueOf(r.getString("mode")),type==null?null:new Context(type,context),status,r.getString("run_id"),r.getTimestamp("created_at").toLocalDateTime(),r.getString("answer_summary"),links);
     }
     private Task taskRow(ResultSet r,int n) throws SQLException { long business=r.getLong("business_id"); Long businessId=r.wasNull()?null:business; return new Task(r.getLong("id"),r.getLong("session_id"),r.getString("business_key"),r.getString("kind"),r.getString("fields_json"),r.getString("stage"),businessId,r.getInt("version"),r.getTimestamp("updated_at").toLocalDateTime()); }
     private String encode(Object value) { return json.writeValueAsString(value); }

@@ -4,22 +4,37 @@ import { useRouter } from 'vue-router';
 
 // A thin top bar shown only when a lazily loaded page takes noticeably long to arrive.
 const router = useRouter();
-const active = ref(false);
-let timer: ReturnType<typeof setTimeout> | undefined;
+const phase = ref<'idle' | 'loading' | 'finishing'>('idle');
+let delayTimer: ReturnType<typeof setTimeout> | undefined;
+let finishTimer: ReturnType<typeof setTimeout> | undefined;
 
 const stopBefore = router.beforeEach(() => {
-  clearTimeout(timer);
-  timer = setTimeout(() => (active.value = true), 150);
+  clearTimeout(delayTimer);
+  clearTimeout(finishTimer);
+  phase.value = 'idle';
+  delayTimer = setTimeout(() => {
+    phase.value = 'loading';
+  }, 150);
 });
 function done() {
-  clearTimeout(timer);
-  active.value = false;
+  clearTimeout(delayTimer);
+  if (phase.value !== 'loading') {
+    phase.value = 'idle';
+    return;
+  }
+  phase.value = 'finishing';
+  clearTimeout(finishTimer);
+  finishTimer = setTimeout(() => {
+    phase.value = 'idle';
+  }, 240);
 }
 const stopAfter = router.afterEach(done);
 const stopError = router.onError(done);
 
 onUnmounted(() => {
-  done();
+  clearTimeout(delayTimer);
+  clearTimeout(finishTimer);
+  phase.value = 'idle';
   stopBefore();
   stopAfter();
   stopError();
@@ -29,10 +44,10 @@ onUnmounted(() => {
 <template>
   <div
     class="route-progress"
-    :class="{ active }"
+    :class="{ active: phase === 'loading', finishing: phase === 'finishing' }"
     role="progressbar"
     aria-label="页面加载中"
-    :aria-hidden="!active"
+    :aria-hidden="phase === 'idle'"
   ></div>
 </template>
 
@@ -52,6 +67,13 @@ onUnmounted(() => {
   opacity: 1;
   animation: route-progress 2.4s var(--ease-campus) forwards;
 }
+.route-progress.finishing {
+  opacity: 0;
+  transform: scaleX(1);
+  transition:
+    transform 140ms var(--ease-campus),
+    opacity 180ms ease 60ms;
+}
 
 @keyframes route-progress {
   to {
@@ -63,6 +85,9 @@ onUnmounted(() => {
   .route-progress.active {
     animation: none;
     transform: scaleX(1);
+  }
+  .route-progress.finishing {
+    transition: none;
   }
 }
 </style>

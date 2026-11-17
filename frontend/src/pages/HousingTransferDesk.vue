@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router';
 import { api, errorMessage } from '../lib/api';
 import BaseSelect from '../components/BaseSelect.vue';
+import '../styles/repair-workflow.css';
 import {
   bedCanAssign,
   housingRequestKey,
@@ -28,7 +29,8 @@ const scopes = ref<DormScope[]>([]);
 const beds = ref<DormBed[]>([]);
 const buildingId = ref('');
 const bedId = ref('');
-const comment = ref('');
+const comments = ref<Record<number, string>>({});
+const extendUntil = ref<Record<number, string>>({});
 const error = ref('');
 const success = ref('');
 const busy = ref(false);
@@ -73,6 +75,15 @@ async function load() {
     waiting.value = pending;
     reserved.value = active;
     selected.value = detail;
+    for (const item of [...pending, ...active, ...(detail ? [detail] : [])]) {
+      if (item.status === 'AWAITING_CHECKIN' && !extendUntil.value[item.id]) {
+        const base = item.reserveUntil ? new Date(item.reserveUntil) : new Date();
+        const next = new Date(Math.max(base.getTime(), Date.now()) + 24 * 60 * 60 * 1000);
+        const pad = (n: number) => String(n).padStart(2, '0');
+        extendUntil.value[item.id] =
+          `${next.getFullYear()}-${pad(next.getMonth() + 1)}-${pad(next.getDate())}T${pad(next.getHours())}:${pad(next.getMinutes())}`;
+      }
+    }
     scopes.value = effective;
     buildingId.value = building;
     beds.value = page?.items.filter(bedCanAssign) ?? [];
@@ -91,14 +102,14 @@ async function refresh() {
   error.value = '';
   await load();
 }
-async function run(path: string, body: object) {
+async function run(path: string, body: object, itemId?: number) {
   busy.value = true;
   error.value = '';
   success.value = '';
   try {
     await api(path, { method: 'POST', body: JSON.stringify(body) });
     key = housingRequestKey();
-    comment.value = '';
+    if (itemId !== undefined) comments.value[itemId] = '';
     success.value = '调宿处理已记录。';
     emit('changed');
     await load();
@@ -114,23 +125,55 @@ function reserve(item: HousingTransfer) {
     error.value = '请选择空闲床位';
     return;
   }
-  return run('/housing/transfers/assign/' + item.id + '/reserve', {
-    requestKey: key,
-    version: item.version,
-    bedId: Number(bedId.value),
-    reason: comment.value.trim() || '安排空闲床位',
-  });
+  return run(
+    '/housing/transfers/assign/' + item.id + '/reserve',
+    {
+      requestKey: key,
+      version: item.version,
+      bedId: Number(bedId.value),
+      reason: (comments.value[item.id] ?? '').trim() || '安排空闲床位',
+    },
+    item.id,
+  );
 }
 function post(item: HousingTransfer, action: string) {
-  if (!comment.value.trim()) {
+  const note = (comments.value[item.id] ?? '').trim();
+  if (!note) {
     error.value = '请填写说明';
     return;
   }
-  return run('/housing/transfers/assign/' + item.id + '/' + action, {
-    requestKey: key,
-    version: item.version,
-    comment: comment.value.trim(),
-  });
+  return run(
+    '/housing/transfers/assign/' + item.id + '/' + action,
+    {
+      requestKey: key,
+      version: item.version,
+      comment: note,
+    },
+    item.id,
+  );
+}
+function extendDeadline(item: HousingTransfer) {
+  const note = (comments.value[item.id] ?? '').trim();
+  const target = (extendUntil.value[item.id] ?? '').trim();
+  if (!note) {
+    error.value = '请填写延期说明';
+    return;
+  }
+  if (!target) {
+    error.value = '请选择新的最晚入住时间';
+    return;
+  }
+  const reserveUntil = target.length === 16 ? `${target}:00` : target;
+  return run(
+    '/housing/transfers/assign/' + item.id + '/extend',
+    {
+      requestKey: key,
+      version: item.version,
+      reason: note,
+      reserveUntil,
+    },
+    item.id,
+  );
 }
 onMounted(refresh);
 watch(() => route.fullPath, refresh);
@@ -221,21 +264,34 @@ onBeforeUnmount(() => {
           >
             不同意取消
           </button>
+          <div v-if="item.allowedActions.includes('extend')" class="extend-deadline-inline">
+            <input
+              v-model="extendUntil[item.id]"
+              type="datetime-local"
+              :disabled="busy"
+              aria-label="延长入住截止时间"
+            />
+            <button class="text-button" type="button" :disabled="busy" @click="extendDeadline(item)">延长预留</button>
+          </div>
+        </div>
+        <div v-if="item.allowedActions.length" style="margin-top: 12px">
+          <label>
+            <div class="label-heading-row">
+              <span>处理说明 / 分配意见</span>
+              <small class="muted">
+                {{ item.allowedActions.includes('reserve') ? '预留选填 · 最多 200 字' : '必填 · 最多 200 字' }}
+              </small>
+            </div>
+            <textarea
+              v-model="comments[item.id]"
+              maxlength="200"
+              rows="2"
+              :disabled="busy"
+              placeholder="在此填写分配说明、延期原因或处理意见…"
+            ></textarea>
+          </label>
         </div>
       </article>
-      <label v-if="items.some(item => item.allowedActions.length)" class="repair-editor">
-        <div class="label-heading-row">
-          <span>处理说明</span>
-          <small class="muted">选填 · 最多 200 字</small>
-        </div>
-        <textarea
-          v-model="comment"
-          maxlength="200"
-          rows="3"
-          :disabled="busy"
-          placeholder="填写分配说明或处理意见（如调宿审核、取消处理等）"
-        ></textarea>
-      </label>
     </template>
   </section>
 </template>

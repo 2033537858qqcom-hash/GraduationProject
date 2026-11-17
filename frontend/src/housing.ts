@@ -1,3 +1,5 @@
+import { formatDateTime } from './lib/format.ts'
+
 export interface HousingPage<T> {
   items: T[]
   total: number
@@ -150,7 +152,7 @@ export function bedCanAssign(bed: {
   return bed.enabled && bed.buildingEnabled && bed.roomEnabled && bed.status === 'VACANT'
 }
 export function housingWhen(value: string | null) {
-  return value ? value.replace('T', ' ').slice(0, 16) : ''
+  return formatDateTime(value)
 }
 export interface HousingTransfer {
   id: number

@@ -31,7 +31,7 @@
 }
 #portal-main .service-workflow :is(.portal-context, .eyebrow),
 #portal-main .campus-affairs .affairs-eyebrow {
-  color: #829174;
+  color: var(--color-text-tertiary);
   font-size: var(--text-eyebrow);
   letter-spacing: 1px;
 }
@@ -41,7 +41,7 @@
   color: var(--color-text-secondary);
 }
 #portal-main .service-page-header .portal-context {
-  color: #829174;
+  color: var(--color-text-tertiary);
   font-size: var(--text-eyebrow);
   line-height: 1.8;
   letter-spacing: 1px;
@@ -67,9 +67,9 @@
 }
 #portal-main .service-workflow :is(.portal-panel, .repair-config-card, .repair-editor),
 #portal-main .campus-affairs .portal-panel {
-  background: var(--color-surface);
-  border: 1px solid #dce3d2;
-  border-radius: var(--radius-md);
+  background: rgb(253 253 249 / 74%);
+  border: 1px solid var(--line, var(--color-border));
+  border-radius: var(--radius-xs);
   box-shadow: none;
 }
 #portal-main .service-workflow .portal-panel {
@@ -110,21 +110,32 @@
   min-height: 35px;
   gap: 8px;
   border-radius: var(--radius-md);
-  border-color: #d2ddc6;
-  background: #fdfef8;
-  color: #506b41;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-brand);
   box-shadow: none;
   font-size: var(--text-supporting);
   line-height: 1.6;
   white-space: normal;
+  transition:
+    transform var(--motion-fast) var(--ease-campus),
+    box-shadow var(--motion-fast) var(--ease-campus),
+    background-color var(--motion-fast) var(--ease-campus),
+    border-color var(--motion-fast) var(--ease-campus),
+    color var(--motion-fast) var(--ease-campus);
 }
 #portal-main .service-workflow .button:hover:not(:disabled),
 #portal-main .campus-affairs .button:hover:not(:disabled) {
-  transform: none;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(41 62 52 / 8%);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-brand-hover);
+}
+#portal-main .service-workflow .button:active:not(:disabled),
+#portal-main .campus-affairs .button:active:not(:disabled) {
+  transform: translateY(0);
   box-shadow: none;
-  filter: none;
-  background: #eff3e5;
-  border-color: #a3b78f;
 }
 #portal-main .service-workflow .button.primary,
 #portal-main .campus-affairs .button.primary {
@@ -134,17 +145,23 @@
 }
 #portal-main .service-workflow .button.primary:hover:not(:disabled),
 #portal-main .campus-affairs .button.primary:hover:not(:disabled) {
-  background: #244332;
-  border-color: #244332;
+  background: var(--color-brand-hover);
+  border-color: var(--color-brand-hover);
+  color: var(--color-white);
+  box-shadow: 0 4px 14px rgb(49 82 68 / 22%);
 }
 #portal-main .service-workflow .button.danger {
-  color: #934e42;
-  border-color: #dfbbae;
-  background: #fff9f5;
+  color: var(--color-danger-strong);
+  border-color: var(--color-danger-border);
+  background: var(--color-danger-soft);
 }
 #portal-main .service-workflow .text-button {
-  color: #5d7d47;
+  color: var(--color-brand);
   font-size: var(--text-supporting);
+  transition: color var(--motion-fast) var(--ease-campus);
+}
+#portal-main .service-workflow .text-button:hover:not(:disabled) {
+  color: var(--color-brand-hover);
 }
 #portal-main .service-workflow .form-actions {
   display: flex;
@@ -159,22 +176,22 @@
 }
 #portal-main .service-workflow :is(.foundation-filters, .leave-filters, .repair-list-filter) {
   padding: 16px 18px;
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  border-radius: var(--radius-md);
+  background: rgb(253 253 249 / 68%);
+  border-color: var(--line, var(--color-border));
+  border-radius: var(--radius-xs);
   box-shadow: none;
   margin-bottom: 22px;
 }
 #portal-main .service-workflow :is(input, textarea, select) {
-  border-color: #d6dfcc;
+  border-color: var(--color-border);
   border-radius: var(--radius-md);
-  color: #3d5636;
+  color: var(--color-ink);
   box-shadow: none;
-  background-color: #fffffc;
+  background-color: var(--color-white);
   font-size: var(--text-supporting);
 }
 #portal-main .service-workflow :is(input, textarea)::placeholder {
-  color: #9ca98e;
+  color: var(--color-text-tertiary);
 }
 #portal-main .service-workflow label {
   color: var(--color-ink);
@@ -192,18 +209,18 @@
 }
 #portal-main .service-workflow .label-heading-row small {
   font-size: var(--text-meta);
-  color: #8e9c80;
+  color: var(--color-text-tertiary);
 }
 #portal-main .service-workflow :is(.form-grid, .resource-facts, .repair-facts) {
   gap: 20px 30px;
 }
 #portal-main .service-workflow :is(.resource-facts, .repair-facts) {
-  padding-block: 18px;
-  border-block: 1px solid #e5e9dc;
-  margin-block: 18px;
+  padding-block: 16px;
+  border-block: 1px solid var(--color-border-subtle);
+  margin-block: 14px;
 }
 #portal-main .service-workflow :is(.resource-facts, .repair-facts) dt {
-  color: #8a987b;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
 }
 #portal-main .service-workflow :is(.resource-facts, .repair-facts) dd {
@@ -215,21 +232,22 @@
 #portal-main .service-workflow .service-processing-note {
   grid-column: 1 / -1;
   padding: 16px 18px;
-  background: #f0f3e7;
-  border-left: 2px solid #94a77c;
+  background: var(--color-surface-soft);
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--color-brand);
+  border-radius: var(--radius-xs);
 }
 #portal-main .service-workflow .service-processing-note dd {
   margin-top: 8px;
   white-space: pre-wrap;
 }
 #portal-main .service-workflow .service-editor-feedback {
-  border: 1px solid #ebdab7;
-  border-left: 2px solid #bd9554;
-  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-xs);
   padding: 15px 18px;
   margin-block: 20px;
-  background: #fbf6eb;
-  color: #8f743f;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 #portal-main .service-workflow .service-editor-feedback strong {
   font-size: var(--text-supporting);
@@ -244,20 +262,19 @@
 }
 #portal-main .service-workflow :is(.leave-upload, .housing-upload) {
   padding: 20px;
-  border: 1px solid #e0e6d5;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: #f5f7ed;
+  background: var(--color-surface-soft);
 }
 #portal-main .service-workflow input[type='file'] {
   max-width: 100%;
   font-size: var(--text-supporting);
 }
 #portal-main .service-workflow :is(.content-context-note, .housing-context-banner, .housing-notice-banner) {
-  border: 1px solid #dce5cf;
-  border-left: 2px solid #94aa7d;
-  border-radius: var(--radius-sm);
-  background: #eff3e6;
-  color: #667e53;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
   padding: 14px 18px;
   font-size: var(--text-supporting);
   line-height: 1.9;
@@ -266,19 +283,21 @@
   margin-block: 22px;
 }
 #portal-main .service-workflow .learning-tabs {
-  border-color: #dce3d1;
+  border-color: var(--color-border);
   gap: 25px;
 }
 #portal-main .service-workflow .learning-tabs button {
-  color: #849376;
+  color: var(--color-text-tertiary);
   font-size: var(--text-supporting);
 }
 #portal-main .service-workflow .learning-tabs button:is(.active, .selected) {
-  color: #365a2c;
+  color: var(--color-brand);
 }
 #portal-main .service-workflow :is(.table-scroll, .table-responsive) {
   max-width: 100%;
   overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border-strong) transparent;
 }
 #portal-main .service-workflow table {
   font-size: var(--text-supporting);
@@ -299,19 +318,45 @@
   color: var(--color-text-secondary);
 }
 #portal-main .service-workflow :is(.resource-selected, .row-selected) {
-  background: #f0f4e7;
+  background: var(--color-surface-soft);
+}
+#portal-main .service-workflow .table-folio-row {
+  background: var(--color-paper);
+}
+#portal-main .service-workflow .table-folio-row:hover {
+  background: var(--color-paper);
+}
+#portal-main .service-workflow .table-folio-cell {
+  padding: 12px 14px 16px;
+  border-bottom: 1px solid var(--color-border-strong);
+  background: var(--color-paper);
+}
+#portal-main .service-workflow .service-inline-folio {
+  margin-bottom: 0;
+  padding: 18px 22px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-strong);
+  border-top: 2px solid var(--color-brand);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 4px 14px rgb(41 62 52 / 5%);
+}
+#portal-main .service-workflow .service-folio-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 #portal-main .service-workflow .status-label {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-xs);
   font-size: var(--text-meta);
-  background: #eef1e7;
-  color: #75866a;
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
 }
 #portal-main
   .service-workflow
   .status-label:is([data-status='APPROVED'], [data-status='COMPLETED'], .approved, .completed) {
-  color: #547b3d;
-  background: #e9f1de;
+  color: var(--color-success);
+  background: var(--color-success-soft);
 }
 #portal-main
   .service-workflow
@@ -323,36 +368,35 @@
     .return_pending,
     .awaiting_checkin
   ) {
-  color: #9a7441;
-  background: #faf1e2;
+  color: var(--color-warning);
+  background: var(--color-warning-soft);
 }
 #portal-main .service-workflow .status-label:is([data-status='REJECTED'], .rejected) {
-  color: #a0685b;
-  background: #f6ece7;
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
 #portal-main .service-workflow .status-label:is([data-status='WITHDRAWN'], .withdrawn, .cancelled, .expired) {
-  color: #959b8d;
-  background: #eff0eb;
+  color: var(--color-text-tertiary);
+  background: var(--color-surface-soft);
 }
 #portal-main .service-workflow :is(.foundation-pagination, .pagination) {
   align-items: center;
   flex-wrap: wrap;
   gap: 14px;
   font-size: var(--text-meta);
-  color: #819173;
+  color: var(--color-text-secondary);
 }
 #portal-main .service-workflow :is(.resource-history, .leave-history article) {
-  padding: 18px;
-  border: 1px solid #e1e7d6;
-  border-left: 2px solid #adbca0;
-  border-radius: var(--radius-sm);
-  background: #f8f9f2;
-  margin-block: 12px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  background: var(--color-paper);
+  margin-block: 10px;
 }
 #portal-main .service-workflow :is(.foundation-dialog, .modal-card) {
-  background: #fbfcf5;
-  border-color: #d6e0c9;
-  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  border-radius: var(--radius-xs);
 }
 #portal-main .service-workflow .foundation-dialog {
   width: min(520px, calc(100vw - 36px));
@@ -365,7 +409,7 @@
   border-color: var(--color-border);
 }
 #portal-main .service-workflow .modal-actions {
-  background: #fbfcf5;
+  background: var(--color-surface);
 }
 #portal-main .service-workflow .booking-dialog {
   margin: 0;
@@ -404,11 +448,12 @@
 
 /* This is an orientation guide, separate from the authoritative history timeline. */
 #portal-main .service-journey {
-  padding: 18px 22px 14px;
-  margin: 0 0 24px;
-  background: #eff2e7;
-  border: 1px solid #dde4d0;
-  border-radius: var(--radius-md);
+  padding: 18px 4px 16px;
+  margin: 0 0 26px;
+  background: rgb(253 253 249 / 45%);
+  border: 0;
+  border-block: 1px solid var(--line, var(--color-border-subtle));
+  border-radius: 0;
 }
 #portal-main .journey-title {
   display: flex;
@@ -416,19 +461,21 @@
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
 }
 #portal-main .journey-title > span {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #71875e;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
-  letter-spacing: 1px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
 }
 #portal-main .journey-title small {
-  color: #59734a;
+  color: var(--color-brand);
   font-size: var(--text-meta);
+  font-weight: 500;
 }
 #portal-main .service-journey ol {
   display: grid;
@@ -443,57 +490,60 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #89977b;
+  color: var(--color-text-tertiary);
   font-size: var(--text-supporting);
-  line-height: 1.7;
+  line-height: 1.65;
 }
 #portal-main .service-journey li > span {
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  width: 27px;
-  height: 27px;
-  border: 1px solid #d3ddc5;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--color-border-strong);
+  background: var(--color-white);
   border-radius: 50%;
-  color: #a0ae91;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 #portal-main .service-journey li[aria-current='step'] {
-  color: #3e6332;
-  font-weight: 500;
+  color: var(--color-heading);
+  font-weight: 600;
 }
 #portal-main .service-journey li[aria-current='step'] > span {
   background: var(--color-brand);
   color: var(--color-white);
   border-color: var(--color-brand);
+  box-shadow: 0 2px 6px rgb(49 82 68 / 18%);
 }
 #portal-main .service-journey > p {
   display: flex;
   align-items: flex-start;
   gap: 9px;
-  margin: 18px 0 0;
+  margin: 16px 0 0;
   padding-top: 13px;
-  border-top: 1px solid var(--color-border);
-  color: #7b8b6b;
+  border-top: 1px solid var(--color-border-subtle);
+  color: var(--color-text-secondary);
   font-size: var(--text-supporting);
-  line-height: 1.9;
+  line-height: 1.85;
 }
 #portal-main .service-journey > p svg {
   flex-shrink: 0;
-  margin-top: 4px;
+  margin-top: 5px;
 }
 #portal-main .service-journey[data-tone='attention'] .journey-title small {
-  color: #976735;
+  color: var(--color-warning);
 }
 #portal-main .service-journey[data-tone='attention'] > p {
-  color: #8e7448;
+  color: var(--color-warning);
 }
 #portal-main .service-journey[data-tone='closed'] .journey-title small {
-  color: #89917f;
+  color: var(--color-text-tertiary);
 }
 #portal-main .service-journey[data-tone='complete'] .journey-title small {
-  color: #4f7a39;
+  color: var(--color-success);
 }
 
 /* Repair keeps its detailed stepper, queue and permission-bound action panel. */
@@ -513,7 +563,6 @@
 }
 #portal-main .service-repair .repair-request-card.selected {
   background: #eef3e4;
-  border-left-color: #7c9b63;
 }
 #portal-main .service-repair .repair-request-card:hover {
   background: #f5f7ed;
@@ -590,11 +639,12 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  min-width: 0;
+  flex: 0 1 320px;
+  min-width: min(100%, 260px);
 }
 #portal-main .service-reservation .search-input-group input {
   min-width: 0;
-  width: auto;
+  width: 100%;
   flex: 1;
 }
 #portal-main .service-reservation .search-input-group button {
@@ -617,7 +667,7 @@
   color: #4f743d;
 }
 #portal-main .service-reservation .category-pills button:focus-visible {
-  outline: 2px solid #75965b !important;
+  outline: 2px solid #75965b;
   outline-offset: 2px;
 }
 #portal-main .service-reservation .category-pill-indicator {
@@ -739,11 +789,20 @@
   color: #486e36;
 }
 #portal-main .campus-workbench .workbench-welcome {
-  padding: 25px 28px;
-  margin-bottom: 24px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+  padding: 4px 0 26px;
+  margin-bottom: 28px;
+  border: 0;
+  border-bottom: 1px solid var(--line, var(--color-border));
+  border-radius: 0;
+  background: transparent;
+}
+#portal-main .campus-workbench .workbench-welcome > div:first-child::before {
+  content: '';
+  display: block;
+  width: 35px;
+  height: 1px;
+  background: var(--color-gold);
+  margin-bottom: 12px;
 }
 #portal-main .campus-workbench .workbench-welcome h1 {
   color: #3e6334;
@@ -761,29 +820,32 @@
 }
 #portal-main .campus-workbench .workbench-pending-summary {
   border: 0;
-  padding: 18px 22px;
-  background: var(--color-brand);
-  color: var(--color-white);
-  border-radius: var(--radius-md);
+  border-left: 1px solid var(--line, var(--color-border));
+  padding: 4px 0 4px 28px;
+  background: transparent;
+  color: var(--color-ink);
+  border-radius: 0;
 }
 #portal-main .campus-workbench .workbench-pending-summary strong {
-  color: var(--color-white);
+  color: var(--color-brand);
+  font-family: var(--campus-display-serif);
   font-size: 42px;
   font-weight: 400;
 }
 #portal-main .campus-workbench .workbench-pending-summary :is(span, small) {
-  color: var(--color-white);
-  opacity: 0.8;
+  color: var(--color-text-secondary);
+  opacity: 1;
 }
 #portal-main .campus-workbench .workbench-dashboard {
   grid-template-columns: minmax(0, 1fr) 250px;
-  gap: 22px;
+  gap: 28px;
 }
 #portal-main .campus-workbench .workbench-tasks-panel {
-  border-color: #dce5d0;
-  border-radius: var(--radius-md);
-  padding: 24px;
-  background: #fdfdf8;
+  border: 0;
+  border-top: 1px solid var(--line, var(--color-border));
+  border-radius: 0;
+  padding: 22px 0 0;
+  background: transparent;
 }
 #portal-main .campus-workbench .heading-with-badge {
   gap: 12px;
@@ -826,30 +888,31 @@
   box-shadow: none;
 }
 #portal-main .campus-workbench .task-pill-btn:focus-visible {
-  outline: 2px solid #75965b !important;
+  outline: 2px solid var(--color-brand);
   outline-offset: 3px;
 }
 #portal-main .campus-workbench .workbench-task-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px;
   gap: 9px 20px;
-  padding: 21px 0;
+  padding: 21px 12px;
   margin: 0;
   border: 0;
-  border-bottom: 1px solid #e0e8d5;
-  border-radius: 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
   background: transparent;
   box-shadow: none;
+  transition: background-color var(--motion-fast) var(--ease-campus);
 }
 #portal-main .campus-workbench .workbench-task-card:hover {
   box-shadow: none;
   transform: none;
-  background: #f7faef;
+  background: var(--color-surface-hover);
 }
 #portal-main .campus-workbench .workbench-task-card.urgent-task {
-  border-left: 2px solid #c5a16c;
-  padding-left: 15px;
-  background: #fcf8ef;
+  border-color: var(--color-warning-border);
+  border-top: 2px solid var(--color-gold);
+  background: var(--color-warning-soft);
 }
 #portal-main .campus-workbench .task-card-header {
   grid-column: 1;
@@ -944,9 +1007,9 @@
 #portal-main .campus-workbench .workbench-scope-panel {
   position: sticky;
   top: 95px;
-  border-color: var(--color-border);
-  border-radius: var(--radius-md);
-  background: #fcfdf7;
+  border-color: var(--line, var(--color-border));
+  border-radius: var(--radius-xs);
+  background: rgb(253 253 249 / 74%);
 }
 #portal-main .campus-workbench .workspace-campus-image {
   height: 115px;
@@ -964,15 +1027,34 @@
 #portal-main .campus-workbench .workspace-scope-note {
   border-color: #e0e8d3;
 }
+#portal-main .campus-workbench .service-entry-grid {
+  gap: 10px 26px;
+}
 #portal-main .campus-workbench .service-entry {
-  border-color: #dfe6d5;
-  background: #fcfdf7;
-  border-radius: var(--radius-md);
+  border: 0;
+  border-top: 1px solid var(--line, var(--color-border));
+  background: transparent;
+  border-radius: 0;
+  padding: 20px 4px;
+  min-height: 0;
+}
+#portal-main .campus-workbench .service-entry:hover {
+  border-top-color: var(--color-gold);
+  background: rgb(253 253 249 / 55%);
+  box-shadow: none;
+  transform: none;
 }
 #portal-main .campus-workbench .service-entry .service-entry-icon {
-  color: #809b69;
-  border-color: #dce7cd;
-  background: #f0f5e6;
+  color: var(--color-brand);
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  width: 24px;
+  height: 24px;
+}
+#portal-main .campus-workbench .service-entry-arrow-wrap {
+  top: 20px;
+  right: 4px;
 }
 #portal-main .campus-workbench .service-entry-copy strong {
   color: #55733f;
@@ -1054,6 +1136,28 @@
     align-items: stretch;
     gap: 14px;
   }
+  #portal-main .service-reservation .search-input-group {
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+  }
+  #portal-main .service-reservation .category-pills {
+    flex-wrap: wrap;
+    width: 100%;
+    border-radius: var(--radius-lg);
+    padding: 4px;
+    gap: 4px;
+  }
+  #portal-main .service-reservation .category-pill-indicator {
+    display: none;
+  }
+  #portal-main .service-reservation .category-pills button {
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+  }
+  #portal-main .service-reservation .category-pills button.active {
+    background: #dce8cc;
+  }
   #portal-main .service-reservation :is(.form-grid-two, .pass-grid) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1083,13 +1187,13 @@
     letter-spacing: 1px;
   }
   #portal-main .campus-workbench .workbench-welcome {
-    padding: 21px;
+    padding: 4px 0 22px;
   }
   #portal-main .campus-workbench .workbench-welcome h1 {
     font-size: 27px;
   }
   #portal-main .campus-workbench .workbench-tasks-panel {
-    padding: 21px 17px;
+    padding: 18px 0 0;
   }
   #portal-main .campus-workbench .workbench-task-card {
     display: block;
@@ -1109,6 +1213,11 @@
     align-items: center;
     margin-top: 16px;
     gap: 12px;
+  }
+  #portal-main .campus-workbench .workbench-pending-summary {
+    border-left: 0;
+    border-top: 1px solid var(--line, var(--color-border));
+    padding: 16px 0 0;
   }
   #portal-main .campus-workbench .workbench-pending-summary strong {
     font-size: 30px;

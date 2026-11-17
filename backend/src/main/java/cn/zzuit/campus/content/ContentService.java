@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class ContentService {
     private final JdbcClient jdbc;
     private final IdentityService identities;
+    private final cn.zzuit.campus.notice.NoticeWriter notices;
     private static final String SELECT="""
         SELECT c.*,p.content_id live_id,p.slug live_slug,p.category live_category,p.title live_title,
           p.summary live_summary,p.body live_body,p.source_url live_source_url,p.source_type live_source_type,
@@ -32,7 +33,7 @@ public class ContentService {
         SELECT r.version,r.action,r.reason,r.actor_name,r.recorded_at,TRUE has_snapshot FROM content_revision r
         WHERE r.content_id=:id AND NOT EXISTS(SELECT 1 FROM content_audit a WHERE a.content_id=r.content_id AND a.content_version=r.version)
         """;
-    public ContentService(JdbcClient jdbc,IdentityService identities) { this.jdbc=jdbc; this.identities=identities; }
+    public ContentService(JdbcClient jdbc,IdentityService identities,cn.zzuit.campus.notice.NoticeWriter notices) { this.jdbc=jdbc; this.identities=identities; this.notices=notices; }
     public List<Content> published(String category) {
         var query=jdbc.sql("SELECT * FROM content_publication WHERE visible=TRUE"+(category==null?"":" AND category=:category")+" ORDER BY published_at DESC,content_id DESC");
         if(category!=null) query.param("category",category);
@@ -73,13 +74,27 @@ public class ContentService {
     }
     @Transactional public Content submit(long id,int version,CampusPrincipal user) {
         var item=locked(id,user,"content:edit",version); owner(item,user); state(item,"DRAFT","REJECTED");
-        return transition(item,user,"IN_REVIEW","SUBMITTED","送交审核",null,item.changeReason());
+        var changed=transition(item,user,"IN_REVIEW","SUBMITTED","送交审核",null,item.changeReason());
+        for(long reviewer:jdbc.sql("""
+            SELECT DISTINCT u.id FROM app_user u
+            JOIN user_role ur ON ur.user_id=u.id
+            JOIN role_permission rp ON rp.role_code=ur.role_code AND rp.permission_code='content:review'
+            WHERE u.enabled=TRUE AND u.id<>:creator
+            """).param("creator",user.id()).query(Long.class).list()) {
+            notices.write(reviewer,"官网内容待审核","CONTENT",id,"REVIEW","《"+changed.title()+"》已送交审核，请进入官网内容管理核对并发布。");
+        }
+        return changed;
     }
     @Transactional public Content recall(long id,int version,String reason,CampusPrincipal user) {
         var item=locked(id,user,"content:edit",version); owner(item,user); state(item,"IN_REVIEW"); return transition(item,user,"DRAFT","RECALLED",reason,null,item.changeReason());
     }
     @Transactional public Content reject(long id,int version,String reason,CampusPrincipal user) {
-        var item=locked(id,user,"content:review",version); independent(item,user); state(item,"IN_REVIEW"); return transition(item,user,"REJECTED","REJECTED",reason,reason,item.changeReason());
+        var item=locked(id,user,"content:review",version); independent(item,user); state(item,"IN_REVIEW");
+        var changed=transition(item,user,"REJECTED","REJECTED",reason,reason,item.changeReason());
+        if(item.createdBy()!=null && !Objects.equals(item.createdBy(),user.id())) {
+            notices.write(item.createdBy(),"官网内容被驳回修改","CONTENT",id,"EDIT","《"+changed.title()+"》未通过审核，请查看退回原因并修改。");
+        }
+        return changed;
     }
     @Transactional public Content revise(long id,int version,String reason,CampusPrincipal user) {
         var item=locked(id,user,"content:edit",version); state(item,"PUBLISHED","WITHDRAWN");
@@ -102,12 +117,19 @@ public class ContentService {
                 """).param("slug",changed.slug()).param("category",changed.category()).param("title",changed.title()).param("summary",changed.summary()).param("body",changed.body())
                 .param("url",changed.sourceUrl()).param("type",changed.sourceType()).param("version",changed.version()).param("time",java.sql.Timestamp.valueOf(changed.publishedAt())).param("id",id).update();
         }
+        if(item.createdBy()!=null && !Objects.equals(item.createdBy(),user.id())) {
+            notices.write(item.createdBy(),"官网内容已审核发布","CONTENT",id,"EDIT","《"+changed.title()+"》已通过审核并上线发布。");
+        }
         return detail(id);
     }
     @Transactional public Content unpublish(long id,int version,String reason,CampusPrincipal user) {
         var item=locked(id,user,"content:review",version); if(item.live()==null || !item.live().visible()) throw conflict();
         jdbc.sql("UPDATE content_publication SET visible=FALSE WHERE content_id=:id").param("id",id).update();
-        return transition(item,user,"WITHDRAWN","UNPUBLISHED",reason,reason,item.changeReason());
+        var changed=transition(item,user,"WITHDRAWN","UNPUBLISHED",reason,reason,item.changeReason());
+        if(item.createdBy()!=null && !Objects.equals(item.createdBy(),user.id())) {
+            notices.write(item.createdBy(),"官网内容已撤下","CONTENT",id,"EDIT","《"+changed.title()+"》已从官网撤下，如需更新请重新发起修订。");
+        }
+        return changed;
     }
     private Content transition(Content item,CampusPrincipal user,String state,String action,String reason,String reviewReason,String changeReason) {
         String legacy=List.of("PUBLISHED","IN_REVIEW").contains(state)?state:"DRAFT";

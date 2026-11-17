@@ -1,14 +1,20 @@
 <script setup lang="ts">
 import { confirmDialog } from '../composables/useConfirm';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { api, ApiError, errorMessage } from '../lib/api';
+import { AI_REQUEST_TIMEOUT, api, ApiError, errorMessage, streamPostJson } from '../lib/api';
 import { goalKindLabels, goalStageLabels, goalTargetLabels, goalToolLabels } from '../lib/assistantGoals';
 import type { GoalSummary, GoalView } from '../lib/assistantGoals';
 import { missionBusinessStatusLabel } from '../lib/assistantMissions';
 import { safeAssistantDestination } from '../lib/assistant';
 import AssistantMission from './AssistantMission.vue';
+import BaseSelect from './BaseSelect.vue';
 
-const props = defineProps<{ sessionId: number | null; active: boolean; modelReady: boolean }>();
+const props = defineProps<{
+  sessionId: number | null;
+  active: boolean;
+  modelReady: boolean;
+  sessionConsent?: boolean;
+}>();
 const emit = defineEmits<{ working: [value: boolean] }>();
 const current = ref<GoalView | null>(null),
   summaries = ref<GoalSummary[]>([]);
@@ -21,6 +27,7 @@ const loading = ref(false),
   busy = ref(false),
   childBusy = ref(false),
   error = ref(''),
+  thinkingSteps = ref<string[]>([]),
   createKey = ref(crypto.randomUUID());
 const pending = ref<{ path: string; body: Record<string, unknown>; session: number } | null>(null);
 const child = ref<{ allowLeave: () => Promise<boolean> } | null>(null);
@@ -38,6 +45,12 @@ const activeTask = computed(
 const submission = computed(() => activeTask.value?.submissionPreview);
 const submissionAuthorized = computed(
   () => !terminal.value && !!submission.value && activeTask.value?.submissionHash === submission.value.proposalHash,
+);
+const goalOptions = computed(() =>
+  summaries.value.map(item => ({
+    value: item.id,
+    label: `#${item.id} · ${goalStageLabels[item.stage] ?? item.stage} · ${item.goal.slice(0, 22)}`,
+  })),
 );
 let generation = 0,
   timer: ReturnType<typeof setTimeout> | null = null,
@@ -115,11 +128,34 @@ async function mutate(path: string, body: Record<string, unknown>) {
     epoch = ++generation;
   busy.value = true;
   error.value = '';
+  thinkingSteps.value = ['正在连接自主目标规划器…'];
   pending.value = { path, body, session };
   controller = new AbortController();
   schedulePolling();
   try {
-    const view = await api<GoalView>(path, { method: 'POST', body: JSON.stringify(body), signal: controller.signal });
+    let view: GoalView;
+    const streamPath = `${path}/stream`;
+    try {
+      view = await streamPostJson<GoalView>(streamPath, body, {
+        signal: controller.signal,
+        timeout: AI_REQUEST_TIMEOUT,
+        onStep: msg => {
+          if (epoch !== generation) return;
+          if (!thinkingSteps.value.includes(msg)) thinkingSteps.value = [...thinkingSteps.value, msg];
+        },
+      });
+    } catch (streamCause) {
+      if (streamCause instanceof ApiError && [404, 405].includes(streamCause.status)) {
+        view = await api<GoalView>(path, {
+          method: 'POST',
+          body: JSON.stringify(body),
+          signal: controller.signal,
+          timeout: AI_REQUEST_TIMEOUT,
+        });
+      } else {
+        throw streamCause;
+      }
+    }
     if (epoch !== generation || session !== props.sessionId) return;
     apply(view);
     pending.value = null;
@@ -135,6 +171,7 @@ async function mutate(path: string, body: Record<string, unknown>) {
   } finally {
     if (epoch === generation) {
       busy.value = false;
+      thinkingSteps.value = [];
       controller = null;
       schedulePolling();
     }
@@ -272,6 +309,16 @@ watch(
   },
 );
 watch(
+  () => props.sessionConsent,
+  agreed => {
+    if (agreed) {
+      consent.value = true;
+      revisionConsent.value = true;
+    }
+  },
+  { immediate: true },
+);
+watch(
   () => [props.active, props.sessionId] as const,
   ([active, session], previous) => {
     if (session !== previous?.[1]) {
@@ -283,7 +330,8 @@ watch(
       summaries.value = [];
       goalText.value = '';
       revision.value = '';
-      consent.value = false;
+      consent.value = !!props.sessionConsent;
+      revisionConsent.value = !!props.sessionConsent;
       pending.value = null;
       chosenTask.value = '';
       createKey.value = crypto.randomUUID();
@@ -305,7 +353,7 @@ defineExpose({ allowLeave });
 </script>
 
 <template>
-  <section class="assistant-history goal" aria-label="自主目标Agent">
+  <section class="assistant-history goal" aria-label="自主目标 Agent">
     <div class="goal-heading">
       <div>
         <h2>自主目标 Agent</h2>
@@ -315,18 +363,27 @@ defineExpose({ allowLeave });
     </div>
     <label v-if="summaries.length" class="goal-field">
       恢复本次对话的目标
-      <select
-        :value="current?.id ?? ''"
+      <BaseSelect
+        :model-value="current?.id ?? null"
+        :options="goalOptions"
         :disabled="working"
-        @change="selectGoal(Number(($event.target as HTMLSelectElement).value))"
-      >
-        <option value="" disabled>选择目标</option>
-        <option v-for="item in summaries" :key="item.id" :value="item.id">
-          #{{ item.id }} · {{ goalStageLabels[item.stage] ?? item.stage }} · {{ item.goal.slice(0, 22) }}
-        </option>
-      </select>
+        compact
+        placeholder="选择目标"
+        @update:model-value="value => value && selectGoal(Number(value))"
+      />
     </label>
     <p v-if="loading" role="status">正在恢复目标和原申请结果…</p>
+    <div v-if="busy && thinkingSteps.length" class="assistant-thinking" role="status" aria-live="polite">
+      <div class="assistant-thinking-head">
+        <span class="assistant-thinking-dot" aria-hidden="true"></span>
+        <span>自主目标规划与执行中</span>
+      </div>
+      <ul class="assistant-thinking-steps">
+        <li v-for="(stepText, idx) in thinkingSteps" :key="idx" :class="{ active: idx === thinkingSteps.length - 1 }">
+          {{ stepText }}
+        </li>
+      </ul>
+    </div>
     <template v-if="!current">
       <label class="goal-field">
         要完成的目标
@@ -343,7 +400,7 @@ defineExpose({ allowLeave });
         同意将本次目标、场地查询条件、有效办理指南、公开场地候选和脱敏执行结果发送至
         DeepSeek。身份、联系方式及本地表单正文不会自动发送。
       </label>
-      <p v-if="!modelReady" class="goal-note">自主规划需要连接 DeepSeek。当前可在“Agent任务”使用本地单项草稿流程。</p>
+      <p v-if="!modelReady" class="goal-note">自主规划需要连接 DeepSeek。当前可在“Agent 任务”使用本地单项草稿流程。</p>
       <button
         class="goal-primary"
         type="button"
@@ -531,9 +588,9 @@ defineExpose({ allowLeave });
 
 <style scoped>
 .goal-submission {
-  border: 1px solid #dce5ef;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: #f7fafc;
+  background: var(--color-surface-soft);
   padding: 10px;
   margin: 12px 0;
 }
@@ -543,7 +600,7 @@ defineExpose({ allowLeave });
   gap: 5px 10px;
 }
 .goal-submission dt {
-  color: #7b8999;
+  color: var(--color-text-tertiary);
 }
 .goal-submission dd {
   margin: 0;
@@ -557,12 +614,12 @@ defineExpose({ allowLeave });
 .goal {
   font-size: var(--text-supporting);
   line-height: 1.65;
-  color: #52677e;
+  color: var(--color-text-secondary);
 }
 .goal h2 {
   margin: 0;
   font-size: var(--text-reading);
-  color: #294c71;
+  color: var(--color-brand);
 }
 .goal h3 {
   font-size: var(--text-supporting);
@@ -588,12 +645,12 @@ defineExpose({ allowLeave });
 .goal-heading p,
 .goal-note {
   font-size: var(--text-meta);
-  color: #7b8999;
+  color: var(--color-text-tertiary);
 }
 .goal button {
   font: inherit;
   padding: 6px 10px;
-  border: 1px solid #d5dfe9;
+  border: 1px solid var(--color-border);
   background: var(--color-white);
   border-radius: var(--radius-md);
   color: var(--color-brand);
@@ -608,7 +665,7 @@ defineExpose({ allowLeave });
 .goal input:focus-visible,
 .goal textarea:focus-visible,
 .goal select:focus-visible {
-  outline: 2px solid #6d91b9;
+  outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
 .goal .goal-primary {
@@ -629,9 +686,9 @@ defineExpose({ allowLeave });
   min-width: 0;
   width: 100%;
   padding: 8px;
-  border: 1px solid #d9e2ec;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  color: #355374;
+  color: var(--color-heading);
   background: var(--color-white);
 }
 .goal textarea {
@@ -667,7 +724,7 @@ defineExpose({ allowLeave });
 }
 .goal-objective {
   font-weight: 600;
-  color: #355374;
+  color: var(--color-heading);
 }
 .goal-plan ol {
   padding: 0;
@@ -681,11 +738,11 @@ defineExpose({ allowLeave });
   text-align: left;
   margin: 0;
   padding: 10px;
-  background: #f7fafc;
+  background: var(--color-surface-soft);
   overflow-wrap: anywhere;
 }
 .goal-plan button[aria-pressed='true'] {
-  border-color: #6d91b9;
+  border-color: var(--color-border-hover);
   background: var(--color-surface-soft);
 }
 .goal-plan strong,
@@ -695,21 +752,21 @@ defineExpose({ allowLeave });
 }
 .goal-plan span {
   font-size: var(--text-meta);
-  color: #7b8999;
+  color: var(--color-text-tertiary);
 }
 .goal-plan small {
   font-size: var(--text-meta);
   margin-top: 5px;
 }
 .goal details {
-  border-top: 1px solid #e4eaf1;
+  border-top: 1px solid var(--color-border-subtle);
   padding-top: 9px;
   margin: 12px 0;
 }
 .goal summary {
   cursor: pointer;
   font-weight: 600;
-  color: #3c5978;
+  color: var(--color-brand);
 }
 .goal-trace ol {
   padding-left: 22px;

@@ -37,16 +37,26 @@ defineProps<{
             <em>笃行向新</em>
           </h2>
           <p class="story-summary">{{ summary }}</p>
-          <div v-if="campuses.length" class="story-campuses" aria-label="学校校区">
+          <div class="story-campuses" aria-label="学校校区">
             <MapPin :size="14" aria-hidden="true" />
-            <span v-for="campus in campuses" :key="campus.id">{{ campus.name }}</span>
+            <span
+              v-for="campus in campuses.length
+                ? campuses
+                : [
+                    { id: 1, code: 'EAST', name: '东校区', address: '' },
+                    { id: 2, code: 'WEST', name: '西校区', address: '' },
+                  ]"
+              :key="campus.id"
+            >
+              {{ campus.name }}
+            </span>
           </div>
           <RouterLink class="chapter-link" :to="publicContentLink('school-introduction', 'about')">
             认识郑州工业应用技术学院
             <ArrowUpRight :size="15" aria-hidden="true" />
           </RouterLink>
         </div>
-        <figure class="chapter-visual">
+        <figure class="chapter-visual" data-photo-reveal>
           <div class="story-photo-frame campus-photo">
             <div class="story-image-plane">
               <img
@@ -76,10 +86,15 @@ defineProps<{
         <div class="story-history-heading" data-reveal>
           <span>时光为序</span>
           <small>HISTORY & MILESTONES</small>
+          <a class="story-source" :href="schoolHistorySource.url" target="_blank" rel="noopener noreferrer">
+            {{ schoolHistorySource.label }}
+            <ArrowUpRight :size="12" aria-hidden="true" />
+          </a>
         </div>
         <span class="story-history-rule" aria-hidden="true"></span>
         <ol class="story-timeline" aria-label="学校历史沿革">
           <li v-for="event in schoolHistory" :key="event.year">
+            <span class="story-milestone-dot" aria-hidden="true"></span>
             <span class="story-year">{{ event.year }}</span>
             <div>
               <h3>{{ event.title }}</h3>
@@ -87,10 +102,6 @@ defineProps<{
             </div>
           </li>
         </ol>
-        <a class="story-source" :href="schoolHistorySource.url" target="_blank" rel="noopener noreferrer">
-          {{ schoolHistorySource.label }}
-          <ArrowUpRight :size="12" aria-hidden="true" />
-        </a>
       </div>
     </div>
   </div>
@@ -154,10 +165,10 @@ defineProps<{
   min-width: 0;
 }
 .story-summary {
-  max-width: 420px;
+  max-width: 440px;
   color: var(--muted);
-  font-size: 13px;
-  line-height: 2.2;
+  font-size: var(--text-body);
+  line-height: 2.05;
   margin-bottom: 18px;
 }
 .story-campuses {
@@ -165,7 +176,7 @@ defineProps<{
   align-items: center;
   gap: 13px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-meta);
   margin-bottom: 22px;
 }
 .story-campuses span + span {
@@ -211,10 +222,14 @@ defineProps<{
   margin: 16px 0 8px;
 }
 .story-timeline li {
+  position: relative;
   display: flex;
   align-items: flex-start;
   gap: 18px;
   min-width: 0;
+}
+.story-milestone-dot {
+  display: none;
 }
 .story-year {
   display: block;
@@ -226,25 +241,24 @@ defineProps<{
   letter-spacing: -1px;
 }
 .story-timeline h3 {
-  font-size: 12px;
+  font-size: var(--text-body);
   margin: 0 0 6px;
   font-weight: 500;
 }
 .story-timeline p {
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.8;
+  font-size: var(--text-supporting);
+  line-height: 1.85;
   margin: 0;
 }
 .story-source {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   width: fit-content;
   margin-left: auto;
-  padding-top: 10px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--text-meta);
 }
 .story-source:hover {
   color: var(--brand);

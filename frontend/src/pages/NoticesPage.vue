@@ -3,7 +3,12 @@ import { onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Bell, Check, RefreshCw, ArrowUpRight, ChevronLeft, ChevronRight } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime } from '../lib/format';
+import { useToast } from '../composables/useToast';
+import { decrementUnreadNoticeCount, setUnreadNoticeCount } from '../stores/notices';
 import BaseSelect from '../components/BaseSelect.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { safeAffairDestination } from '../lib/navigation';
 import type { Notice } from '../types';
 import type { Paged } from '../foundation';
@@ -35,18 +40,26 @@ async function load() {
   if (filter.value) params.set('read', filter.value);
   try {
     const result = await api<typeof list.value>('/notices?' + params);
-    if (request === sequence) list.value = result;
+    if (request === sequence) {
+      list.value = result;
+      setUnreadNoticeCount(result.unreadCount);
+    }
   } catch (cause) {
     if (request === sequence) error.value = errorMessage(cause);
   } finally {
     if (request === sequence) loading.value = false;
   }
 }
+const toast = useToast();
 async function mark(notice: Notice, open = false) {
   reading.value = notice.id;
   error.value = '';
   try {
-    if (!notice.read) await api('/notices/' + notice.id + '/read', { method: 'POST' });
+    if (!notice.read) {
+      await api('/notices/' + notice.id + '/read', { method: 'POST' });
+      decrementUnreadNoticeCount();
+      if (!open) toast.success('已将该消息标记为已读');
+    }
     const target = safeAffairDestination(notice.targetPath);
     if (open && target) await router.push(target);
     else await load();
@@ -73,18 +86,15 @@ watch(
 );
 </script>
 <template>
-  <div>
-    <div class="page-heading-row">
-      <div>
-        <span class="portal-context">个人消息</span>
-        <h1>消息通知</h1>
-        <p class="muted">阅读发给你的消息，查看对应申请的办理进度。</p>
-      </div>
-      <button class="button compact" :disabled="loading || reading !== null" @click="load">
-        <RefreshCw :size="15" />
-        刷新消息
-      </button>
-    </div>
+  <div class="service-workflow notices-page">
+    <ServicePageHeader context="个人消息" title="消息通知" description="阅读发给你的消息，查看对应申请的办理进度。">
+      <template #actions>
+        <button class="button compact" :disabled="loading || reading !== null" @click="load">
+          <RefreshCw :size="15" />
+          刷新消息
+        </button>
+      </template>
+    </ServicePageHeader>
 
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
 
@@ -105,20 +115,25 @@ watch(
           @change="search"
         />
       </label>
-      <button class="button compact" :disabled="loading || reading !== null">查询</button>
+      <button class="button compact primary" :disabled="loading || reading !== null">查询</button>
     </form>
 
     <section class="portal-panel" aria-label="个人消息列表">
-      <p v-if="loading" role="status">正在读取个人消息…</p>
-      <p v-else-if="!list.items.length" class="empty-state">当前筛选下没有消息。</p>
-      <article v-for="notice in loading ? [] : list.items" :key="notice.id" class="notice-row">
+      <SkeletonBlock v-if="loading" variant="list" :rows="4" label="正在读取个人消息…" />
+      <p v-else-if="!list.items.length" class="empty-state">当前筛选条件下暂无个人消息。</p>
+      <article
+        v-for="notice in loading ? [] : list.items"
+        :key="notice.id"
+        class="notice-row"
+        :class="{ 'is-unread': !notice.read }"
+      >
         <div class="notice-heading">
           <h3>{{ notice.title }}</h3>
           <span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span>
         </div>
         <p>{{ notice.body }}</p>
         <div class="notice-actions">
-          <time>{{ notice.createdAt.slice(0, 16).replace('T', ' ') }}</time>
+          <time>{{ formatDateTime(notice.createdAt) }}</time>
           <button
             v-if="safeAffairDestination(notice.targetPath)"
             class="text-button"
@@ -135,7 +150,7 @@ watch(
         </div>
       </article>
 
-      <div class="pagination">
+      <div v-if="list.total > 0" class="pagination">
         <span class="pagination-info">
           第 {{ list.page }} / {{ Math.max(1, Math.ceil(list.total / list.pageSize)) }} 页 · 共 {{ list.total }} 条
         </span>
@@ -160,6 +175,14 @@ watch(
       </div>
     </section>
 
-    <p class="data-note">仅查询当前账号的消息。历史普通消息保留原文；有业务来源且当前仍有权限的消息提供申请入口。</p>
+    <p class="data-note">
+      仅展示当前账号的个人消息。历史通知保留原始正文；关联校内业务且具备访问权限的消息支持直接跳转对应申请。
+    </p>
   </div>
 </template>
+
+<style scoped>
+.notices-page .notice-row.is-unread {
+  background: var(--color-surface-soft);
+}
+</style>

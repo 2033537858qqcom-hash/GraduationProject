@@ -100,7 +100,7 @@ public class AgentPlanningQueries {
         identities.requirePermission(user,"reservation:apply");
         String campus=choice(args,"campus",null,Set.of("EAST","WEST","ALL")),start=text(args,"startsAt",null,19),end=text(args,"endsAt",null,19),keyword=text(args,"keyword",null,40);
         Long people=number(args,"participants");if(people!=null && people>10000)throw invalid();
-        if(campus==null || people==null || start==null || end==null)return needs("find_available_venues","请提供校区、预计人数和明确起止时间，例如：明天东校区 20人 09:00-11:00 查找空闲场地。","/portal/reservations");
+        if(campus==null || people==null || start==null || end==null)return needs("find_available_venues","请提供校区、预计人数和明确起止时间（如“上午/下午/第几节”需明确写为 09:00-11:00），例如：明天东校区 20人 09:00-11:00 查找空闲场地。","/portal/reservations");
         LocalDateTime from,to;try {from=LocalDateTime.parse(start);to=LocalDateTime.parse(end);}catch(Exception ex) {return needs("find_available_venues","日期或时间不明确，请使用 YYYY-MM-DD HH:mm，并明确跨日时的结束日期。","/portal/reservations");}
         long minutes=Duration.between(from,to).toMinutes();
         if(from.getYear()<2000 || from.getYear()>2099 || to.getYear()>2100 || from.getSecond()!=0 || to.getSecond()!=0 || from.getNano()!=0 || to.getNano()!=0 || !to.isAfter(from) || from.isBefore(LocalDateTime.now(ZoneId.of("Asia/Shanghai"))) || minutes<30 || minutes>840)
@@ -129,15 +129,17 @@ public class AgentPlanningQueries {
     }
     public List<Call> local(String question,Context context) {
         var calls=new ArrayList<Call>();
-        boolean schedule=question.matches(".*(日程|时间重叠|时间冲突|(今天|明天|本周|这周|下周).*(有哪些安排|有什么安排|全部安排|安排汇总)).*");
-        boolean finding=question.matches(".*(空闲场地|空场地|查找.*场地|找.*场地|查询.*场地|场地.*可用|可预约.*场地|可以预约.*场地).*");
-        boolean booking=question.matches(".*(我的预约|我的借用|本人预约|本人借用|预约进度|借用进度|预约编号|借用编号).*" ) || context!=null && context.type().equals("RESERVATION_MINE") && question.matches(".*(当前|这条|这个|进度|状态).*");
+        boolean schedule=question.matches(".*(日程|时间重叠|时间冲突|什么时候有空|没课|空档|空闲时间|(今天|明天|后天|大后天|本周|这周|下周).*(有哪些安排|有什么安排|全部安排|安排汇总)).*");
+        boolean finding=question.matches(".*(空闲场地|空场地|查找.*场地|找.*场地|查询.*场地|找.*教室|借.*教室|组会.*场地|开会.*室|场地.*可用|可预约.*场地|可以预约.*场地).*");
+        boolean booking=question.matches(".*(我的预约|我的借用|本人预约|本人借用|预约进度|借用进度|预约编号|借用编号).*" )
+            || (!finding && question.matches(".*(?:查询|查看|查一下|查下|看看|有哪些|已取消|待审批|待审核|已批准|使用中).*(?:预约|借用).*"))
+            || context!=null && context.type().equals("RESERVATION_MINE") && question.matches(".*(当前|这条|这个|进度|状态).*");
         if(schedule) {
-            var a=new HashMap<String,Object>();String date=explicitDate(question,true);a.put("date",date==null?"未明确":date);a.put("range",question.contains("今天")||question.contains("明天")||question.matches(".*\\d{4}-\\d{2}-\\d{2}.*")?"DAY":"WEEK");calls.add(call("my_schedule",a));
+            var a=new HashMap<String,Object>();String date=explicitDate(question,true);a.put("date",date==null?"未明确":date);a.put("range",question.contains("今天")||question.contains("明天")||question.contains("后天")||question.contains("大后天")||question.matches(".*\\d{4}-\\d{2}-\\d{2}.*")?"DAY":"WEEK");calls.add(call("my_schedule",a));
         }
         if(booking) {
             var a=new HashMap<String,Object>();var matcher=Pattern.compile("(?:预约|借用)(?:编号|\\s*#)\\s*([1-9]\\d{0,14})").matcher(question);if(matcher.find())a.put("id",Long.parseLong(matcher.group(1)));
-            if(!a.containsKey("id") && (context==null || !context.type().equals("RESERVATION_MINE")))a.put("status",question.contains("待审批")||question.contains("待审核")?"SUBMITTED":question.contains("使用中")?"IN_USE":question.contains("已批准")?"APPROVED":"ALL");
+            if(!a.containsKey("id") && (context==null || !context.type().equals("RESERVATION_MINE")))a.put("status",question.contains("待审批")||question.contains("待审核")?"SUBMITTED":question.contains("使用中")?"IN_USE":question.contains("已批准")?"APPROVED":question.contains("已取消")?"CANCELLED":"ALL");
             calls.add(call("my_reservations",a));
         }
         if(finding) {
@@ -146,16 +148,16 @@ public class AgentPlanningQueries {
             var times=Pattern.compile("(?<!\\d)([0-2]?\\d:[0-5]\\d)(?!\\d)").matcher(question);var found=new ArrayList<String>();while(times.find())found.add(times.group(1));
             var dates=Pattern.compile("\\d{4}-\\d{2}-\\d{2}").matcher(question);var dateValues=new ArrayList<String>();while(dates.find())dateValues.add(dates.group());String date=explicitDate(question,false);
             if(found.size()==2 && date!=null && dateValues.size()<=2){a.put("startsAt",date+"T"+padded(found.get(0)));a.put("endsAt",(dateValues.size()==2?dateValues.get(1):date)+"T"+padded(found.get(1)));}
-            var keyword=Pattern.compile("(?:关键词|名称)[:：]?\\s*([^\\s，。,。！？!?]{1,40})").matcher(question);if(keyword.find())a.put("keyword",keyword.group(1));else for(String word:List.of("报告厅","研讨室","篮球","羽毛球","网球","教室"))if(question.contains(word)){a.put("keyword",word);break;}
+            var keyword=Pattern.compile("(?:关键词|名称)[:：]?\\s*([^\\s，。,。！？!?]{1,40})").matcher(question);if(keyword.find())a.put("keyword",keyword.group(1));else for(String word:List.of("报告厅","研讨室","会议室","活动室","篮球","羽毛球","网球","教室"))if(question.contains(word)){a.put("keyword",word.equals("会议室")||word.equals("活动室")?"研讨室":word);break;}
             calls.add(call("find_available_venues",a));
         }
         return calls.isEmpty()?null:calls;
     }
     private String explicitDate(String text,boolean defaultToday) {
         var date=Pattern.compile("\\d{4}-\\d{2}-\\d{2}").matcher(text);if(date.find())return date.group();
-        LocalDate base=today();if(text.contains("明天"))return base.plusDays(1).toString();if(text.contains("后天"))return base.plusDays(2).toString();
+        LocalDate base=today();if(text.contains("大后天"))return base.plusDays(3).toString();if(text.contains("后天"))return base.plusDays(2).toString();if(text.contains("明天"))return base.plusDays(1).toString();
         if(text.contains("下周"))base=base.plusWeeks(1);
-        var day=Pattern.compile("(?:本周|这周|下周)([一二三四五六日天])").matcher(text);if(day.find())return base.with(DayOfWeek.of("一二三四五六日".indexOf(day.group(1).replace('天','日'))+1)).toString();
+        var day=Pattern.compile("(?:本周|这周|下周)(?:周|星期)?([一二三四五六日天])").matcher(text);if(day.find())return base.with(DayOfWeek.of("一二三四五六日".indexOf(day.group(1).replace('天','日'))+1)).toString();
         if(text.matches(".*(?:周[一二三四五六日天]|星期[一二三四五六日天]).*") && !text.contains("本周")&&!text.contains("这周")&&!text.contains("下周"))return null;
         return defaultToday || text.contains("今天") ? base.toString() : null;
     }

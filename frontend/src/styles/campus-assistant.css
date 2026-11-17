@@ -8,8 +8,7 @@
   margin: 0 0 20px;
   background: var(--color-surface-soft);
   border: 1px solid var(--color-border);
-  border-left: 2px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xs);
 }
 #portal-main .campus-return-banner small {
   display: block;
@@ -42,9 +41,9 @@
 #campus-assistant {
   color: var(--color-text-secondary);
 
-  --brand: #42613e;
-  --muted: #879a76;
-  --line: #dce5d1;
+  --brand: var(--color-brand);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-border);
   right: 22px;
   bottom: 22px;
 }
@@ -57,15 +56,21 @@
   background: var(--color-surface);
   box-shadow: var(--shadow-panel);
   transform-origin: bottom right;
+  transition:
+    width 0.22s var(--ease-campus),
+    height 0.22s var(--ease-campus);
+}
+#campus-assistant.is-wide .assistant-panel {
+  width: min(680px, calc(100vw - 32px));
 }
 #campus-assistant .assistant-head {
-  padding: 22px 22px 18px;
+  padding: 12px 16px 10px;
   border-color: var(--color-border);
   background: var(--color-surface);
 }
 #campus-assistant .assistant-head strong {
   font-family: var(--campus-display-serif);
-  color: var(--color-text-secondary);
+  color: var(--color-heading);
   font-size: 20px;
   font-weight: 400;
   letter-spacing: 2px;
@@ -81,6 +86,7 @@
 }
 #campus-assistant .assistant-icon:hover {
   background: var(--color-surface-soft);
+  color: var(--color-ink);
 }
 #campus-assistant .assistant-session-bar {
   padding: 6px 20px;
@@ -88,7 +94,7 @@
   background: var(--color-surface-soft);
 }
 #campus-assistant .assistant-session-bar button {
-  color: var(--color-text-secondary);
+  color: var(--color-brand);
   font-size: var(--text-meta);
   min-height: 28px;
 }
@@ -102,7 +108,7 @@
   height: 4px;
 }
 #campus-assistant .assistant-tasks::-webkit-scrollbar-thumb {
-  background: var(--color-surface-soft);
+  background: var(--color-border-strong);
   border-radius: var(--radius-sm);
 }
 #campus-assistant .assistant-tasks button {
@@ -113,16 +119,29 @@
   border-radius: var(--radius-sm);
   font-size: var(--text-meta);
   min-height: 30px;
+  transition:
+    background var(--motion-fast) var(--ease-campus),
+    border-color var(--motion-fast) var(--ease-campus),
+    color var(--motion-fast) var(--ease-campus),
+    box-shadow var(--motion-fast) var(--ease-campus);
+}
+#campus-assistant .assistant-tasks button:hover:not([aria-pressed='true'], :disabled) {
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
+  color: var(--color-ink);
 }
 #campus-assistant .assistant-tasks button[aria-pressed='true'] {
-  border-color: var(--color-border);
-  background: var(--color-surface-soft);
-  color: var(--color-text-secondary);
+  border-color: var(--color-brand);
+  background: var(--color-brand);
+  color: var(--color-white);
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgb(49 82 68 / 20%);
 }
 #campus-assistant .assistant-mode {
   border-top: 1px solid var(--color-border);
   padding-inline: 20px;
   color: var(--color-text-secondary);
+  background: var(--color-surface-soft);
   flex-shrink: 0;
   gap: 10px;
   flex-wrap: wrap;
@@ -153,25 +172,29 @@
   height: 44px;
 }
 #campus-assistant .assistant-question {
-  color: var(--color-text-secondary);
-  background: var(--color-surface-soft);
-  border-color: var(--color-border);
+  color: var(--color-ink);
+  background: var(--color-surface-active);
+  border-color: var(--color-border-strong);
   border-radius: var(--radius-md);
+  padding: 12px 15px;
   font-size: var(--text-supporting);
 }
 #campus-assistant .assistant-summary {
-  color: var(--color-text-secondary);
-  font-size: var(--text-supporting);
+  color: var(--color-ink);
+  font-size: var(--text-body);
   line-height: 1.9;
 }
 #campus-assistant .assistant-result {
   border-color: var(--color-border);
-  background: var(--color-surface-soft);
+  background: var(--color-surface);
   border-radius: var(--radius-md);
+  padding: 16px;
 }
 #campus-assistant .assistant-result h3 {
-  color: var(--color-text-secondary);
-  font-size: var(--text-supporting);
+  font-family: var(--campus-display-serif);
+  color: var(--color-heading);
+  font-size: 17px;
+  font-weight: 400;
 }
 #campus-assistant .assistant-result > p {
   color: var(--color-text-secondary);
@@ -180,13 +203,20 @@
 }
 #campus-assistant .assistant-fact {
   border-color: var(--color-border);
-  color: var(--color-text-secondary);
-  background: var(--color-surface-soft);
+  color: var(--color-ink);
+  background: var(--color-surface);
   border-radius: var(--radius-sm);
+  transition:
+    border-color var(--motion-fast) var(--ease-campus),
+    background var(--motion-fast) var(--ease-campus),
+    transform var(--motion-fast) var(--ease-campus),
+    box-shadow var(--motion-fast) var(--ease-campus);
 }
 #campus-assistant .assistant-fact:hover {
-  border-color: var(--color-border);
-  background: var(--color-surface-soft);
+  border-color: var(--color-brand);
+  background: var(--color-surface-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(41 62 52 / 8%);
 }
 #campus-assistant .assistant-fact strong {
   color: var(--color-ink);
@@ -202,10 +232,17 @@
   cursor: default;
   border-color: var(--color-border);
   background: var(--color-surface-soft);
+  transform: none;
+  box-shadow: none;
 }
 #campus-assistant .assistant-more,
 #campus-assistant .assistant-source a {
-  color: var(--color-text-secondary);
+  color: var(--color-brand);
+  font-weight: 500;
+}
+#campus-assistant .assistant-more:hover,
+#campus-assistant .assistant-source a:hover {
+  color: var(--color-brand-hover);
 }
 #campus-assistant .assistant-source {
   border-color: var(--color-border);
@@ -218,16 +255,28 @@
   border-color: var(--color-border);
 }
 #campus-assistant .assistant-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 0 20px 8px;
   gap: 8px;
-  padding-inline: 20px;
 }
 #campus-assistant .assistant-prompts button {
+  border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
-  border-color: var(--color-border);
   background: var(--color-surface-soft);
   border-radius: var(--radius-sm);
+  padding: 4px 8px;
   font-size: var(--text-meta);
   min-height: 30px;
+  cursor: pointer;
+}
+#campus-assistant .assistant-prompts button:hover:not(:disabled) {
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
+}
+#campus-assistant .assistant-prompts button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 #campus-assistant .assistant-compose {
   padding: 15px 20px;
@@ -245,13 +294,19 @@
 }
 #campus-assistant textarea:focus,
 #campus-assistant input:focus {
-  border-color: var(--color-border);
-  box-shadow: 0 0 0 2px #a6c38926;
+  background: var(--color-white);
+  border-color: var(--color-brand);
+  box-shadow: var(--focus-ring);
+  outline: none;
 }
 #campus-assistant .assistant-send {
   background: var(--color-brand);
   color: var(--color-white);
   border-radius: var(--radius-md);
+}
+#campus-assistant .assistant-send:hover:not(:disabled),
+#campus-assistant .assistant-draft-save:hover:not(:disabled) {
+  background: var(--color-brand-hover);
 }
 #campus-assistant .assistant-send:disabled {
   background: var(--color-surface-soft);
@@ -280,43 +335,33 @@
   background: var(--color-danger-soft);
 }
 #campus-assistant .assistant-launcher {
-  width: 52px;
-  height: 52px;
-  background: linear-gradient(140deg, #587a4b, #3d6240);
-  border-color: var(--color-border);
-  box-shadow:
-    0 5px 20px #37583633,
-    inset 0 1px 1px #ffffff40;
+  height: 46px;
+  min-width: 46px;
+  background: var(--color-brand);
+  border-color: rgb(182 164 119 / 35%);
+  box-shadow: var(--shadow-popover);
 }
-#campus-assistant .launcher-sparkle-icon {
-  color: var(--color-text-secondary);
-  filter: none;
+#campus-assistant .assistant-launcher:hover {
+  background: var(--color-brand-hover);
+  border-color: rgb(182 164 119 / 65%);
 }
-#campus-assistant .assistant-hint {
-  border-color: var(--color-border);
-  background: var(--color-surface-soft);
-  box-shadow: 0 3px 16px #3b5b2920;
-}
-#campus-assistant .assistant-hint-btn {
-  color: var(--color-text-secondary);
-  font-size: var(--text-meta);
-}
-#campus-assistant .assistant-hint-badge {
-  color: var(--color-text-secondary);
-  background: var(--color-surface-soft);
+#campus-assistant .assistant-launcher.is-open {
+  width: 46px;
+  background: var(--color-ink);
+  border-color: rgb(255 255 255 / 15%);
 }
 #campus-assistant .assistant-aura-ring {
-  border-color: var(--color-border);
-}
-#campus-assistant .assistant-surf-trail,
-#campus-assistant .assistant-jet-trail {
-  background: radial-gradient(ellipse, #a6c98b80, transparent);
+  border-color: rgb(182 164 119 / 70%);
 }
 #campus-assistant .assistant-session-list > button {
-  color: var(--color-text-secondary);
-  background: var(--color-surface-soft);
+  color: var(--color-ink);
+  background: var(--color-surface);
   border-color: var(--color-border);
   border-radius: var(--radius-md);
+}
+#campus-assistant .assistant-session-list > button:hover {
+  border-color: var(--color-brand);
+  background: var(--color-surface-hover);
 }
 #campus-assistant .assistant-restored p {
   color: var(--color-text-secondary);
@@ -324,13 +369,13 @@
 }
 #campus-assistant .assistant-restored button,
 #campus-assistant .assistant-older {
-  color: var(--color-text-secondary);
+  color: var(--color-brand);
 }
 #campus-assistant .assistant-draft-scroll {
   color: var(--color-text-secondary);
 }
 #campus-assistant .assistant-draft-scroll h2 {
-  color: var(--color-text-secondary);
+  color: var(--color-heading);
 }
 #campus-assistant .assistant-draft-save,
 #campus-assistant .assistant-draft-input button {
@@ -441,72 +486,6 @@
   opacity: 0.5;
   cursor: wait;
 }
-#campus-assistant .assistant-summary {
-  color: var(--color-ink);
-  font-size: var(--text-body);
-}
-#campus-assistant .assistant-result {
-  background: var(--color-surface);
-  padding: 16px;
-}
-#campus-assistant .assistant-question {
-  background: var(--color-surface-active);
-  color: var(--color-ink);
-  padding: 12px 15px;
-}
-#campus-assistant .assistant-hint {
-  width: max-content;
-  max-width: min(390px, calc(100vw - 102px));
-  white-space: normal;
-}
-#campus-assistant .assistant-hint-btn {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  line-height: 1.6;
-}
-#campus-assistant .assistant-hint-close {
-  flex-shrink: 0;
-}
-.portal-motion-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  min-height: 34px;
-  padding: 4px 0;
-  color: var(--color-text-secondary);
-  background: none;
-  border: 0;
-  font-size: var(--text-meta);
-  white-space: nowrap;
-}
-.portal-motion-toggle > span {
-  width: 23px;
-  height: 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  position: relative;
-}
-.portal-motion-toggle > span::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--color-brand);
-  transition: transform 0.18s;
-}
-.portal-motion-toggle[aria-pressed='true'] > span::after {
-  transform: translateX(11px);
-}
-.portal-drawer-motion {
-  justify-content: flex-start;
-  padding: 14px 12px;
-  min-height: 50px;
-}
 .campus-portal.public-motion-reduced *,
 .campus-portal.public-motion-reduced *::before,
 .campus-portal.public-motion-reduced *::after,
@@ -519,20 +498,18 @@
 }
 
 @media (max-width: 760px) {
-  .portal-account-controls > .portal-motion-toggle {
-    display: none;
-  }
   #campus-assistant {
     right: 16px;
     bottom: 18px;
   }
   #campus-assistant .assistant-panel {
     position: fixed;
-    right: 12px;
-    left: 12px;
-    bottom: 82px;
-    width: auto;
-    height: min(740px, calc(100dvh - 108px));
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: min(82dvh, 640px);
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
   }
   #campus-assistant .assistant-head {
     padding: 15px 16px 12px;
@@ -558,45 +535,74 @@
 }
 
 @media print {
-  #campus-assistant,
-  .portal-motion-toggle {
+  #campus-assistant {
     display: none !important;
   }
 }
 
-#campus-assistant {
-  --brand: var(--color-brand);
-  --muted: var(--color-text-secondary);
-  --line: var(--color-border);
-}
-#campus-assistant .assistant-panel {
-  background: var(--color-surface);
-  box-shadow: var(--shadow-panel);
-}
-#campus-assistant .assistant-head strong,
-#campus-assistant .assistant-intro h2 {
-  color: var(--color-heading);
-  font-family: var(--campus-display-serif);
-}
-#campus-assistant .assistant-result h3 {
-  font-family: var(--campus-display-serif);
-  color: var(--color-heading);
-  font-size: 17px;
-  font-weight: 400;
-}
-#campus-assistant .assistant-tasks button[aria-pressed='true'] {
-  background: var(--color-surface-active);
-  color: var(--color-heading);
-  border-color: var(--color-border-strong);
-}
-#campus-assistant .assistant-send:hover:not(:disabled),
-#campus-assistant .assistant-draft-save:hover:not(:disabled) {
-  background: var(--color-brand-hover);
-}
-
-#campus-assistant .assistant-mode {
-  background: var(--color-surface-soft);
-}
 #campus-assistant .assistant-intro small {
   color: var(--color-text-secondary);
+}
+
+#campus-assistant .assistant-thinking {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-soft);
+}
+
+#campus-assistant .assistant-thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-heading);
+  font-size: var(--text-meta);
+  font-weight: 600;
+}
+
+#campus-assistant .assistant-thinking-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-gold);
+  animation: assistant-step-pulse 1.4s ease-in-out infinite;
+}
+
+#campus-assistant .assistant-thinking-steps {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0 0 0 15px;
+  border-left: 1px solid var(--color-border);
+  display: grid;
+  gap: 5px;
+}
+
+#campus-assistant .assistant-thinking-steps li {
+  color: var(--color-text-tertiary);
+  font-size: var(--text-meta);
+  line-height: 1.5;
+}
+
+#campus-assistant .assistant-thinking-steps li.active {
+  color: var(--color-brand);
+  font-weight: 500;
+}
+
+@keyframes assistant-step-pulse {
+  0%,
+  100% {
+    transform: scale(0.85);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.25);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #campus-assistant .assistant-thinking-dot {
+    animation: none;
+  }
 }

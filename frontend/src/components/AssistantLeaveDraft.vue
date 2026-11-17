@@ -44,7 +44,6 @@ const {
   prepare,
   restore,
   save,
-  finishLeave,
   allowLeave,
   keydown,
 } = useAssistantDraft<LeavePreviewFields, AssistantLeavePreview>({
@@ -210,21 +209,6 @@ defineExpose({ allowLeave });
       恢复最新进度
     </button>
     <p v-if="error" class="assistant-draft-error" role="alert">{{ error }}</p>
-    <Teleport to="body">
-      <dialog
-        ref="dialog"
-        class="assistant-draft-dialog"
-        aria-labelledby="assistant-draft-dialog-title"
-        @cancel.prevent="finishLeave(false)"
-      >
-        <h2 id="assistant-draft-dialog-title">请假预览有未暂存修改</h2>
-        <p>未暂存的修改会丢失；已核对的内容可从历史对话恢复。</p>
-        <div>
-          <button ref="cancelButton" @click="finishLeave(false)">继续填写</button>
-          <button @click="finishLeave(true)">放弃修改并离开</button>
-        </div>
-      </dialog>
-    </Teleport>
   </div>
 </template>
 <style scoped src="../styles/assistant-draft.css"></style>

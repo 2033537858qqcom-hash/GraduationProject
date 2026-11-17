@@ -28,11 +28,18 @@ public class AgentMissionTools {
     private final AgentRepairMissionTools repair;
     private final AgentLeaveMissionTools leave;
     private final AgentCertificateMissionTools certificate;
+    private final AgentHousingMissionTools housing;
     private final JsonMapper json=JsonMapper.builder().build();
     private final JsonMapper canonicalJson=JsonMapper.builder().enable(tools.jackson.databind.SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS).build();
-    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair,AgentLeaveMissionTools leave,AgentCertificateMissionTools certificate) {
-        this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;this.repair=repair;this.leave=leave;this.certificate=certificate;
+    @org.springframework.beans.factory.annotation.Autowired
+    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair,AgentLeaveMissionTools leave,AgentCertificateMissionTools certificate,AgentHousingMissionTools housing) {
+        this.planning=planning;this.schedules=schedules;this.reservations=reservations;this.rooms=rooms;this.jdbc=jdbc;this.repair=repair;this.leave=leave;this.certificate=certificate;this.housing=housing;
     }
+    public AgentMissionTools(AgentPlanningQueries planning,PersonalScheduleService schedules,VenueReservationService reservations,PhysicalRoomService rooms,JdbcClient jdbc,AgentRepairMissionTools repair,AgentLeaveMissionTools leave,AgentCertificateMissionTools certificate) {
+        this(planning,schedules,reservations,rooms,jdbc,repair,leave,certificate,null);
+    }
+    public boolean housing(State s){return "HOUSING".equals(s.kind);}
+    public HousingFields normalizeHousing(HousingFields fields){return housing.normalize(fields);}
     public boolean certificate(State s){return "CERTIFICATE".equals(s.kind);}
     public CertificateFields normalizeCertificate(CertificateFields fields){return certificate.normalize(fields);}
     public boolean leave(State s){return "LEAVE".equals(s.kind);}
@@ -64,6 +71,7 @@ public class AgentMissionTools {
     }
     private boolean scheduleBlocked(State state){return !state.scheduleStatus.equals("OK")||state.conflictCount>0;}
     public List<String> allowed(State state) {
+        if(housing(state))return housing.allowed(state);
         if(certificate(state))return certificate.allowed(state);
         if(leave(state))return leave.allowed(state);
         if(repair(state))return repair.allowed(state);
@@ -79,7 +87,7 @@ public class AgentMissionTools {
     private Outcome outcome(String action,String status,long count,String stage,State s){return new Outcome(stage,observation(action,status,count,s));}
     private void checkSchedule(CampusPrincipal user,State state) {
         var from=date(state.fields.startsAt());var to=date(state.fields.endsAt());
-        var schedule=schedules.mine(user,from.toLocalDate(),to.toLocalDate().plusDays(1));
+        var schedule=schedules.planningConflicts(user,from.toLocalDate(),to.toLocalDate().plusDays(1));
         var overlaps=schedule.events().stream().filter(e->e.startsAt().isBefore(to)&&e.endsAt().isAfter(from)).toList();
         state.conflictCount=overlaps.size();state.scheduleChecked=true;state.scheduleStatus=schedule.unavailableSources().isEmpty()?"OK":"PARTIAL";
         state.conflicts=overlaps.stream().limit(8).map(e->new Fact(e.key(),e.title(),e.startsAt()+"—"+e.endsAt()+" · "+(e.tentative()?"待审安排":"已有安排"),e.href())).toList();
@@ -97,12 +105,13 @@ public class AgentMissionTools {
         if(scheduleBlocked(state))throw changed("本人日程存在冲突或部分来源不可核对，请修改时段后重新规划");
         if(reservations.checkConflict(new CheckConflictCommand(venue.id(),date(state.fields.startsAt()),date(state.fields.endsAt()),null)).hasConflict())throw changed("场地已有新的占用，请重新选择时段或场地");
     }
-    public String fingerprint(State state,CampusPrincipal user){return certificate(state)?hash(certificate.fingerprint(state,user)):leave(state)?hash(leave.fingerprint(state,user)):repair(state)?hash(repair.fingerprint(state,user)):hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
+    public String fingerprint(State state,CampusPrincipal user){return housing(state)?hash(housing.fingerprint(state,user)):certificate(state)?hash(certificate.fingerprint(state,user)):leave(state)?hash(leave.fingerprint(state,user)):repair(state)?hash(repair.fingerprint(state,user)):hash(Map.of("fields",state.fields,"option",selected(state),"user",user.id(),"securityVersion",user.securityVersion()));}
     public String hash(Object input) {
         try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(canonicalJson.writeValueAsString(input).getBytes(StandardCharsets.UTF_8)));}
         catch(Exception failure){throw new IllegalStateException("任务请求摘要生成失败",failure);}
     }
     public void invalidate(State state,String message) {
+        if(housing(state)){housing.invalidate(state,message);return;}
         if(certificate(state)){certificate.invalidate(state,message);return;}
         if(leave(state)){leave.invalidate(state,message);return;}
         if(repair(state)){repair.invalidate(state,message);return;}
@@ -110,6 +119,7 @@ public class AgentMissionTools {
         state.scheduleChecked=false;state.venuesChecked=false;state.conflicts=List.of();state.conflictCount=0;state.message=message;state.missing=List.of("startsAt","endsAt","keyword");
     }
     public Outcome execute(CampusPrincipal user,String action,State state,String businessKey) {
+        if(housing(state))return housing.execute(user,action,state,businessKey,this::hash);
         if(certificate(state))return certificate.execute(user,action,state,businessKey,this::hash);
         if(leave(state))return leave.execute(user,action,state,businessKey,this::hash);
         if(repair(state))return repair.execute(user,action,state,businessKey,this::hash);
@@ -155,6 +165,7 @@ public class AgentMissionTools {
         }
     }
     public Business business(CampusPrincipal user,State state) {
+        if(housing(state))return housing.business(user,state);
         if(certificate(state))return certificate.business(user,state);
         if(leave(state))return leave.business(user,state);
         if(repair(state))return repair.business(user,state);

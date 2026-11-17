@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import DownloadLink from '../components/DownloadLink.vue';
-import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue';
+import FileDropZone from '../components/FileDropZone.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
+import { computed, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
+import { confirmDialog } from '../composables/useConfirm';
 import {
   BookOpen,
   CalendarDays,
@@ -15,10 +19,12 @@ import {
   GraduationCap,
 } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { shanghaiToday } from '../lib/format';
 import { currentUser } from '../stores/auth';
 import { readTeachingDraft, writeTeachingDraft } from '../lib/teachingDrafts';
 import type { TeachingDraft } from '../lib/teachingDrafts';
 import { learningLinkSelection } from '../lib/learningLink';
+import { TIMETABLE_PERIODS, TIMETABLE_WEEKDAYS, lessonsInSlot, type TimetablePeriodKey } from '../lib/timetable';
 import type {
   AcademicTerm,
   TeachingClass,
@@ -89,17 +95,18 @@ const busy = ref(false);
 const weekStart = ref('');
 const editing = ref<CourseMaterial | null>(null);
 const editorOpen = ref(false);
+const noticeFormOpen = ref(false);
+const expandedMaterialIds = ref<Record<number, boolean>>({});
+function toggleMaterialBody(id: number) {
+  expandedMaterialIds.value[id] = !expandedMaterialIds.value[id];
+}
 const form = reactive({ title: '', body: '' });
 const attachment = ref<File | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
+const fileInput = ref<InstanceType<typeof FileDropZone> | null>(null);
 const notice = reactive({ title: '', body: '', requestKey: crypto.randomUUID() });
 const restoredDraft = ref(false);
 const storageAvailable = ref(true);
 const missingAttachment = ref('');
-const confirmation = ref('');
-const confirmationDialog = ref<HTMLDialogElement | null>(null);
-const keepEditingButton = ref<HTMLButtonElement | null>(null);
-let resolveConfirmation: ((accepted: boolean) => void) | null = null;
 let hydratingDraft = false;
 const materialDirty = computed(
   () =>
@@ -128,8 +135,8 @@ function monday(value: string) {
 function displayDate(value: string) {
   return value.slice(0, 10).replaceAll('-', '/');
 }
-function dayLessons(day: string) {
-  return lessons.value.filter(l => l.startsAt.slice(0, 10) === day);
+function slotLessons(day: string, period: TimetablePeriodKey) {
+  return lessonsInSlot(lessons.value, day, period);
 }
 async function selectClass(id: number) {
   if (id === detail.value?.info.id) return;
@@ -222,7 +229,7 @@ async function load() {
     lessons.value = lessonRows;
     grades.value = gradeRows;
     exams.value = examRows;
-    const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date());
+    const today = shanghaiToday();
     weekStart.value = monday(
       linked?.date ??
         (today < (term.value?.startsOn ?? '')
@@ -245,23 +252,13 @@ async function changeTerm() {
     await router.replace({ query: { ...route.query, term: undefined, week: undefined } });
   else await load();
 }
-async function requestConfirmation(message: string) {
-  if (resolveConfirmation) finishConfirmation(false);
-  confirmation.value = message;
-  return new Promise<boolean>(resolve => {
-    resolveConfirmation = resolve;
-    void nextTick(() => {
-      confirmationDialog.value?.showModal();
-      keepEditingButton.value?.focus();
-    });
+function requestConfirmation(message: string) {
+  return confirmDialog(message, {
+    title: '处理未保存的内容',
+    confirmText: '确认继续',
+    cancelText: '继续编辑',
+    danger: true,
   });
-}
-function finishConfirmation(accepted: boolean) {
-  confirmationDialog.value?.close();
-  const resolve = resolveConfirmation;
-  resolveConfirmation = null;
-  confirmation.value = '';
-  resolve?.(accepted);
 }
 async function openEditor(material: CourseMaterial | null) {
   if (
@@ -278,7 +275,7 @@ async function openEditor(material: CourseMaterial | null) {
   missingAttachment.value = '';
   hydratingDraft = false;
   persistDraft();
-  if (fileInput.value) fileInput.value.value = '';
+  fileInput.value?.clear();
   error.value = '';
   success.value = '';
 }
@@ -370,7 +367,7 @@ function fileChanged(event: Event) {
 function removePendingAttachment() {
   attachment.value = null;
   missingAttachment.value = '';
-  if (fileInput.value) fileInput.value.value = '';
+  fileInput.value?.clear();
 }
 async function cancelEditor() {
   if (materialDirty.value && !(await requestConfirmation('继续会放弃当前资料的未保存内容，教学班通知会保留。'))) return;
@@ -441,7 +438,6 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
   persistDraft();
-  finishConfirmation(false);
   detailSequence++;
   loadSequence++;
   window.removeEventListener('beforeunload', beforeUnload);
@@ -450,37 +446,23 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="learning-page" :aria-busy="loading">
-    <dialog
-      ref="confirmationDialog"
-      class="draft-confirm"
-      aria-labelledby="draft-confirm-title"
-      @cancel.prevent="finishConfirmation(false)"
+    <ServicePageHeader
+      :context="teacher ? '教师教学服务' : '学生学习服务'"
+      :title="pageTitle"
+      :description="pageDescription"
     >
-      <h2 id="draft-confirm-title">处理未保存的内容</h2>
-      <p>{{ confirmation }}</p>
-      <div class="form-actions">
-        <button ref="keepEditingButton" type="button" class="button primary compact" @click="finishConfirmation(false)">
-          继续编辑
-        </button>
-        <button type="button" class="button compact" @click="finishConfirmation(true)">确认继续</button>
-      </div>
-    </dialog>
-    <div class="learning-heading">
-      <div>
-        <span class="portal-context">{{ teacher ? '教师教学服务' : '学生学习服务' }}</span>
-        <h1>{{ pageTitle }}</h1>
-        <p class="muted">{{ pageDescription }}</p>
-      </div>
-      <div class="term-picker">
-        <span class="picker-label">学期</span>
-        <BaseSelect
-          v-model="termId"
-          :options="terms.map(t => ({ value: t.id, label: t.name }))"
-          :disabled="loading || busy"
-          @change="changeTerm"
-        />
-      </div>
-    </div>
+      <template #actions>
+        <div class="term-picker">
+          <span class="picker-label">学期</span>
+          <BaseSelect
+            v-model="termId"
+            :options="terms.map(t => ({ value: t.id, label: t.name }))"
+            :disabled="loading || busy"
+            @change="changeTerm"
+          />
+        </div>
+      </template>
+    </ServicePageHeader>
     <nav ref="navRef" class="learning-tabs" :aria-label="teacher ? '教学服务栏目' : '学习服务栏目'">
       <RouterLink v-if="!teacher" to="/portal/schedule">
         <CalendarDays :size="16" aria-hidden="true" />
@@ -509,7 +491,7 @@ onBeforeUnmount(() => {
       <button class="text-button" :disabled="busy" @click="load">刷新数据</button>
     </p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
-    <p v-if="loading && !terms.length" class="loading-state" role="status">正在读取教学信息…</p>
+    <SkeletonBlock v-if="loading && !terms.length" variant="split" :rows="4" label="正在读取教学信息…" />
     <p v-else-if="!terms.length" class="empty-state">尚未维护学期，请联系教务信息维护岗位。</p>
     <template v-else-if="tab === 'courses'">
       <p v-if="!classes.length" class="empty-state">本学期暂无{{ teacher ? '有效授课' : '已关联' }}教学班。</p>
@@ -533,7 +515,7 @@ onBeforeUnmount(() => {
           </button>
         </aside>
         <section class="portal-panel course-detail">
-          <p v-if="detailLoading" class="loading-state" role="status">正在读取教学班…</p>
+          <SkeletonBlock v-if="detailLoading" variant="detail" label="正在读取教学班…" />
           <template v-else-if="detail">
             <p v-if="teacher && hasDraft" class="draft-hint" role="status">
               {{ restoredDraft ? '已恢复此教学班未提交的内容。' : '未提交内容已暂存。'
@@ -554,7 +536,10 @@ onBeforeUnmount(() => {
               <button v-if="teacher" class="button" :disabled="busy" @click="openEditor(null)">新建资料</button>
             </div>
             <form v-if="teacher && editorOpen" class="learning-form" @submit.prevent="saveMaterial">
-              <h3>{{ editing ? '编辑课程资料' : '新建课程资料' }}</h3>
+              <div class="section-heading">
+                <h3>{{ editing ? '编辑课程资料' : '新建课程资料' }}</h3>
+                <button type="button" class="button compact" :disabled="busy" @click="cancelEditor">收起表单 ×</button>
+              </div>
               <fieldset :disabled="busy">
                 <label>
                   资料标题
@@ -564,13 +549,21 @@ onBeforeUnmount(() => {
                   正文
                   <textarea v-model="form.body" required maxlength="20000" rows="5" />
                 </label>
-                <label>
-                  附件（可选）
-                  <input ref="fileInput" type="file" accept=".pdf,.txt" @change="fileChanged" />
-                  <small class="muted">
-                    PDF 或 UTF-8 文本，最大 2 MB{{ editing?.fileName ? '；已有附件：' + editing.fileName : '' }}
-                  </small>
-                </label>
+                <div class="learning-attachment-field">
+                  <FileDropZone
+                    ref="fileInput"
+                    compact
+                    accept=".pdf,.txt"
+                    :file-name="attachment?.name ?? ''"
+                    title="选择或拖入课程附件（可选）"
+                    :hint="`PDF 或 UTF-8 文本，最大 2 MB${editing?.fileName ? '；已有附件：' + editing.fileName : ''}`"
+                    @change="fileChanged"
+                    @clear="
+                      attachment = null;
+                      missingAttachment = '';
+                    "
+                  />
+                </div>
               </fieldset>
               <p v-if="attachment || missingAttachment" class="muted">
                 {{
@@ -601,7 +594,18 @@ onBeforeUnmount(() => {
                   }}
                 </span>
               </div>
-              <p class="preserve-lines">{{ m.body }}</p>
+              <p class="preserve-lines">
+                {{ m.body.length > 180 && !expandedMaterialIds[m.id] ? m.body.slice(0, 180).trimEnd() + '…' : m.body }}
+              </p>
+              <button
+                v-if="m.body.length > 180"
+                type="button"
+                class="text-button"
+                style="margin-bottom: 6px"
+                @click="toggleMaterialBody(m.id)"
+              >
+                {{ expandedMaterialIds[m.id] ? '收起正文 ▴' : '展开全文 ▾' }}
+              </button>
               <small class="muted">{{ m.authorName }} · {{ displayDate(m.updatedAt) }}</small>
               <div class="entry-actions">
                 <DownloadLink v-if="m.fileName" class="text-button" :href="'/api/teaching-files/' + m.id">
@@ -639,11 +643,22 @@ onBeforeUnmount(() => {
                 </template>
               </div>
             </article>
-            <h3 class="subsection-heading">
-              <Bell :size="16" />
-              教学班通知
-            </h3>
-            <form v-if="teacher" class="learning-form" @submit.prevent="publishNotice">
+            <div class="section-heading" style="margin-top: 20px">
+              <h3 class="subsection-heading" style="margin: 0">
+                <Bell :size="16" />
+                教学班通知
+              </h3>
+              <button
+                v-if="teacher"
+                type="button"
+                class="button compact"
+                :disabled="busy"
+                @click="noticeFormOpen = !noticeFormOpen"
+              >
+                {{ noticeFormOpen ? '收起通知表单 ×' : '发布班级通知' }}
+              </button>
+            </div>
+            <form v-if="teacher && noticeFormOpen" class="learning-form" @submit.prevent="publishNotice">
               <fieldset :disabled="busy">
                 <label>
                   通知标题
@@ -728,28 +743,43 @@ onBeforeUnmount(() => {
       </div>
       <p class="muted no-print">导出当前所选周的课程安排；下载 PDF 后可用阅读器打印。</p>
       <div class="week-scroll">
-        <div class="week-grid">
-          <div v-for="(day, n) in days" :key="day" class="week-day">
-            <div class="week-day-heading">
-              {{ ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][n] }}
-              <small>{{ day.slice(5).replace('-', '/') }}</small>
-            </div>
-            <article v-for="l in dayLessons(day)" :key="l.id" class="week-lesson">
-              <small>{{ l.startsAt.slice(11, 16) }}—{{ l.endsAt.slice(11, 16) }}</small>
-              <strong>{{ l.courseName }}</strong>
-              <span>{{ l.classroom }}</span>
-              <span>{{ l.campusName }}</span>
-              <span>{{ teacher ? l.className : l.teacherName }}</span>
-            </article>
-            <p v-if="!dayLessons(day).length" class="day-empty">无课程</p>
-          </div>
-        </div>
+        <table class="week-schedule-table" aria-label="每周时段课程表">
+          <thead>
+            <tr>
+              <th scope="col" class="week-period-col">时段</th>
+              <th v-for="(day, n) in days" :key="day" scope="col" class="week-day-heading">
+                {{ TIMETABLE_WEEKDAYS[n] }}
+                <small>{{ day.slice(5).replace('-', '/') }}</small>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="period in TIMETABLE_PERIODS" :key="period.key">
+              <th scope="row" class="week-period-heading">
+                <strong>{{ period.label }}</strong>
+                <small>{{ period.range }}</small>
+              </th>
+              <td v-for="day in days" :key="`${day}-${period.key}`" class="week-slot-cell">
+                <div v-if="slotLessons(day, period.key).length" class="week-slot-list">
+                  <article v-for="l in slotLessons(day, period.key)" :key="l.id" class="week-lesson">
+                    <small>{{ l.startsAt.slice(11, 16) }}—{{ l.endsAt.slice(11, 16) }}</small>
+                    <strong>{{ l.courseName }}</strong>
+                    <span>{{ l.classroom }}</span>
+                    <span>{{ l.campusName }}</span>
+                    <span>{{ teacher ? l.className : l.teacherName }}</span>
+                  </article>
+                </div>
+                <span v-else class="week-cell-empty" aria-label="本时段无课程">—</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
       </div>
     </section>
     <section v-else-if="tab === 'grades'" class="portal-panel">
       <div class="section-heading">
         <div>
-          <span class="eyebrow">ACADEMIC RECORD</span>
+          <span class="eyebrow">成绩记录</span>
           <h2>已发布成绩</h2>
         </div>
         <span class="muted">{{ grades.length }} 门课程</span>
@@ -779,7 +809,7 @@ onBeforeUnmount(() => {
     <section v-else class="portal-panel">
       <div class="section-heading">
         <div>
-          <span class="eyebrow">EXAM SCHEDULE</span>
+          <span class="eyebrow">考务安排</span>
           <h2>考试安排</h2>
         </div>
         <span class="muted">{{ exams.length }} 场已发布考试</span>

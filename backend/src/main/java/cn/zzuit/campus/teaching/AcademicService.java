@@ -18,8 +18,9 @@ public class AcademicService {
     private final TeachingService teaching;
     private final TeachingScheduleService schedule;
     private final RoomService rooms;
-    public AcademicService(JdbcClient jdbc,TeachingService teaching,TeachingScheduleService schedule,RoomService rooms) {
-        this.jdbc=jdbc; this.teaching=teaching; this.schedule=schedule; this.rooms=rooms;
+    private final cn.zzuit.campus.notice.NoticeWriter notices;
+    public AcademicService(JdbcClient jdbc,TeachingService teaching,TeachingScheduleService schedule,RoomService rooms,cn.zzuit.campus.notice.NoticeWriter notices) {
+        this.jdbc=jdbc; this.teaching=teaching; this.schedule=schedule; this.rooms=rooms; this.notices=notices;
     }
 
     private long department(CampusPrincipal user) {
@@ -32,7 +33,7 @@ public class AcademicService {
         var courses=jdbc.sql("SELECT * FROM course ORDER BY code").query((r,n)->new Course(r.getLong("id"),r.getString("code"),r.getString("name"),r.getBigDecimal("credits"))).list();
         var classes=jdbc.sql("""
             SELECT tc.id,tc.term_id,tc.course_id,tc.name,c.name course_name,c.credits,d.name department_name,
-            (SELECT COUNT(*) FROM teaching_member m WHERE m.class_id=tc.id AND m.active=TRUE) member_count
+            (SELECT COUNT(*) FROM teaching_member m JOIN app_user u ON u.id=m.student_id AND u.enabled=TRUE WHERE m.class_id=tc.id AND m.active=TRUE) member_count
             FROM teaching_class tc JOIN course c ON c.id=tc.course_id JOIN department d ON d.id=tc.department_id
             WHERE tc.department_id=:d ORDER BY tc.id DESC
             """).param("d",department).query((r,n)->new ClassInfo(r.getLong("id"),r.getLong("term_id"),r.getLong("course_id"),r.getString("name"),r.getString("course_name"),r.getBigDecimal("credits"),r.getString("department_name"),r.getLong("member_count"))).list();
@@ -147,7 +148,7 @@ public class AcademicService {
                 id=old.get().id();
                 if (jdbc.sql("UPDATE academic_grade SET score=:s,status='DRAFT',version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v")
                     .param("s",row.score()).param("id",id).param("v",row.version()).update()!=1) teaching.conflict("成绩版本已变化，请刷新后重试");
-                if (old.get().status().equals("PUBLISHED")) personalNotice(row.studentId(),"成绩信息正在更正","你的课程成绩正在更正，发布后可在我的学习中查看。原始记录已保留审计。");
+                if (old.get().status().equals("PUBLISHED")) notices.write(row.studentId(),"成绩信息正在更正","TEACHING",classId,"LEARN","你的课程成绩正在更正，发布后可在我的学习中查看。原始记录已保留审计。");
             }
             teaching.audit(classId,user.id(),"GRADE_DRAFT",id,"学生 "+row.studentId()+"；原记录 "+(old.isEmpty()?"无":old.get().score()+" / "+old.get().status()+" / v"+old.get().version())+"；新成绩 "+row.score()+" / DRAFT");
         }
@@ -164,7 +165,7 @@ public class AcademicService {
         if (jdbc.sql("UPDATE academic_grade SET status=:s,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=:id AND version=:v")
             .param("s",input.status()).param("id",id).param("v",input.version()).update()!=1) teaching.conflict("成绩版本已变化，请刷新后重试");
         teaching.audit(classId,user.id(),"GRADE_"+input.status(),id,old.courseName()+"："+old.score());
-        personalNotice(old.studentId(),input.status().equals("PUBLISHED")?"课程成绩已发布":"课程成绩已撤下","请在我的学习中查看当前已发布成绩。具体结果仅在本人查询页面展示。");
+        notices.write(old.studentId(),input.status().equals("PUBLISHED")?"课程成绩已发布":"课程成绩已撤下","TEACHING",classId,"LEARN","请在我的学习中查看当前已发布成绩。具体结果仅在本人查询页面展示。");
         return teaching.gradesForClass(classId).stream().filter(g->g.id()==id).findFirst().orElseThrow(teaching::notFound);
     }
     @Transactional
@@ -207,8 +208,5 @@ public class AcademicService {
         teaching.audit(classId,user.id(),"EXAM_"+input.status(),id,exam.startsAt()+" / "+exam.classroom());
         teaching.notifyMembers(classId,input.status().equals("PUBLISHED")?"考试安排已发布":"考试安排已撤下","请在我的学习中查看当前有效的考试安排。");
         return teaching.examsForClass(classId).get(0);
-    }
-    private void personalNotice(long student,String title,String body) {
-        jdbc.sql("INSERT INTO user_notice(user_id,title,body) VALUES(:u,:t,:b)").param("u",student).param("t",title).param("b",body).update();
     }
 }

@@ -56,6 +56,45 @@ export interface AssistantCapabilities {
   tools: { name: string; title: string }[]
   message: string
 }
+export interface AssistantFeedbackSummary {
+  runId: string
+  rating: 'UP' | 'DOWN'
+  comment: string | null
+  updatedAt: string
+}
+export interface AssistantRunMetrics {
+  totalRuns: number
+  successRuns: number
+  partialRuns: number
+  failedRuns: number
+  refusedRuns: number
+  avgDurationMs: number
+  totalPromptTokens: number
+  totalCompletionTokens: number
+  topTools: string[]
+  upFeedbacks: number
+  downFeedbacks: number
+}
+export interface AssistantOverviewMetrics extends AssistantRunMetrics {
+  activeUsers: number
+  p95DurationMs?: number
+  outcomeCounts?: Record<string, number>
+  negativeReasons?: string[]
+}
+export interface AssistantBriefing {
+  unreadNotices: number
+  pendingReviews: number
+  housingExpiringNote: string | null
+  suggestions: string[]
+}
+export interface AssistantPhotoAnalysis {
+  category: string
+  suggestedTitle: string
+  suggestedDescription: string
+  resolution: string
+  modelUsed: boolean
+  summary: string
+}
 export function assistantContext(path: string, id: unknown): AssistantContext | null {
   if (
     path === '/portal/payments' &&
@@ -82,6 +121,12 @@ export function assistantContext(path: string, id: unknown): AssistantContext | 
 export function safeAssistantDestination(value: unknown): string | null {
   if (typeof value !== 'string') return null
   if (/^\/portal\/payments(?:\?id=[1-9]\d{0,14}&tab=details)?$/.test(value)) return value
+  if (
+    /^\/portal\/payments\?tab=dorm&dormCategory=(?:ELECTRICITY|WATER)&dormMode=(?:AMOUNT|QUANTITY)&dormValue=[A-Za-z0-9.%+-]{1,24}$/.test(
+      value,
+    )
+  )
+    return value
   if (/^\/finance\/payments\?tab=reconciliation(?:&case=[1-9]\d{0,14})?$/.test(value)) return value
   if (reservationSearchSelection(value)) return value
   if (/^\/portal\/reservations\?tab=mine(?:&status=[A-Z_]+)?$/.test(value)) {
@@ -93,7 +138,7 @@ export function safeAssistantDestination(value: unknown): string | null {
     return value
   if (/^\/assistant\/guides\/[a-z0-9][a-z0-9-]{0,79}$/.test(value)) return value
   if (
-    /^\/(?:portal(?:\/(?:affairs|notices|reservations|learning(?:\/(?:timetable|grades|exams))?))?|workbench|profile|notices|teaching(?:\/timetable)?|academic|admin\/content|student-affairs\/(?:leave|certificates|housing|reservations))$/.test(
+    /^\/(?:portal(?:\/(?:affairs|notices|reservations|learning(?:\/(?:timetable|grades|exams))?))?|workbench|profile|notices|teaching(?:\/timetable)?|academic|admin\/content|student-affairs\/(?:leave|certificates|housing|reservations)|housing\/assignments|payment-bases)$/.test(
       value,
     )
   )

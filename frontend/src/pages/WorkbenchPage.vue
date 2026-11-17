@@ -19,8 +19,10 @@ import {
   Wrench,
 } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import type { AssistantOverviewMetrics } from '../lib/assistant';
 import { currentUser } from '../stores/auth';
 import ServiceEntry from '../components/ServiceEntry.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { useTaskQueue } from '../composables/useTaskQueue';
 import { defaultWorkspaceCode, workspaceEntryVisible } from '../lib/workbenchWorkspace';
 import type { TaskDomain, WorkbenchOverview, WorkspaceInfo } from '../workbench';
@@ -66,6 +68,7 @@ const { indicatorStyle: taskFilterPillStyle } = useSlidingIndicator(taskFilterPi
   activeSelector: '.task-pill-btn.active',
 });
 const showAllServices = ref(false);
+const assistantOverview = ref<AssistantOverviewMetrics | null>(null);
 
 const activeWorkspace = computed(() => {
   return workspaces.value.find(w => w.code === activeWorkspaceCode.value) || workspaces.value[0] || null;
@@ -155,6 +158,17 @@ async function loadOverview() {
       const preferred = defaultWorkspaceCode(workspaces.value);
       if (preferred) selectWorkspace(preferred);
     }
+    if (foundation.value) {
+      api<AssistantOverviewMetrics>('/assistant/metrics/overview', { cacheTtl: 15_000 })
+        .then(data => {
+          if (request === overviewRequest) assistantOverview.value = data;
+        })
+        .catch(() => {
+          /* Keep workbench overview functional if assistant metrics fail. */
+        });
+    } else {
+      assistantOverview.value = null;
+    }
   } catch (cause) {
     if (request === overviewRequest) error.value = errorMessage(cause);
   } finally {
@@ -173,7 +187,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="workbench-page campus-workbench">
     <div class="workbench-toolbar">
-      <span>WORKSPACE / 校园事务办理</span>
+      <span>校园事务工作台</span>
       <button class="button compact" :disabled="loading || taskLoading" @click="loadOverview">
         <RefreshCw :size="14" />
         刷新工作台
@@ -207,11 +221,20 @@ onBeforeUnmount(() => {
           {{ activeWorkspace?.roleTitle ?? '岗位工作台' }} · {{ activeWorkspace?.name ?? '工作空间' }}
         </span>
         <h1>{{ activeWorkspace?.name ?? '岗位工作台' }}</h1>
-        <p>
-          <span v-if="currentUser?.departmentName && !activeWorkspace?.scopeNote.includes(currentUser.departmentName)">
-            {{ currentUser.departmentName }} ·
+        <p v-if="currentUser?.departmentName || activeWorkspace?.scopeNote">
+          <span v-if="currentUser?.departmentName && !activeWorkspace?.scopeNote?.includes(currentUser.departmentName)">
+            {{ currentUser.departmentName }}
           </span>
-          <span>{{ activeWorkspace?.scopeNote }}</span>
+          <span
+            v-if="
+              currentUser?.departmentName &&
+              !activeWorkspace?.scopeNote?.includes(currentUser.departmentName) &&
+              activeWorkspace?.scopeNote
+            "
+          >
+            ·
+          </span>
+          <span v-if="activeWorkspace?.scopeNote">{{ activeWorkspace.scopeNote }}</span>
         </p>
       </div>
       <div class="workbench-pending-summary" aria-label="已读取的待办数量">
@@ -281,7 +304,12 @@ onBeforeUnmount(() => {
               重新读取
             </button>
           </div>
-          <p v-if="loading || (taskLoading && !tasks.length)" class="loading-state" role="status">正在读取待办…</p>
+          <SkeletonBlock
+            v-if="loading || (taskLoading && !tasks.length)"
+            variant="list"
+            :rows="5"
+            label="正在读取待办…"
+          />
           <div v-else-if="taskError" class="alert" role="alert">
             {{ taskError }}
             <button class="text-button" @click="loadTasks(taskFilter, currentPage)">重试</button>
@@ -627,6 +655,35 @@ onBeforeUnmount(() => {
             <UserRound :size="14" />
           </RouterLink>
         </div>
+        <div v-if="foundation && assistantOverview" class="workspace-scope-copy assistant-overview-box">
+          <span class="eyebrow">AI 助手运行概览</span>
+          <h3>全平台服务指标</h3>
+          <dl>
+            <div>
+              <dt>累计查询</dt>
+              <dd>{{ assistantOverview.totalRuns }} 次（{{ assistantOverview.activeUsers }} 位用户）</dd>
+            </div>
+            <div>
+              <dt>成功与响应</dt>
+              <dd>
+                {{ assistantOverview.successRuns }} 次成功 · 均耗 {{ assistantOverview.avgDurationMs }} ms
+                <template v-if="assistantOverview.p95DurationMs !== undefined">
+                  · P95 {{ assistantOverview.p95DurationMs }} ms
+                </template>
+              </dd>
+            </div>
+            <div>
+              <dt>用户评价</dt>
+              <dd>{{ assistantOverview.upFeedbacks }} 赞 / {{ assistantOverview.downFeedbacks }} 待改进</dd>
+            </div>
+          </dl>
+          <p v-if="assistantOverview.negativeReasons?.length" class="workspace-scope-note">
+            高频反馈问题：{{ assistantOverview.negativeReasons.slice(0, 3).join(' · ') }}
+          </p>
+          <p v-if="assistantOverview.topTools.length" class="workspace-scope-note">
+            热门能力：{{ assistantOverview.topTools.slice(0, 3).join(' · ') }}
+          </p>
+        </div>
       </aside>
     </div>
   </div>
@@ -677,10 +734,10 @@ onBeforeUnmount(() => {
   font-size: var(--text-supporting);
   font-weight: 500;
   padding: 4px 10px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: color 0.15s ease;
-  outline: none !important;
+  outline: none;
 }
 .task-pill-btn:hover:not(.active) {
   background: var(--color-surface);
@@ -688,13 +745,13 @@ onBeforeUnmount(() => {
   border-color: var(--color-border-strong);
 }
 .task-pill-btn:focus:not(:focus-visible) {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 .task-pill-btn.active {
-  background: transparent !important;
+  background: transparent;
   color: var(--color-white);
-  border-color: transparent !important;
+  border-color: transparent;
   font-weight: 600;
 }
 .task-filter-pill-indicator {
@@ -703,9 +760,9 @@ onBeforeUnmount(() => {
   bottom: 0;
   left: 0;
   background: var(--color-brand);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   pointer-events: none;
-  box-shadow: 0 1px 3px rgb(36, 75, 120, 0.28);
+  box-shadow: 0 1px 3px rgb(49 82 68 / 24%);
   transition:
     transform 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05),
     width 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05);
@@ -726,18 +783,19 @@ onBeforeUnmount(() => {
   padding: 16px 18px;
   background: var(--color-white);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.04);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 1px 2px rgb(41 62 52 / 4%);
   transition:
     border-color 0.2s,
     box-shadow 0.2s;
 }
 .workbench-task-card:hover {
   border-color: var(--color-border-strong);
-  box-shadow: 0 4px 12px rgb(15, 23, 42, 0.06);
+  box-shadow: 0 4px 12px rgb(41 62 52 / 6%);
 }
 .workbench-task-card.urgent-task {
-  border-left: 4px solid var(--color-danger);
+  border-color: var(--color-danger-border);
+  border-top: 2px solid var(--color-danger);
 }
 .task-card-header {
   display: flex;
@@ -760,17 +818,17 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-md);
   background: var(--color-danger-soft);
   color: var(--color-danger);
-  border: 1px solid #fecaca;
+  border: 1px solid var(--color-danger-border);
 }
 .task-status-pill {
   margin-left: auto;
   font-size: var(--text-meta);
   font-weight: 500;
-  color: var(--color-info);
-  background: var(--color-info-soft);
+  color: var(--color-brand);
+  background: var(--color-surface-active);
   padding: 2px 8px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--color-info-soft);
+  border: 1px solid var(--color-border-strong);
 }
 .task-title {
   font-size: var(--text-body);
@@ -813,7 +871,7 @@ onBeforeUnmount(() => {
   transition: background 0.15s;
 }
 .task-action-btn:hover {
-  background: #1b385a;
+  background: var(--color-night-surface);
 }
 .workbench-tasks-empty {
   padding: 24px 16px;
@@ -860,5 +918,15 @@ onBeforeUnmount(() => {
   .workbench-task-grid {
     grid-template-columns: 1fr;
   }
+}
+.assistant-overview-box {
+  margin-top: 16px;
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: 16px;
+}
+.assistant-overview-box h3 {
+  margin: 4px 0 10px;
+  font-size: var(--text-body);
+  color: var(--color-ink);
 }
 </style>

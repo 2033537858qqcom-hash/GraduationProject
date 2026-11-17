@@ -1,27 +1,21 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { api, errorMessage } from '../lib/api';
+import { api } from '../lib/api';
+import { formatDateTime } from '../lib/format';
+import { useRequest } from '../composables/useRequest';
 import type { AssistantGuide } from '../lib/assistant';
-const route = useRoute(),
-  guide = ref<AssistantGuide | null>(null),
-  error = ref(''),
-  loading = ref(false);
-let sequence = 0;
-async function load() {
-  const current = ++sequence;
-  guide.value = null;
-  error.value = '';
-  loading.value = true;
-  try {
-    const result = await api<AssistantGuide>('/assistant/guides/' + encodeURIComponent(String(route.params.slug)));
-    if (current === sequence) guide.value = result;
-  } catch (cause) {
-    if (current === sequence) error.value = errorMessage(cause);
-  } finally {
-    if (current === sequence) loading.value = false;
-  }
-}
+const route = useRoute();
+const {
+  data: guide,
+  error,
+  loading,
+  run: fetchGuide,
+} = useRequest(
+  (signal, slug: string) => api<AssistantGuide>('/assistant/guides/' + encodeURIComponent(slug), { signal }),
+  { immediate: false, keepPrevious: false },
+);
+const load = () => fetchGuide(String(route.params.slug));
 watch(() => route.params.slug, load, { immediate: true });
 </script>
 <template>
@@ -34,7 +28,7 @@ watch(() => route.params.slug, load, { immediate: true });
     </p>
     <template v-if="guide">
       <h1>{{ guide.title }}</h1>
-      <p class="muted">版本 V{{ guide.version }} · 更新 {{ guide.updatedAt.replace('T', ' ').slice(0, 16) }}</p>
+      <p class="muted">版本 V{{ guide.version }} · 更新 {{ formatDateTime(guide.updatedAt) }}</p>
       <div class="assistant-guide-body">{{ guide.body }}</div>
     </template>
   </article>
@@ -48,9 +42,9 @@ watch(() => route.params.slug, load, { immediate: true });
   white-space: pre-wrap;
   line-height: 2.1;
   font-size: var(--text-reading);
-  color: #425c77;
-  background: white;
-  border: 1px solid #e0e7ef;
+  color: var(--color-ink);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
   padding: 28px 32px;
   margin-top: 24px;
   border-radius: var(--radius-md);
@@ -58,7 +52,7 @@ watch(() => route.params.slug, load, { immediate: true });
 }
 .assistant-guide-page h1 {
   font-size: 28px;
-  color: #294c73;
+  color: var(--color-heading);
 }
 
 @media (max-width: 600px) {

@@ -1,44 +1,28 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft, ArrowUpRight } from '@lucide/vue';
-import { api, errorMessage } from '../lib/api';
+import { api } from '../lib/api';
+import { useRequest } from '../composables/useRequest';
 import type { PublicContent } from '../types';
 import { contentOrigin, contentParagraphs, formatPublicDate, publicSource } from '../lib/publicReading';
 const route = useRoute();
-const content = ref<PublicContent | null>(null);
-const error = ref('');
-const loading = ref(false);
+const {
+  data: content,
+  error,
+  loading,
+  run: fetchContent,
+} = useRequest(
+  (signal, slug: string) =>
+    api<PublicContent>('/public/content/' + encodeURIComponent(slug), { signal, cacheTtl: 30_000 }),
+  { immediate: false, keepPrevious: false },
+);
 const origin = computed(() => contentOrigin(route.params.slug, route.query.from));
 const source = computed(() => publicSource(content.value?.sourceUrl));
 const paragraphs = computed(() => contentParagraphs(content.value?.body ?? ''));
 const date = computed(() => formatPublicDate(content.value?.publishedAt));
-let generation = 0;
-let controller: AbortController | undefined;
-async function load() {
-  const ticket = ++generation;
-  controller?.abort();
-  const request = new AbortController();
-  controller = request;
-  content.value = null;
-  error.value = '';
-  loading.value = true;
-  try {
-    const result = await api<PublicContent>('/public/content/' + encodeURIComponent(String(route.params.slug)), {
-      signal: request.signal,
-    });
-    if (ticket === generation) content.value = result;
-  } catch (cause) {
-    if (ticket === generation && !request.signal.aborted) error.value = errorMessage(cause);
-  } finally {
-    if (ticket === generation) loading.value = false;
-  }
-}
+const load = () => fetchContent(String(route.params.slug));
 watch(() => route.params.slug, load, { immediate: true });
-onUnmounted(() => {
-  generation++;
-  controller?.abort();
-});
 </script>
 <template>
   <article class="public-article campus-article page-width">
@@ -53,7 +37,7 @@ onUnmounted(() => {
     </div>
     <template v-if="content">
       <header class="article-heading">
-        <span class="article-eyebrow">{{ origin.name }} / PUBLIC INFORMATION</span>
+        <span class="article-eyebrow">{{ origin.name }} · 公开信息</span>
         <h1>{{ content.title }}</h1>
         <div class="article-meta">
           <span>{{ content.sourceType === 'DEMO' ? '毕业设计演示内容' : '学校公开资料' }}</span>
@@ -69,13 +53,24 @@ onUnmounted(() => {
         </div>
         <aside class="article-context" aria-label="资料来源">
           <h2>资料来源</h2>
-          <p>
-            {{ content.sourceType === 'DEMO' ? '平台演示说明' : '学校公开资料' }}
-            <template v-if="source">
-              <br />
-              {{ source.host }}
-            </template>
-          </p>
+          <dl class="article-context-list">
+            <div>
+              <dt>所属栏目</dt>
+              <dd>{{ origin.name }}</dd>
+            </div>
+            <div>
+              <dt>资料性质</dt>
+              <dd>{{ content.sourceType === 'DEMO' ? '平台演示说明' : '学校公开资料' }}</dd>
+            </div>
+            <div v-if="date">
+              <dt>发布日期</dt>
+              <dd>{{ date }}</dd>
+            </div>
+            <div v-if="source">
+              <dt>来源站点</dt>
+              <dd>{{ source.host }}</dd>
+            </div>
+          </dl>
           <a v-if="source" :href="source.href" target="_blank" rel="noopener noreferrer">
             查看原始来源
             <ArrowUpRight :size="14" />

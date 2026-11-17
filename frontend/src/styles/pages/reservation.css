@@ -26,15 +26,15 @@
   gap: 4px;
   background: var(--color-surface-soft);
   padding: 3px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-xs);
   border: 1px solid var(--color-border);
 }
 
 .category-pills button {
   position: relative;
   z-index: 1;
-  padding: 6px 15px;
-  border-radius: var(--radius-pill);
+  padding: 6px 14px;
+  border-radius: var(--radius-xs);
   border: 0;
   background: transparent;
   font-size: var(--text-supporting);
@@ -42,22 +42,22 @@
   color: var(--color-text-secondary);
   cursor: pointer;
   transition: color 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  outline: none !important;
+  outline: none;
 }
 
 .category-pills button:hover:not(.active) {
-  color: #0f172a;
+  color: var(--color-ink);
 }
 
 .category-pills button:focus:not(:focus-visible) {
-  outline: none !important;
-  box-shadow: none !important;
+  outline: none;
+  box-shadow: none;
 }
 
 .category-pills button.active {
   color: var(--color-white);
   font-weight: 600;
-  background: transparent !important;
+  background: transparent;
 }
 
 .category-pill-indicator {
@@ -66,8 +66,8 @@
   bottom: 3px;
   left: 0;
   background: var(--brand, var(--color-brand));
-  border-radius: var(--radius-pill);
-  box-shadow: 0 1px 3px rgb(36, 75, 120, 0.28);
+  border-radius: var(--radius-xs);
+  box-shadow: 0 1px 3px rgb(49 82 68 / 28%);
   pointer-events: none;
   transition:
     transform 0.28s cubic-bezier(0.2, 0.85, 0.32, 1.05),
@@ -150,8 +150,8 @@
 }
 
 .venue-category-badge.venue {
-  background: var(--color-info-soft);
-  color: var(--color-info);
+  background: var(--color-surface-active);
+  color: var(--color-brand);
 }
 
 .venue-category-badge.equipment {
@@ -234,7 +234,7 @@
 
 /* Reservation Details Drawer */
 .reservation-detail-panel {
-  border-top: 3px solid var(--brand, #1e3a8a);
+  border-top: 3px solid var(--brand, var(--color-brand));
 }
 
 .detail-header-status {
@@ -248,7 +248,7 @@
   position: relative;
   background: linear-gradient(135deg, var(--color-success-soft) 0%, var(--color-white) 100%);
   border: 2px solid #86efac;
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-sm);
   padding: 22px;
   margin: 16px 0 24px;
   box-shadow: 0 4px 16px rgb(16, 185, 129, 0.08);
@@ -390,7 +390,7 @@
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(15, 23, 42, 0.45);
+  background: rgb(33 60 53 / 45%);
   backdrop-filter: blur(2px);
   z-index: 999;
   display: flex;
@@ -442,7 +442,7 @@
 
 .close-icon-btn:hover {
   background: var(--color-surface-soft);
-  color: #0f172a;
+  color: var(--color-ink);
 }
 
 .form-grid-two {
@@ -480,19 +480,22 @@
 }
 
 .chip-btn {
-  background: white;
+  background: var(--color-white);
   border: 1px solid var(--color-border-strong);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-xs);
   padding: 3px 10px;
   font-size: var(--text-supporting);
   cursor: pointer;
   color: var(--color-ink);
-  transition: all 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease;
 }
 
 .chip-btn:hover {
-  border-color: var(--brand, #1e3a8a);
-  color: var(--brand, #1e3a8a);
+  border-color: var(--brand, var(--color-brand));
+  color: var(--brand, var(--color-brand));
 }
 
 .conflict-check-banner {
@@ -570,9 +573,9 @@
   align-items: center;
   justify-content: space-between;
   background: var(--color-surface);
-  border-left: 3px solid #f59e0b;
+  border: 1px solid var(--color-border);
   padding: 10px 14px;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  border-radius: var(--radius-xs);
 }
 
 .slot-time {
@@ -637,7 +640,10 @@
     flex-wrap: wrap;
   }
   .search-input-group input {
-    min-width: 160px;
+    min-width: 0;
+  }
+  .manage-header-desc {
+    min-width: 0;
   }
 }
 
@@ -707,13 +713,13 @@
   align-items: center;
   gap: 4px;
   font-size: var(--text-meta);
-  background: #e0e7ff;
-  color: #3730a3;
+  background: var(--color-surface-active);
+  color: var(--color-brand);
   padding: 3px 8px;
   border-radius: var(--radius-sm);
 }
 .manager-tag small {
-  color: #4f46e5;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
 }
 .manage-actions {
@@ -728,13 +734,13 @@
 .manager-tag.is-inactive small {
   color: inherit;
 }
-.warning-btn {
-  color: #b45309 !important;
-  border-color: #fde68a !important;
-  background: var(--color-warning-soft) !important;
+.button.warning-btn {
+  color: var(--color-warning);
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-soft);
 }
-.warning-btn:hover {
-  background: var(--color-warning-active) !important;
+.button.warning-btn:hover {
+  background: var(--color-warning-active);
 }
 .venue-edit-modal {
   max-width: 580px;

@@ -1,8 +1,8 @@
 import { ref } from 'vue'
-import { api, ApiError, resetCsrf } from '../lib/api'
+import { api, ApiError, resetCsrf } from '../lib/api.ts'
 import type { Profile } from '../types'
-import { clearTeachingDrafts } from '../lib/teachingDrafts'
-import { landingPage as resolveLandingPage } from '../lib/landing'
+import { clearTeachingDrafts } from '../lib/teachingDrafts.ts'
+import { landingPage as resolveLandingPage } from '../lib/landing.ts'
 
 export const currentUser = ref<Profile | null>(null)
 let initialized = false

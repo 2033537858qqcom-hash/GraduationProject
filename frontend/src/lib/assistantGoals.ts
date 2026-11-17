@@ -84,5 +84,6 @@ export const goalKindLabels: Record<string, string> = {
   LEAVE: '请假',
   REPAIR: '报修',
   CERTIFICATE: '在校证明',
+  HOUSING: '调宿',
 }
 export const goalTargetLabels = { DRAFT: '保存草稿', SUBMIT: '提交审核', TRACK: '提交并跟踪' }

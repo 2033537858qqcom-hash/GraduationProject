@@ -1,13 +1,20 @@
 <script setup lang="ts">
-import { confirmDialog } from '../composables/useConfirm';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router';
+import { useLeaveGuard } from '../composables/useEditProtection';
+import { computed, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { api, errorMessage } from '../lib/api';
+import { formatMoney as money } from '../lib/format';
 import { currentUser } from '../stores/auth';
 import DownloadLink from '../components/DownloadLink.vue';
+import BaseSelect from '../components/BaseSelect.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import DormMeterSettings from '../components/DormMeterSettings.vue';
 import FeeCategorySettings from '../components/FeeCategorySettings.vue';
-import ReconciliationCasePanel from '../components/ReconciliationCasePanel.vue';
+import FinanceBillDetailSection from '../components/finance/FinanceBillDetailSection.vue';
+import FinanceBasesTab from '../components/finance/FinanceBasesTab.vue';
+import FinanceRequestsTab from '../components/finance/FinanceRequestsTab.vue';
+import FinanceReconciliationTab from '../components/finance/FinanceReconciliationTab.vue';
 import {
   centsFromInput,
   paymentActionLabels,
@@ -64,7 +71,6 @@ const statusOptions = [
   { value: 'OVERDUE', label: '逾期待缴' },
   { value: 'UNCONFIRMED', label: '支付结果待核实' },
 ];
-const money = (cents: number) => '¥' + (cents / 100).toFixed(2);
 const showBillForm = ref(false),
   editingId = ref<number | null>(null);
 const emptyBill = () => ({
@@ -100,9 +106,31 @@ const isBatch = computed(
   () => !editingId.value && !form.value.basisId && form.value.usernames.split(/[\s,，]+/).filter(Boolean).length > 1,
 );
 const activeCategories = computed(() => catalog.value?.categories.filter(item => item.enabled !== false) ?? []);
+const activeCategoryOptions = computed(() =>
+  activeCategories.value.map(category => ({ value: category.code, label: category.name })),
+);
+const ledgerCategoryOptions = computed(() => [
+  { value: '', label: '全部分类' },
+  ...(catalog.value?.categories.map(category => ({ value: category.code, label: category.name })) ?? []),
+]);
 const standardsForForm = computed(
   () => catalog.value?.standards.filter(item => item.available && item.categoryCode === form.value.categoryCode) ?? [],
 );
+const billStandardOptions = computed(() => [
+  { value: '', label: '手工核定金额' },
+  ...standardsForForm.value.map(standard => ({
+    value: String(standard.id),
+    label: `${standard.name} · ${money(standard.unitPriceCents)}/${standard.unit}`,
+  })),
+]);
+const campusOptions = computed(() => [
+  { value: '', label: '全校区' },
+  ...(catalog.value?.campuses.map(campus => ({ value: String(campus.id), label: campus.name })) ?? []),
+]);
+const majorOptions = computed(() => [
+  { value: '', label: '全部专业' },
+  ...(catalog.value?.majors.map(major => ({ value: String(major.id), label: major.name })) ?? []),
+]);
 const selectedStandard = computed(() => standardsForForm.value.find(item => String(item.id) === form.value.standardId));
 watch(
   form,
@@ -205,6 +233,36 @@ async function page(value: number) {
 async function openBill(id: number) {
   await router.replace({ query: { ...route.query, id: String(id), tab: 'details' } });
 }
+async function closeBill() {
+  actionTarget.value = null;
+  actionReason.value = '';
+  await router.replace({ query: { ...route.query, id: undefined, tab: 'ledger' } });
+}
+function billTone(bill: PaymentBill) {
+  if (['VOIDED', 'WAIVED'].includes(bill.workflowStatus) || bill.refundStatus === 'REFUNDED') return 'muted';
+  if (bill.status === 'PAID') return 'success';
+  if (bill.workflowStatus === 'RETURNED') return 'danger';
+  if (bill.workflowStatus === 'PENDING_REVIEW' || bill.status === 'UNPAID') return 'warning';
+  return 'default';
+}
+const standaloneActionTarget = computed(() => {
+  if (!actionTarget.value) return false;
+  if (tab.value === 'ledger' && detail.value) {
+    if (
+      (actionTarget.value.kind === 'bill' || actionTarget.value.kind === 'billRequest') &&
+      actionTarget.value.id === detail.value.bill.id
+    ) {
+      return false;
+    }
+    if (actionTarget.value.kind === 'request' && detail.value.requests.some(req => req.id === actionTarget.value?.id)) {
+      return false;
+    }
+  }
+  if (tab.value === 'standards' && actionTarget.value.kind === 'standard') {
+    return false;
+  }
+  return true;
+});
 function newBill() {
   editingId.value = null;
   form.value = emptyBill();
@@ -244,9 +302,13 @@ function useBasis(basis: FeeBasis) {
   };
 }
 async function saveBill() {
+  if (!form.value.categoryCode) {
+    error.value = '请选择收费分类。';
+    return;
+  }
   const usernames = form.value.usernames.split(/[\s,，]+/).filter(Boolean);
   if (!usernames.length || usernames.length > 100 || new Set(usernames).size !== usernames.length) {
-    error.value = '请填写1—100个不重复的学生账号。';
+    error.value = '请填写 1—100 个不重复的学生账号。';
     return;
   }
   if ((editingId.value || form.value.basisId) && usernames.length !== 1) {
@@ -313,6 +375,10 @@ async function saveBill() {
   }
 }
 async function createStandard() {
+  if (!standardForm.value.categoryCode) {
+    error.value = '请选择收费分类。';
+    return;
+  }
   const price = centsFromInput(standardForm.value.price.trim());
   if (price === null) {
     error.value = '请填写有效单价，最多保留两位小数。';
@@ -378,7 +444,7 @@ function billAction(action: string) {
 async function executeAction() {
   const target = actionTarget.value;
   if (!target || actionReason.value.trim().length < 5) {
-    error.value = '请填写至少5个字符的处理说明。';
+    error.value = '请填写至少 5 个字符的处理说明。';
     return;
   }
   const payload = {
@@ -436,13 +502,13 @@ async function readStatement(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
   if (!file) return;
   if (file.size > 262144) {
-    error.value = '每次交易明细最多256KB，请分批核对。';
+    error.value = '每次交易明细最多 256 KB，请分批核对。';
     return;
   }
   try {
     statementCsv.value = await file.text();
   } catch {
-    error.value = '无法读取文件，请重新选择UTF-8 CSV文件。';
+    error.value = '无法读取文件，请重新选择 UTF-8 编码的 CSV 文件。';
   }
 }
 async function compareStatement() {
@@ -461,13 +527,6 @@ async function compareStatement() {
     busy.value = false;
   }
 }
-const statementResults: Record<string, string> = {
-  MATCH: '一致',
-  DIFFERENCE: '存在差异',
-  NOT_FOUND: '本地无此订单',
-  INVALID: '格式待核对',
-  DUPLICATE: '重复订单',
-};
 const billFormDirty = computed(
   () => showBillForm.value && Boolean(form.value.usernames || form.value.title || form.value.basis),
 );
@@ -477,22 +536,7 @@ const statementDirty = computed(() => Boolean(statementCsv.value.trim()) && !sta
 const hasUnsaved = computed(
   () => billFormDirty.value || standardFormDirty.value || actionFormDirty.value || statementDirty.value,
 );
-async function confirmLeave() {
-  if (busy.value) return false;
-  return (
-    !hasUnsaved.value ||
-    (await confirmDialog('尚有未保存的财务输入（账单、收费标准、处理说明或交易明细），确定离开并放弃？'))
-  );
-}
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (busy.value || hasUnsaved.value) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-}
-onBeforeRouteLeave(confirmLeave);
-onMounted(() => window.addEventListener('beforeunload', beforeUnload));
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
+useLeaveGuard(busy, hasUnsaved, '尚有未保存的财务输入（账单、收费标准、处理说明或交易明细），确定离开并放弃？');
 watch(
   () => route.fullPath,
   () => {
@@ -504,17 +548,16 @@ watch(
 
 <template>
   <div class="payment-office">
-    <header class="page-heading-row">
-      <div>
-        <span class="portal-context">财务服务 · {{ canManage ? '经办工作台' : '独立复核工作台' }}</span>
-        <h1>财务收费</h1>
-        <p class="muted">核对收费依据，分工经办与复核，跟进每一笔应缴费用。</p>
-      </div>
-      <div class="finance-actions">
+    <ServicePageHeader
+      :context="`财务服务 · ${canManage ? '经办工作台' : '独立复核工作台'}`"
+      title="财务收费"
+      description="核对收费依据，分工经办与复核，跟进每一笔应缴费用。"
+    >
+      <template #actions>
         <button v-if="canManage" class="button primary" :disabled="loading || busy" @click="newBill">新建账单</button>
         <button class="button compact" :disabled="loading || busy" @click="load">刷新</button>
-      </div>
-    </header>
+      </template>
+    </ServicePageHeader>
     <p class="finance-note">当前使用支付宝沙箱。新账单须经其他人员复核发布；收费标准不会预置学校实际价格。</p>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <p v-if="message" class="finance-success" role="status">{{ message }}</p>
@@ -580,12 +623,12 @@ watch(
           </label>
           <label>
             收费分类
-            <select v-model="form.categoryCode" required :disabled="!!form.basisId">
-              <option value="" disabled>请选择分类</option>
-              <option v-for="category in activeCategories" :key="category.code" :value="category.code">
-                {{ category.name }}
-              </option>
-            </select>
+            <BaseSelect
+              v-model="form.categoryCode"
+              :options="activeCategoryOptions"
+              placeholder="请选择分类"
+              :disabled="!!form.basisId"
+            />
           </label>
           <label>
             费用名称
@@ -607,12 +650,7 @@ watch(
           </label>
           <label>
             计费方式
-            <select v-model="form.standardId">
-              <option value="">手工核定金额</option>
-              <option v-for="standard in standardsForForm" :key="standard.id" :value="String(standard.id)">
-                {{ standard.name }} · {{ money(standard.unitPriceCents) }}/{{ standard.unit }}
-              </option>
-            </select>
+            <BaseSelect v-model="form.standardId" :options="billStandardOptions" placeholder="手工核定金额" />
           </label>
           <label>
             数量 / 分摊用量
@@ -709,7 +747,7 @@ watch(
     </section>
 
     <section
-      v-if="actionTarget"
+      v-if="standaloneActionTarget && actionTarget"
       class="portal-panel finance-panel finance-confirm"
       aria-labelledby="finance-action-heading"
     >
@@ -728,104 +766,6 @@ watch(
       </form>
     </section>
 
-    <section v-if="detail && tab === 'ledger'" class="portal-panel finance-panel">
-      <div class="finance-heading">
-        <div>
-          <span class="finance-badge">
-            {{ paymentWorkflowText(detail.bill.workflowStatus) }} · {{ paymentSettlementText(detail.bill) }}
-          </span>
-          <h2>{{ detail.bill.title }}</h2>
-          <p class="muted">
-            {{ detail.bill.studentName }} · {{ detail.bill.studentUsername }} · {{ detail.bill.billingPeriod }}
-          </p>
-        </div>
-        <strong class="finance-total">{{ money(detail.bill.amountCents) }}</strong>
-      </div>
-      <dl class="finance-facts">
-        <div>
-          <dt>缴费截止</dt>
-          <dd>{{ detail.bill.dueDate || '历史账单未设置' }}</dd>
-        </div>
-        <div>
-          <dt>经办人员</dt>
-          <dd>{{ detail.bill.creatorName }}</dd>
-        </div>
-        <div>
-          <dt>收费标准</dt>
-          <dd>{{ detail.bill.standardName || '手工核定金额' }}</dd>
-        </div>
-        <div>
-          <dt>数量</dt>
-          <dd>{{ detail.bill.quantity }}</dd>
-        </div>
-        <div class="finance-wide">
-          <dt>收费依据</dt>
-          <dd>{{ detail.bill.basis }}</dd>
-        </div>
-        <div class="finance-wide">
-          <dt>订单号</dt>
-          <dd>{{ detail.bill.orderNo }}</dd>
-        </div>
-        <div v-if="detail.bill.tradeNo" class="finance-wide">
-          <dt>平台交易号</dt>
-          <dd>{{ detail.bill.tradeNo }}</dd>
-        </div>
-      </dl>
-      <p v-if="detail.bill.lastSyncError" class="alert">{{ detail.bill.lastSyncError }}</p>
-      <p v-if="detail.bill.pendingRequestId" class="finance-note">
-        该账单有待完成的财务处理申请，学生暂不能继续发起支付。
-      </p>
-      <div class="finance-actions">
-        <button
-          v-for="action in detail.allowedActions"
-          :key="action"
-          class="button compact"
-          :disabled="busy"
-          @click="billAction(action)"
-        >
-          {{ paymentActionLabels[action] || action }}
-        </button>
-      </div>
-      <section v-if="detail.requests.length" class="finance-subsection">
-        <h3>财务处理申请</h3>
-        <article v-for="request in detail.requests" :key="request.id" class="finance-record">
-          <div>
-            <strong>{{ financeRequestTypes[request.type] }} · {{ financeRecordText(request.status) }}</strong>
-            <p>{{ request.reason }}</p>
-            <p v-if="request.lastError" class="finance-warning">{{ request.lastError }}</p>
-          </div>
-          <div class="finance-actions">
-            <template v-if="canReview && request.status === 'SUBMITTED' && request.requestedBy !== currentUser?.id">
-              <button class="button compact" :disabled="busy" @click="requestAction(request, 'APPROVE')">
-                复核通过
-              </button>
-              <button class="button compact" :disabled="busy" @click="requestAction(request, 'REJECT')">
-                不予通过
-              </button>
-            </template>
-            <button
-              v-if="request.status === 'FAILED'"
-              class="button compact"
-              :disabled="busy"
-              @click="requestAction(request, 'RETRY')"
-            >
-              核对并重试原申请
-            </button>
-          </div>
-        </article>
-      </section>
-      <section class="finance-subsection">
-        <h3>办理记录</h3>
-        <ol class="finance-history">
-          <li v-for="event in detail.history" :key="event.id">
-            <strong>{{ paymentActionLabels[event.action] || event.action }}</strong>
-            <span>{{ event.actorName }} · {{ event.createdAt.slice(0, 16).replace('T', ' ') }}</span>
-            <p>{{ event.reason }}</p>
-          </li>
-        </ol>
-      </section>
-    </section>
-
     <section v-if="tab === 'ledger'" class="portal-panel finance-panel">
       <div class="finance-heading">
         <h2>账单台账</h2>
@@ -838,20 +778,11 @@ watch(
         </label>
         <label>
           分类
-          <select v-model="filters.categoryCode">
-            <option value="">全部分类</option>
-            <option v-for="category in catalog?.categories" :key="category.code" :value="category.code">
-              {{ category.name }}
-            </option>
-          </select>
+          <BaseSelect v-model="filters.categoryCode" :options="ledgerCategoryOptions" placeholder="全部分类" />
         </label>
         <label>
           状态
-          <select v-model="filters.status">
-            <option v-for="option in statusOptions" :key="option.value" :value="option.value">
-              {{ option.label }}
-            </option>
-          </select>
+          <BaseSelect v-model="filters.status" :options="statusOptions" placeholder="全部状态" />
         </label>
         <label>
           账期
@@ -859,23 +790,93 @@ watch(
         </label>
         <button class="button" :disabled="loading || busy">查询</button>
       </form>
-      <p v-if="loading" role="status">正在读取账单及统计…</p>
+
+      <FinanceBillDetailSection
+        v-if="detail && !ledger?.items.some(item => item.id === detail?.bill.id)"
+        v-model:action-reason="actionReason"
+        :detail="detail"
+        :current-user-id="currentUser?.id"
+        :can-review="canReview"
+        :busy="busy"
+        :action-target="actionTarget"
+        @bill-action="billAction"
+        @request-action="requestAction"
+        @close="closeBill"
+        @execute-action="executeAction"
+        @cancel-action="actionTarget = null"
+      />
+
+      <SkeletonBlock v-if="loading" variant="list" :rows="5" label="正在读取账单及统计…" />
       <p v-else-if="!ledger?.items.length && !error" class="empty-state">当前筛选下没有账单。</p>
-      <article v-for="bill in loading ? [] : ledger?.items" :key="bill.id" class="finance-record">
-        <div>
-          <span class="finance-badge">{{ bill.categoryName }}</span>
-          <h3>{{ bill.title }}</h3>
-          <p>{{ bill.studentName }} · {{ bill.studentUsername }} · {{ bill.billingPeriod }}</p>
-          <small class="muted">
-            {{ paymentWorkflowText(bill.workflowStatus) }} · {{ paymentSettlementText(bill) }}
-            <template v-if="bill.dueDate">· 截止 {{ bill.dueDate }}</template>
-          </small>
-        </div>
-        <div class="finance-record-end">
-          <strong>{{ money(bill.amountCents) }}</strong>
-          <button class="button compact" :disabled="busy" @click="openBill(bill.id)">查看与办理</button>
-        </div>
-      </article>
+
+      <div v-if="!loading && ledger?.items.length" class="finance-ledger-head" aria-hidden="true">
+        <span>收费项目 / 事项名称</span>
+        <span>缴款人 / 账期</span>
+        <span>流转状态 / 截止限期</span>
+        <span class="is-right">核定金额</span>
+        <span class="is-right">卷宗操作</span>
+      </div>
+
+      <div
+        v-for="bill in loading ? [] : ledger?.items"
+        :key="bill.id"
+        class="finance-ledger-group"
+        :class="{ 'is-expanded': detail?.bill.id === bill.id }"
+      >
+        <article
+          class="finance-record finance-record--ledger"
+          :class="{ 'finance-selected': detail?.bill.id === bill.id }"
+        >
+          <div class="finance-col-main">
+            <div class="finance-title-line">
+              <span class="finance-badge">{{ bill.categoryName }}</span>
+              <h3>{{ bill.title }}</h3>
+            </div>
+            <small v-if="bill.orderNo" class="finance-order-meta">单号 {{ bill.orderNo }}</small>
+          </div>
+          <div class="finance-col-party">
+            <strong>{{ bill.studentName }}（{{ bill.studentUsername }}）</strong>
+            <span>账期：{{ bill.billingPeriod }}</span>
+          </div>
+          <div class="finance-col-status">
+            <span class="finance-status-tag" :data-tone="billTone(bill)">
+              {{ paymentWorkflowText(bill.workflowStatus) }} · {{ paymentSettlementText(bill) }}
+            </span>
+            <small class="muted">
+              {{ bill.dueDate ? `截止 ${bill.dueDate}` : '未设截止日期' }}
+            </small>
+          </div>
+          <div class="finance-col-amount">
+            <strong>{{ money(bill.amountCents) }}</strong>
+          </div>
+          <div class="finance-col-actions">
+            <button
+              class="button compact"
+              :class="{ primary: detail?.bill.id === bill.id }"
+              :disabled="busy"
+              @click="detail?.bill.id === bill.id ? closeBill() : openBill(bill.id)"
+            >
+              {{ detail?.bill.id === bill.id ? '收起卷宗 ▴' : '查看与办理 ▾' }}
+            </button>
+          </div>
+        </article>
+
+        <FinanceBillDetailSection
+          v-if="detail && detail.bill.id === bill.id"
+          v-model:action-reason="actionReason"
+          :detail="detail"
+          :current-user-id="currentUser?.id"
+          :can-review="canReview"
+          :busy="busy"
+          :action-target="actionTarget"
+          @bill-action="billAction"
+          @request-action="requestAction"
+          @close="closeBill"
+          @execute-action="executeAction"
+          @cancel-action="actionTarget = null"
+        />
+      </div>
+
       <div v-if="ledger && ledger.total > 0" class="finance-pagination">
         <span>
           共 {{ ledger.total }} 笔 · 第 {{ ledger.page }} / {{ Math.ceil(ledger.total / ledger.pageSize) }} 页
@@ -896,8 +897,14 @@ watch(
     </section>
 
     <section v-if="tab === 'standards'" class="portal-panel finance-panel">
-      <h2>收费标准</h2>
-      <p class="muted">标准经独立复核后生效。调整价格时新建标准，旧账单保留建单时的价格快照。</p>
+      <div class="finance-heading">
+        <div>
+          <h2>收费标准</h2>
+          <p class="muted" style="margin: 4px 0 0">
+            标准经独立复核后生效。调整价格时新建标准，旧账单保留建单时的价格快照。
+          </p>
+        </div>
+      </div>
       <form v-if="canManage" class="finance-form finance-subsection" @submit.prevent="createStandard">
         <fieldset :disabled="busy || loading">
           <label>
@@ -906,12 +913,7 @@ watch(
           </label>
           <label>
             收费分类
-            <select v-model="standardForm.categoryCode" required>
-              <option value="" disabled>请选择分类</option>
-              <option v-for="category in activeCategories" :key="category.code" :value="category.code">
-                {{ category.name }}
-              </option>
-            </select>
+            <BaseSelect v-model="standardForm.categoryCode" :options="activeCategoryOptions" placeholder="请选择分类" />
           </label>
           <label>
             计价单位
@@ -923,21 +925,11 @@ watch(
           </label>
           <label>
             适用校区
-            <select v-model="standardForm.campusId">
-              <option value="">全校区</option>
-              <option v-for="campus in catalog?.campuses" :key="campus.id" :value="String(campus.id)">
-                {{ campus.name }}
-              </option>
-            </select>
+            <BaseSelect v-model="standardForm.campusId" :options="campusOptions" placeholder="全校区" />
           </label>
           <label>
             适用专业
-            <select v-model="standardForm.majorId">
-              <option value="">全部专业</option>
-              <option v-for="major in catalog?.majors" :key="major.id" :value="String(major.id)">
-                {{ major.name }}
-              </option>
-            </select>
+            <BaseSelect v-model="standardForm.majorId" :options="majorOptions" placeholder="全部专业" />
           </label>
           <label>
             标准生效日期（可选）
@@ -951,182 +943,133 @@ watch(
             标准依据
             <textarea v-model="standardForm.reason" required minlength="5" maxlength="500" rows="2" />
           </label>
-          <button class="button primary">提交标准复核</button>
+          <div class="finance-actions finance-wide">
+            <button class="button primary">提交标准复核</button>
+          </div>
         </fieldset>
       </form>
       <p v-if="!loading && !catalog?.standards.length" class="empty-state">尚未建立收费标准。</p>
-      <article v-for="standard in catalog?.standards" :key="standard.id" class="finance-record">
-        <div>
-          <span class="finance-badge">
-            {{ standard.categoryName }} ·
-            {{
-              standard.status === 'ACTIVE'
-                ? standard.available
-                  ? '生效中'
-                  : '已审核 · 不在有效期'
-                : financeRecordText(standard.status)
-            }}
-          </span>
-          <h3>{{ standard.name }}</h3>
-          <p>{{ money(standard.unitPriceCents) }}/{{ standard.unit }} · {{ standard.creatorName }}</p>
-          <p class="muted">{{ standard.reason }}</p>
-          <p class="muted">
-            适用日期：{{ standard.effectiveFrom || '不限' }} 至 {{ standard.effectiveTo || '不限' }}
-            <template v-if="standard.status === 'ACTIVE' && !standard.available">· 当前不在有效期</template>
-          </p>
-        </div>
-        <div class="finance-actions">
-          <template v-if="canReview && standard.status === 'PENDING_REVIEW' && standard.createdBy !== currentUser?.id">
-            <button class="button compact" :disabled="busy" @click="standardAction(standard, 'APPROVE')">
-              复核通过
-            </button>
-            <button class="button compact" :disabled="busy" @click="standardAction(standard, 'RETURN')">退回</button>
-          </template>
-          <button
-            v-if="canManage && standard.status === 'ACTIVE'"
-            class="button compact"
-            :disabled="busy"
-            @click="standardAction(standard, 'RETIRE')"
-          >
-            停用标准
-          </button>
-        </div>
-      </article>
-    </section>
-
-    <section v-if="tab === 'bases'" class="portal-panel finance-panel">
-      <h2>业务收费依据</h2>
-      <p class="muted">业务岗位只提供负责范围内的依据，金额由财务核定，发布仍需独立复核。</p>
-      <p v-if="!loading && !bases.length" class="empty-state">暂无业务部门提交的收费依据。</p>
-      <article
-        v-for="basis in bases"
-        :key="basis.id"
-        class="finance-record"
-        :class="{ 'finance-selected': String(basis.id) === route.query.id }"
+      <div
+        v-for="standard in catalog?.standards"
+        :key="standard.id"
+        class="finance-ledger-group"
+        :class="{ 'is-expanded': actionTarget?.kind === 'standard' && actionTarget.id === standard.id }"
       >
-        <div>
-          <span class="finance-badge">{{ basis.categoryName }} · {{ financeRecordText(basis.status) }}</span>
-          <h3>{{ basis.studentName }} · {{ basis.billingPeriod }}</h3>
-          <p>{{ basis.basis }}</p>
-          <p class="muted">{{ basis.sourceReference }} · 数量 {{ basis.quantity }} · 提供人 {{ basis.creatorName }}</p>
-        </div>
-        <div v-if="canManage && basis.status === 'SUBMITTED'" class="finance-actions">
-          <button class="button compact" :disabled="busy" @click="useBasis(basis)">按此依据建单</button>
-          <button
-            class="button compact"
-            :disabled="busy"
-            @click="
-              chooseAction({
-                kind: 'basis',
-                id: basis.id,
-                action: 'RETURN',
-                version: basis.version,
-                title: basis.studentName + ' · ' + basis.billingPeriod,
-              })
-            "
-          >
-            退回补充
-          </button>
-        </div>
-      </article>
+        <article class="finance-record finance-record--ledger">
+          <div class="finance-col-main">
+            <div class="finance-title-line">
+              <span class="finance-badge">{{ standard.categoryName }}</span>
+              <h3>{{ standard.name }}</h3>
+            </div>
+            <small class="finance-order-meta">{{ standard.reason }}</small>
+          </div>
+          <div class="finance-col-party">
+            <strong>经办：{{ standard.creatorName }}</strong>
+            <span>有效期：{{ standard.effectiveFrom || '不限' }} 至 {{ standard.effectiveTo || '不限' }}</span>
+          </div>
+          <div class="finance-col-status">
+            <span
+              class="finance-status-tag"
+              :data-tone="
+                standard.status === 'ACTIVE' && standard.available
+                  ? 'success'
+                  : standard.status === 'PENDING_REVIEW'
+                    ? 'warning'
+                    : 'muted'
+              "
+            >
+              {{
+                standard.status === 'ACTIVE'
+                  ? standard.available
+                    ? '生效中'
+                    : '已审核 · 不在有效期'
+                  : financeRecordText(standard.status)
+              }}
+            </span>
+          </div>
+          <div class="finance-col-amount">
+            <strong>{{ money(standard.unitPriceCents) }}/{{ standard.unit }}</strong>
+          </div>
+          <div class="finance-col-actions">
+            <template
+              v-if="canReview && standard.status === 'PENDING_REVIEW' && standard.createdBy !== currentUser?.id"
+            >
+              <button class="button compact primary" :disabled="busy" @click="standardAction(standard, 'APPROVE')">
+                复核通过
+              </button>
+              <button class="button compact" :disabled="busy" @click="standardAction(standard, 'RETURN')">退回</button>
+            </template>
+            <button
+              v-if="canManage && standard.status === 'ACTIVE'"
+              class="button compact"
+              :disabled="busy"
+              @click="standardAction(standard, 'RETIRE')"
+            >
+              停用标准
+            </button>
+          </div>
+        </article>
+        <section
+          v-if="actionTarget?.kind === 'standard' && actionTarget.id === standard.id"
+          class="finance-folio"
+          aria-label="收费标准处理确认"
+        >
+          <form class="finance-confirm" @submit.prevent="executeAction">
+            <h3>{{ paymentActionLabels[actionTarget.action] || actionTarget.action }} · {{ actionTarget.title }}</h3>
+            <label>
+              处理说明（必填，至少 5 个字）
+              <textarea v-model="actionReason" required minlength="5" maxlength="500" rows="2" :disabled="busy" />
+            </label>
+            <div class="finance-actions">
+              <button class="button primary compact" :disabled="busy">{{ busy ? '正在处理…' : '确认处理' }}</button>
+              <button type="button" class="button compact" :disabled="busy" @click="actionTarget = null">取消</button>
+            </div>
+          </form>
+        </section>
+      </div>
     </section>
 
-    <section v-if="tab === 'requests'" class="portal-panel finance-panel">
-      <h2>作废、减免与退款</h2>
-      <p class="muted">须由其他财务人员复核；只有支付平台确认后才会显示退款或关单完成。</p>
-      <p v-if="!loading && !requests.length" class="empty-state">暂无财务处理申请。</p>
-      <article v-for="request in requests" :key="request.id" class="finance-record">
-        <div>
-          <span class="finance-badge">
-            {{ financeRequestTypes[request.type] }} · {{ financeRecordText(request.status) }}
-          </span>
-          <h3>账单 #{{ request.billId }}</h3>
-          <p>{{ request.reason }}</p>
-          <p class="muted">
-            申请人 {{ request.requesterName }} · {{ request.createdAt.slice(0, 16).replace('T', ' ') }}
-          </p>
-          <p v-if="request.lastError" class="finance-warning">{{ request.lastError }}</p>
-        </div>
-        <div class="finance-actions">
-          <button class="button compact" :disabled="busy" @click="openBill(request.billId)">查看账单</button>
-          <template v-if="canReview && request.status === 'SUBMITTED' && request.requestedBy !== currentUser?.id">
-            <button class="button compact" :disabled="busy" @click="requestAction(request, 'APPROVE')">复核通过</button>
-            <button class="button compact" :disabled="busy" @click="requestAction(request, 'REJECT')">不予通过</button>
-          </template>
-          <button
-            v-if="request.status === 'FAILED'"
-            class="button compact"
-            :disabled="busy"
-            @click="requestAction(request, 'RETRY')"
-          >
-            核对并重试原申请
-          </button>
-        </div>
-      </article>
-    </section>
-    <section v-if="tab === 'reconciliation'" class="portal-panel finance-panel">
-      <div class="finance-heading">
-        <h2>交易明细核对</h2>
-        <DownloadLink
-          href="/api/finance/payments/reconciliation/template"
-          expected-type="text/csv"
-          class="button compact"
-        >
-          下载核对模板
-        </DownloadLink>
-      </div>
-      <p class="muted">
-        将支付平台导出的交易明细按模板整理为UTF-8 CSV，可比较订单号、金额、交易号及支付状态。每批最多256KB、2000笔。
-      </p>
-      <p class="finance-note">
-        导入明细只用于发现差异，不会将账单标记为已支付。发现差异后，请进入原账单使用“核验支付结果”向支付平台查单。
-      </p>
-      <form class="finance-form" @submit.prevent="compareStatement">
-        <label>
-          选择交易明细文件
-          <input type="file" accept=".csv,text/csv" :disabled="busy" @change="readStatement" />
-        </label>
-        <label>
-          交易明细内容
-          <textarea
-            v-model="statementCsv"
-            required
-            maxlength="262144"
-            rows="8"
-            :disabled="busy"
-            placeholder="订单号,金额（元）,交易号,支付状态"
-          />
-        </label>
-        <button class="button primary" :disabled="busy">{{ busy ? '正在核对…' : '生成差异核对结果' }}</button>
-      </form>
-      <section v-if="statementPreview" class="finance-subsection">
-        <p>
-          一致 {{ statementPreview.matchedCount }} 笔 · 差异 {{ statementPreview.differenceCount }} 笔 · 本地无订单
-          {{ statementPreview.notFoundCount }} 笔 · 格式异常 {{ statementPreview.invalidCount }} 笔 · 重复
-          {{ statementPreview.duplicateCount }} 笔
-        </p>
-        <article v-for="row in statementPreview.items" :key="row.line" class="finance-record">
-          <div>
-            <span class="finance-badge">第 {{ row.line }} 行 · {{ statementResults[row.result] }}</span>
-            <h3>{{ row.orderNo }}</h3>
-            <p>
-              明细金额 {{ row.amount }} 元 · 本地金额
-              {{ row.localAmountCents === null ? '—' : money(row.localAmountCents) }}
-            </p>
-            <p>{{ row.explanation }}</p>
-          </div>
-          <button v-if="row.billId" class="button compact" :disabled="busy" @click="openBill(row.billId)">
-            查看原账单
-          </button>
-        </article>
-      </section>
-      <ReconciliationCasePanel
-        :csv="statementCsv"
-        :preview="statementPreview"
-        :can-manage="canManage"
-        :can-review="canReview"
-        @open-bill="openBill"
-      />
-    </section>
+    <FinanceBasesTab
+      v-if="tab === 'bases'"
+      :bases="bases"
+      :selected-id="String(route.query.id ?? '')"
+      :can-manage="canManage"
+      :loading="loading"
+      :busy="busy"
+      @use-basis="useBasis"
+      @return-basis="
+        basis =>
+          chooseAction({
+            kind: 'basis',
+            id: basis.id,
+            action: 'RETURN',
+            version: basis.version,
+            title: basis.studentName + ' · ' + basis.billingPeriod,
+          })
+      "
+    />
+
+    <FinanceRequestsTab
+      v-if="tab === 'requests'"
+      :requests="requests"
+      :current-user-id="currentUser?.id"
+      :can-review="canReview"
+      :loading="loading"
+      :busy="busy"
+      @open-bill="openBill"
+      @request-action="requestAction"
+    />
+
+    <FinanceReconciliationTab
+      v-if="tab === 'reconciliation'"
+      v-model:csv="statementCsv"
+      :preview="statementPreview"
+      :can-manage="canManage"
+      :can-review="canReview"
+      :busy="busy"
+      @read-statement="readStatement"
+      @compare-statement="compareStatement"
+      @open-bill="openBill"
+    />
   </div>
 </template>

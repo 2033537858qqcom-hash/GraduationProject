@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue';
 import type { Component } from 'vue';
 import {
   BedDouble,
@@ -19,9 +20,15 @@ import {
   Wrench,
 } from '@lucide/vue';
 import type { PortalNavGroup } from '../lib/portalNavigation';
+import { useSlidingIndicator } from '../composables/useSlidingIndicator';
 
-defineProps<{ groups: PortalNavGroup[]; active?: string; label: string }>();
+const props = defineProps<{ groups: PortalNavGroup[]; active?: string; label: string }>();
 const emit = defineEmits<{ navigate: [] }>();
+const navRef = ref<HTMLElement | null>(null);
+const { indicatorStyle } = useSlidingIndicator(navRef, () => [props.active, props.groups.length], {
+  activeSelector: 'a[aria-current="page"]',
+  axis: 'y',
+});
 const icons: Record<string, Component> = {
   home: House,
   calendar: CalendarDays,
@@ -46,7 +53,8 @@ function navigate(event: MouseEvent) {
 </script>
 
 <template>
-  <nav class="portal-grouped-nav" :aria-label="label">
+  <nav ref="navRef" class="portal-grouped-nav" :aria-label="label">
+    <div class="portal-nav-indicator" :style="indicatorStyle" aria-hidden="true"></div>
     <div v-for="group in groups" :key="group.id" class="portal-nav-group">
       <p>{{ group.label }}</p>
       <RouterLink

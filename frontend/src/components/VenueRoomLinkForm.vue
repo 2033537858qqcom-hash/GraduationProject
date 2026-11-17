@@ -81,6 +81,6 @@ async function save() {
   color: var(--ink);
 }
 .room-link-dialog::backdrop {
-  background: rgb(20 35 55 / 40%);
+  background: rgb(33 60 53 / 40%);
 }
 </style>

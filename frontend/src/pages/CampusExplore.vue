@@ -135,7 +135,7 @@ const {
       <section class="exploration-viewport" :class="{ evening, 'map-mode': mode === 'map' }" aria-label="三维校园探索">
         <div class="exploration-toolbar">
           <div v-if="mapConfigured" class="view-options mode-options" role="group" aria-label="探索方式">
-            <button :aria-pressed="mode === 'map'" @click="changeMode('map')">2.5D高德地图</button>
+            <button :aria-pressed="mode === 'map'" @click="changeMode('map')">2.5D 高德地图</button>
             <button :aria-pressed="mode === 'model'" title="切换当前校区的三维沙盘" @click="changeMode('model')">
               独立沙盘
             </button>
@@ -250,8 +250,23 @@ const {
               </button>
             </template>
           </div>
-          <div v-if="loading" class="exploration-fallback" role="status">
-            {{ mode === 'map' ? '正在载入高德地图…' : '正在构建校园场景…' }}
+          <div v-if="loading" class="exploration-fallback is-loading" role="status" aria-live="polite">
+            <svg class="exploration-blueprint-svg" viewBox="0 0 320 124" fill="none" aria-hidden="true">
+              <path class="blueprint-grid-line" d="M20 96H300M48 18V108M160 12V108M272 18V108" />
+              <path
+                class="blueprint-contour"
+                d="M42 96V64L68 50L94 64V96M114 96V42L160 28L206 42V96M226 96V58H278V96"
+              />
+              <path class="blueprint-accent" d="M132 96V66H188V96M152 46H168M160 38V54" />
+              <circle class="blueprint-node" cx="160" cy="46" r="4" />
+            </svg>
+            <span class="exploration-loading-kicker">
+              {{ mode === 'map' ? 'AMAP SPATIAL LAYER' : 'CAMPUS ARCHITECTURE' }}
+            </span>
+            <p class="exploration-loading-label">
+              {{ mode === 'map' ? '正在校准校园高德地图图层…' : '正在构建校区建筑轮廓沙盘…' }}
+            </p>
+            <div class="exploration-loading-bar" aria-hidden="true"><span></span></div>
           </div>
           <div v-else-if="error" class="exploration-fallback" role="status">
             <Layers :size="27" />
@@ -287,8 +302,8 @@ const {
               <output>{{ calibrationCoordinate }}</output>
             </label>
             <div class="calibration-pixels">
-              <input v-model.number="calibrationX" type="number" aria-label="参照点画布X" />
-              <input v-model.number="calibrationY" type="number" aria-label="参照点画布Y" />
+              <input v-model.number="calibrationX" type="number" aria-label="参照点画布 X" />
+              <input v-model.number="calibrationY" type="number" aria-label="参照点画布 Y" />
               <button @click="scene?.readCoordinate?.(calibrationX, calibrationY)">读取坐标</button>
             </div>
             <div class="calibration-pixels">

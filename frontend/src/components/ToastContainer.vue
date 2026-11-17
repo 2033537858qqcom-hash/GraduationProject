@@ -53,20 +53,22 @@ function iconFor(type: ToastType) {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: rgb(255, 255, 255, 0.94);
+  background: var(--color-surface);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgb(220, 228, 238, 0.85);
-  box-shadow:
-    0 12px 32px rgb(18, 38, 63, 0.12),
-    0 2px 6px rgb(0, 0, 0, 0.04);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-popover);
   border-radius: var(--radius-pill);
   padding: 8px 16px 8px 14px;
   font-size: var(--text-supporting);
   font-weight: 500;
-  color: #1f2937;
+  color: var(--color-ink);
   max-width: 480px;
-  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .toast-icon {
@@ -74,31 +76,31 @@ function iconFor(type: ToastType) {
 }
 
 .type-success {
-  border-color: rgb(52, 199, 89, 0.3);
+  border-color: var(--color-success-border);
 }
 .type-success .toast-icon {
-  color: #2e7d32;
+  color: var(--color-success);
 }
 
 .type-error {
-  border-color: rgb(239, 68, 68, 0.3);
+  border-color: var(--color-danger-border);
 }
 .type-error .toast-icon {
-  color: #d32f2f;
+  color: var(--color-danger);
 }
 
 .type-warning {
-  border-color: rgb(245, 158, 11, 0.3);
+  border-color: var(--color-warning-border);
 }
 .type-warning .toast-icon {
-  color: #ed6c02;
+  color: var(--color-warning);
 }
 
 .type-info {
-  border-color: rgb(0, 113, 227, 0.3);
+  border-color: var(--color-info-border);
 }
 .type-info .toast-icon {
-  color: #0071e3;
+  color: var(--color-info);
 }
 
 .toast-message {
@@ -112,7 +114,7 @@ function iconFor(type: ToastType) {
   justify-content: center;
   background: transparent;
   border: none;
-  color: #9ca3af;
+  color: var(--color-text-tertiary);
   cursor: pointer;
   padding: 2px;
   border-radius: 50%;
@@ -123,8 +125,8 @@ function iconFor(type: ToastType) {
 }
 
 .toast-close:hover {
-  color: #4b5563;
-  background-color: rgb(0, 0, 0, 0.05);
+  color: var(--color-text-secondary);
+  background-color: var(--color-surface-soft);
 }
 
 /* Animations */
@@ -143,5 +145,17 @@ function iconFor(type: ToastType) {
 .toast-slide-leave-to {
   opacity: 0;
   transform: translateY(-12px) scale(0.96);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-pill,
+  .toast-close {
+    transition-duration: 0.01ms;
+  }
+
+  .toast-slide-enter-from,
+  .toast-slide-leave-to {
+    transform: none;
+  }
 }
 </style>

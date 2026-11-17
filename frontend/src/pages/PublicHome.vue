@@ -7,6 +7,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { api, errorMessage } from '../lib/api';
 import { activeChapter, chapterReadingProgress, chapters, requestedChapter } from '../lib/publicNavigation';
 import { publicReducedMotion } from '../lib/publicMotion';
+import { currentUser, landingPage } from '../stores/auth';
 import SchoolStory from '../components/SchoolStory.vue';
 import CampusContour from '../components/CampusContour.vue';
 import ChapterDirectory from '../components/ChapterDirectory.vue';
@@ -25,13 +26,16 @@ const loading = ref(true);
 const slide = ref(0);
 const previousSlide = ref(-1);
 const active = ref(0);
-const images = [schoolMedia.overview, schoolMedia.learning];
+const heroPaused = ref(false);
+const hoveredDept = ref(0);
+const disclosureCategory = ref<'all' | 'notice' | 'about'>('all');
+const images = [schoolMedia.overview, schoolMedia.mingde, schoolMedia.spring];
 const panels = [
   {
     id: 'about',
     eyebrow: 'ABOUT ZUIT',
     title: ['认识学校', '连接未来'],
-    body: '学校名称与校区信息来自公开资料，更多内容将由后台审核发布。',
+    body: '学校概况与东、西校区介绍来自公开资料，校园动态与专题内容将持续更新发布。',
     media: schoolMedia.lakeside,
     link: '认识郑州工业应用技术学院',
     slug: 'school-introduction',
@@ -50,21 +54,22 @@ const panels = [
     title: ['让知识', '与实践相连'],
     body: '课程、实践与持续学习，共同构成校园中的成长旅程。',
     media: schoolMedia.practice,
+    secondaryMedia: schoolMedia.architecture,
     tone: 'surface',
   },
   {
     id: 'research',
     eyebrow: 'RESEARCH & DISCOVERY',
     title: ['从一个问题', '走向新的发现'],
-    body: '科研平台、学术交流与研究动态，将通过公开内容目录持续完善。',
-    media: schoolMedia.seminar,
+    body: '汇聚科研平台建设、学术交流活动与研究动态，伴随校园公开信息持续更新。',
+    media: schoolMedia.library,
     tone: 'surface',
   },
   {
     id: 'admissions',
     eyebrow: 'ADMISSIONS & CAREERS',
     title: ['了解学校', '开启下一段旅程'],
-    body: '学校公开招生信息与专业资料，可通过官方招生网站查阅。',
+    body: '学校公开招生信息、培养特色与校园风貌，可通过官方招生与校园站点查阅。',
     media: schoolMedia.freshmen,
     tone: 'surface',
     external: 'https://zsb.zzuit.edu.cn/',
@@ -73,8 +78,8 @@ const panels = [
     id: 'exchange',
     eyebrow: 'CONNECTION & PARTNERSHIPS',
     title: ['让交流', '打开新的视野'],
-    body: '关注学校合作交流信息，了解校园与社会的连接。',
-    media: schoolMedia.international,
+    body: '关注学校合作交流信息，在更广阔的对话中理解校园与世界的连接。',
+    media: schoolMedia.boardwalk,
     tone: 'surface',
   },
   {
@@ -89,14 +94,79 @@ const panels = [
     id: 'disclosure',
     eyebrow: 'PUBLIC INFORMATION',
     title: ['公开信息', '清晰可达'],
-    body: '从学校资料到平台说明，找到已经发布的公开内容。',
+    body: '从学校资料到平台说明，快速查阅已发布的公开信息与核验入口。',
     tone: 'surface',
   },
 ];
-const departments = ['信息工程学院', '机电工程学院', '建筑工程学院', '医学院', '管理学院', '艺术设计学院'];
+const departments = [
+  {
+    name: '信息工程学院',
+    english: 'INFORMATION ENGINEERING',
+    focus: '软件工程 · 人工智能 · 物联网与电子信息',
+    note: '面向数字时代与智能计算，强化工程实训与创新实践。',
+    media: schoolMedia.mingde,
+    url: 'https://zsb.zzuit.edu.cn/',
+  },
+  {
+    name: '机电工程学院',
+    english: 'MECHANICAL & ELECTRICAL',
+    focus: '智能制造 · 自动化控制 · 工业机器人',
+    note: '以实验平台和工程装备为依托，培养扎实的应用型工程人才。',
+    media: schoolMedia.practice,
+    url: 'https://zsb.zzuit.edu.cn/',
+  },
+  {
+    name: '建筑工程学院',
+    english: 'CIVIL & CONSTRUCTION',
+    focus: '工程造价 · 土木建造 · 城乡空间设计',
+    note: '将结构力学、智能建造与人居空间美学融入课堂与工坊。',
+    media: schoolMedia.lakeside,
+    url: 'https://zsb.zzuit.edu.cn/',
+  },
+  {
+    name: '医学院',
+    english: 'MEDICAL SCIENCES',
+    focus: '护理学 · 康复治疗 · 医学检验与健康管理',
+    note: '秉持仁心精术，对接临床实践与区域健康服务需求。',
+    media: schoolMedia.library,
+    url: 'https://zsb.zzuit.edu.cn/',
+  },
+  {
+    name: '管理学院',
+    english: 'BUSINESS & MANAGEMENT',
+    focus: '财务管理 · 数字商贸 · 现代物流与运营',
+    note: '结合产业数字化实践，培养兼具洞察力与执行力的管理人才。',
+    media: schoolMedia.boardwalk,
+    url: 'https://zsb.zzuit.edu.cn/',
+  },
+  {
+    name: '艺术设计学院',
+    english: 'ART & DESIGN',
+    focus: '视觉传达 · 环境设计 · 数字媒体艺术',
+    note: '在艺术楼光影与工坊创作中，把东方意蕴与当代设计相连。',
+    media: schoolMedia.architecture,
+    url: 'https://zsb.zzuit.edu.cn/',
+  },
+];
+const activeDepartment = computed(() => departments[hoveredDept.value] ?? departments[0]!);
+const lifePillars = [
+  { label: '阅读', line: '清晨图书馆台阶上的日光与墨香，陪你度过每一次安静求索。' },
+  { label: '运动', line: '红体馆与绿茵场上的汗水，记录青春里最纯粹的奔跑。' },
+  { label: '艺术', line: '艺术楼窗畔与舞台聚光灯下的热爱，让日常自带光芒。' },
+  { label: '伙伴', line: '在东、西校区并肩前行的同窗，构成最难忘的校园记忆。' },
+];
+const activePillar = ref(0);
 const publishedNotices = computed(() => contents.value.filter(item => item.category === 'notice'));
+const filteredContents = computed(() => {
+  const list =
+    disclosureCategory.value === 'all'
+      ? contents.value
+      : contents.value.filter(item => item.category === disclosureCategory.value);
+  return list.slice(0, 5);
+});
 const darkChapter = computed(() => active.value === 0 || chapters[active.value]?.id === 'life');
 let media: gsap.MatchMedia | undefined;
+let slideTimer: ReturnType<typeof setInterval> | undefined;
 let scrollFrame = 0;
 let resizeFrame = 0;
 let motionFrame = 0;
@@ -110,6 +180,19 @@ function selectSlide(index: number) {
   if (next !== slide.value) {
     previousSlide.value = slide.value;
     slide.value = next;
+  }
+}
+function startSlideTimer() {
+  stopSlideTimer();
+  if (publicReducedMotion.value) return;
+  slideTimer = setInterval(() => {
+    if (!heroPaused.value && !document.hidden && active.value === 0) selectSlide(slide.value + 1);
+  }, 7500);
+}
+function stopSlideTimer() {
+  if (slideTimer) {
+    clearInterval(slideTimer);
+    slideTimer = undefined;
   }
 }
 function targetTop(index: number) {
@@ -238,12 +321,33 @@ function setupMotion() {
     }
     for (const element of root.querySelectorAll<HTMLElement>('[data-reveal]')) {
       gsap.from(element, {
-        y: 26,
+        y: 24,
         opacity: 0,
         duration: 0.9,
         ease: 'power2.out',
-        scrollTrigger: { trigger: element, start: 'top 94%', once: true },
+        scrollTrigger: { trigger: element, start: 'top 92%', once: true },
       });
+    }
+    for (const frame of root.querySelectorAll<HTMLElement>('[data-photo-reveal]')) {
+      const target = frame.querySelector('.campus-photo, .life-photo') ?? frame;
+      const img = target.querySelector('img');
+      gsap.from(target, {
+        clipPath: 'inset(10% 0% 0% 0%)',
+        opacity: 0,
+        duration: 1.1,
+        ease: 'power3.out',
+        clearProps: 'clipPath',
+        scrollTrigger: { trigger: frame, start: 'top 90%', once: true },
+      });
+      if (img) {
+        gsap.from(img, {
+          scale: 1.07,
+          duration: 1.35,
+          ease: 'power2.out',
+          clearProps: 'transform',
+          scrollTrigger: { trigger: frame, start: 'top 90%', once: true },
+        });
+      }
     }
   });
 }
@@ -252,11 +356,16 @@ async function load() {
   loading.value = true;
   try {
     const [identity, content] = await Promise.all([
-      api<School>('/public/school'),
-      api<PublicContent[]>('/public/content'),
+      api<School>('/public/school', { cacheTtl: 60_000 }),
+      api<PublicContent[]>('/public/content', { cacheTtl: 30_000 }),
     ]);
     school.value = identity;
     contents.value = content;
+    await nextTick();
+    if (mounted && route.query.chapter) {
+      const index = chapters.findIndex(chapter => chapter.id === route.query.chapter);
+      if (index > 0) go(index, true);
+    }
   } catch (cause) {
     error.value = errorMessage(cause);
   } finally {
@@ -278,11 +387,13 @@ watch(
     if (!mounted || !motionReady) return;
     const chapter = active.value;
     cancelAnimationFrame(motionFrame);
+    stopSlideTimer();
     media?.revert();
     media = undefined;
     await nextTick();
     if (!mounted) return;
     setupMotion();
+    startSlideTimer();
     // The sticky opening changes height. Restore the anchor after the new layout settles.
     motionFrame = requestAnimationFrame(() => {
       motionFrame = 0;
@@ -303,6 +414,7 @@ onMounted(async () => {
   window.addEventListener('scroll', scrollChanged, { passive: true });
   window.addEventListener('resize', viewportResized);
   setupMotion();
+  startSlideTimer();
   const index = chapters.findIndex(chapter => chapter.id === route.query.chapter);
   if (index >= 0) go(index, true);
   scrollChanged();
@@ -316,6 +428,7 @@ onMounted(async () => {
 onUnmounted(() => {
   mounted = false;
   motionReady = false;
+  stopSlideTimer();
   cancelAnimationFrame(scrollFrame);
   cancelAnimationFrame(resizeFrame);
   cancelAnimationFrame(motionFrame);
@@ -328,14 +441,25 @@ onUnmounted(() => {
 <template>
   <div
     class="homepage-stage-wrap cinema-home"
-    :class="{ 'is-dark-chapter': darkChapter, 'has-story-motion': !publicReducedMotion }"
+    :class="{
+      'is-dark-chapter': darkChapter,
+      'is-opening-chapter': active === 0,
+      'has-story-motion': !publicReducedMotion,
+    }"
   >
-    <div v-if="error" class="public-api-error page-width" role="alert">
-      {{ error }}
-      <button class="text-button" @click="load">重新加载</button>
-    </div>
     <div ref="stage" class="chapter-stage" aria-label="学校官网章节浏览">
-      <section id="home" data-chapter="home" class="campus-chapter hero-chapter" aria-label="首页">
+      <section
+        id="home"
+        data-chapter="home"
+        class="campus-chapter hero-chapter"
+        aria-label="首页"
+        @mouseenter="heroPaused = true"
+        @mouseleave="heroPaused = false"
+        @focusin="heroPaused = true"
+        @focusout="heroPaused = false"
+        @keydown.left="selectSlide(slide - 1)"
+        @keydown.right="selectSlide(slide + 1)"
+      >
         <div class="hero-scene">
           <div class="hero-backdrop">
             <div class="hero-slides" aria-hidden="true">
@@ -344,12 +468,20 @@ onUnmounted(() => {
                 :key="image.url"
                 class="hero-slide"
                 :class="{ current: slide === index, retiring: previousSlide === index && slide !== index }"
-                :style="{ backgroundImage: 'url(' + image.url + ')', backgroundPosition: image.position }"
-              ></div>
+              >
+                <img
+                  class="hero-slide-image"
+                  :src="image.url"
+                  alt=""
+                  :fetchpriority="index === 0 ? 'high' : 'low'"
+                  decoding="async"
+                  :style="{ objectPosition: image.position }"
+                />
+              </div>
             </div>
           </div>
           <div class="hero-shade"></div>
-          <span class="hero-side-note" aria-hidden="true">ZHENGZHOU · A JOURNEY OF GROWTH</span>
+          <span class="hero-side-note" aria-hidden="true">新郑 · 始于一九九七 · ZHENGZHOU</span>
           <div class="hero-copy page-width">
             <span class="cinema-eyebrow">在校园中，开启自己的成长旅程</span>
             <h1>
@@ -361,10 +493,16 @@ onUnmounted(() => {
               <br />
               成为走向未来的起点。
             </p>
-            <RouterLink :to="publicContentLink('school-introduction', 'home')">
-              认识郑工
-              <ArrowUpRight :size="17" />
-            </RouterLink>
+            <div class="hero-cta-row">
+              <RouterLink class="hero-cta-primary" :to="publicContentLink('school-introduction', 'home')">
+                认识郑工
+                <ArrowUpRight :size="17" />
+              </RouterLink>
+              <RouterLink class="hero-cta-secondary" to="/campus/explore?view=model">
+                三维校园漫游
+                <ArrowUpRight :size="15" />
+              </RouterLink>
+            </div>
           </div>
           <div class="hero-controls page-width">
             <span>
@@ -387,7 +525,7 @@ onUnmounted(() => {
               <button class="icon-button" aria-label="下一张校园图片" @click="selectSlide(slide + 1)">
                 <ArrowRight :size="17" />
               </button>
-              <small class="hero-image-label">校园影像</small>
+              <small class="hero-image-label">{{ images[slide]?.label }}</small>
             </div>
           </div>
           <a class="hero-photo-credit" :href="images[slide]?.sourceUrl" target="_blank" rel="noopener noreferrer">
@@ -425,7 +563,7 @@ onUnmounted(() => {
             <p>学习之外，还有生活的万千可能。</p>
           </div>
           <div class="life-composition">
-            <figure class="life-visual">
+            <figure class="life-visual" data-photo-reveal>
               <div class="life-photo">
                 <img
                   :src="schoolMedia.performance.url"
@@ -458,11 +596,22 @@ onUnmounted(() => {
                 <em>写进日常</em>
               </h2>
               <p>{{ panel.body }}</p>
+              <div class="life-pillars" role="group" aria-label="校园生活面向">
+                <button
+                  v-for="(pillar, pillarIndex) in lifePillars"
+                  :key="pillar.label"
+                  type="button"
+                  :aria-pressed="activePillar === pillarIndex"
+                  @mouseenter="activePillar = pillarIndex"
+                  @click="activePillar = pillarIndex"
+                >
+                  {{ pillar.label }}
+                </button>
+              </div>
+              <Transition :name="publicReducedMotion ? '' : 'pillar-fade'" mode="out-in">
+                <p :key="activePillar" class="life-pillar-note">{{ lifePillars[activePillar]?.line }}</p>
+              </Transition>
             </div>
-          </div>
-          <div class="life-footnote">
-            <span>在这里，发现课堂之外的自己。</span>
-            <span>阅读 · 运动 · 艺术 · 伙伴</span>
           </div>
           <div class="life-explore-bridge" data-reveal>
             <div>
@@ -492,26 +641,105 @@ onUnmounted(() => {
             }"
           >
             <div class="chapter-copy" data-reveal>
+              <span class="chapter-watermark" aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
               <h2 class="chapter-title">
                 {{ panel.title[0] }}
                 <br />
                 {{ panel.title[1] }}
               </h2>
               <p>{{ panel.body }}</p>
+              <ul v-if="panel.id === 'education'" class="editorial-pillars" aria-label="教学特色">
+                <li>
+                  <span>01</span>
+                  工程实训与项目化课堂
+                </li>
+                <li>
+                  <span>02</span>
+                  校企协同与产教深度融合
+                </li>
+                <li>
+                  <span>03</span>
+                  理工实践与人文美育并重
+                </li>
+              </ul>
+              <ul v-if="panel.id === 'research'" class="editorial-pillars" aria-label="科研与学术支撑">
+                <li>
+                  <span>01</span>
+                  重点（培育）学科与平台建设
+                </li>
+                <li>
+                  <span>02</span>
+                  工程技术研发与产学研协作
+                </li>
+                <li>
+                  <span>03</span>
+                  东、西校区馆藏与数字文献支撑
+                </li>
+              </ul>
+              <div v-if="panel.id === 'admissions'" class="admissions-facts" aria-label="学校办学概览">
+                <div>
+                  <strong>东 / 西</strong>
+                  <span>新郑双校区联动育人</span>
+                </div>
+                <div>
+                  <strong>6 大学院</strong>
+                  <span>工 · 医 · 管 · 艺多学科布局</span>
+                </div>
+              </div>
+              <div v-if="panel.id === 'departments'" class="department-spotlight">
+                <div class="department-spotlight-frame">
+                  <img
+                    v-for="(dept, deptIndex) in departments"
+                    :key="dept.name"
+                    :class="{ 'is-active': hoveredDept === deptIndex }"
+                    :src="dept.media.url"
+                    :alt="dept.media.alt"
+                    :width="dept.media.width"
+                    :height="dept.media.height"
+                    :style="{ objectPosition: dept.media.position }"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                  <div class="department-spotlight-overlay">
+                    <small>{{ activeDepartment.english }}</small>
+                    <strong>{{ activeDepartment.name }}</strong>
+                    <p>{{ activeDepartment.note }}</p>
+                  </div>
+                </div>
+              </div>
               <RouterLink v-if="panel.slug" class="chapter-link" :to="publicContentLink(panel.slug, panel.id)">
                 {{ panel.link }}
                 <ArrowUpRight :size="16" />
               </RouterLink>
-              <a
-                v-if="panel.external"
-                class="chapter-link"
-                :href="panel.external"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                学校招生信息网
+              <RouterLink v-if="panel.id === 'education'" class="chapter-link" to="/campus/explore?view=model">
+                探索教学楼宇与空间
                 <ArrowUpRight :size="16" />
-              </a>
+              </RouterLink>
+              <div v-if="panel.id === 'research'" class="chapter-action-row">
+                <a class="chapter-link" href="https://kwc.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">
+                  学校科研处
+                  <ArrowUpRight :size="16" />
+                </a>
+                <a class="chapter-link" href="https://lib.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">
+                  图书馆资源
+                  <ArrowUpRight :size="16" />
+                </a>
+              </div>
+              <div v-if="panel.external" class="chapter-action-row">
+                <a
+                  class="chapter-link chapter-link-framed"
+                  :href="panel.external"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  学校招生信息网
+                  <ArrowUpRight :size="16" />
+                </a>
+                <a class="chapter-link" href="https://www.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">
+                  校园动态与服务
+                  <ArrowUpRight :size="16" />
+                </a>
+              </div>
               <a
                 v-if="panel.id === 'departments'"
                 class="chapter-link"
@@ -523,7 +751,7 @@ onUnmounted(() => {
                 <ArrowUpRight :size="16" />
               </a>
               <div v-if="panel.id === 'exchange'" class="exchange-line">
-                <span>交流信息以学校发布为准</span>
+                <span>交流信息以学校官方发布为准</span>
                 <a href="https://www.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">
                   学校官方站点
                   <ArrowUpRight :size="15" />
@@ -534,7 +762,7 @@ onUnmounted(() => {
               v-if="panel.media && panel.tone !== 'photo'"
               class="chapter-visual"
               :style="{ maxWidth: panel.media.width + 'px' }"
-              data-reveal
+              data-photo-reveal
             >
               <div
                 class="chapter-media campus-photo"
@@ -550,6 +778,19 @@ onUnmounted(() => {
                   decoding="async"
                 />
               </div>
+              <div v-if="panel.secondaryMedia" class="education-inset-visual">
+                <div class="campus-photo">
+                  <img
+                    :src="panel.secondaryMedia.url"
+                    :alt="panel.secondaryMedia.alt"
+                    :width="panel.secondaryMedia.width"
+                    :height="panel.secondaryMedia.height"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </div>
+                <small>{{ panel.secondaryMedia.label }} · 美育空间</small>
+              </div>
               <figcaption class="campus-caption">
                 <span>{{ panel.media.label }}</span>
                 <small>
@@ -563,24 +804,60 @@ onUnmounted(() => {
             <div v-if="panel.id === 'departments'" class="department-grid" data-reveal>
               <a
                 v-for="(department, departmentIndex) in departments"
-                :key="department"
-                href="https://zsb.zzuit.edu.cn/"
+                :key="department.name"
+                :class="{ 'is-highlighted': hoveredDept === departmentIndex }"
+                :href="department.url"
                 target="_blank"
                 rel="noopener noreferrer"
+                @mouseenter="hoveredDept = departmentIndex"
+                @focus="hoveredDept = departmentIndex"
               >
                 <small class="department-number" aria-hidden="true">
                   {{ String(departmentIndex + 1).padStart(2, '0') }}
                 </small>
-                <span>{{ department }}</span>
+                <div class="department-item-copy">
+                  <span>{{ department.name }}</span>
+                  <small>{{ department.focus }}</small>
+                </div>
                 <ArrowUpRight :size="15" />
               </a>
-              <small>院系名称参考学校公开招生目录；点击前往学校招生信息网。</small>
+              <small>院系名称参考学校公开招生目录；悬停可预览学院风物，点击前往学校招生信息网。</small>
             </div>
             <div v-if="panel.id === 'disclosure'" class="public-content-list" data-reveal>
-              <RouterLink v-for="item in contents" :key="item.id" :to="publicContentLink(item.slug, 'disclosure')">
+              <div class="disclosure-filters" role="group" aria-label="公开信息分类筛选">
+                <button type="button" :aria-pressed="disclosureCategory === 'all'" @click="disclosureCategory = 'all'">
+                  全部
+                </button>
+                <button
+                  type="button"
+                  :aria-pressed="disclosureCategory === 'notice'"
+                  @click="disclosureCategory = 'notice'"
+                >
+                  通知公告
+                </button>
+                <button
+                  type="button"
+                  :aria-pressed="disclosureCategory === 'about'"
+                  @click="disclosureCategory = 'about'"
+                >
+                  学校资料
+                </button>
+              </div>
+              <div v-if="error" class="public-api-inline-error" role="alert">
+                <span>{{ error }}</span>
+                <button class="text-button" @click="load">重新加载</button>
+              </div>
+              <RouterLink
+                v-for="item in filteredContents"
+                :key="item.id"
+                :to="publicContentLink(item.slug, 'disclosure')"
+              >
                 <div class="public-content-copy">
                   <small>
-                    <span>{{ item.sourceType === 'DEMO' ? '演示内容' : '学校资料' }}</span>
+                    <span>
+                      {{ item.category === 'notice' ? '通知公告' : '学校资料' }} ·
+                      {{ item.sourceType === 'DEMO' ? '演示内容' : '公开资料' }}
+                    </span>
                     <time v-if="item.publishedAt" :datetime="item.publishedAt">
                       {{ formatPublicDate(item.publishedAt) }}
                     </time>
@@ -591,17 +868,22 @@ onUnmounted(() => {
                 <ArrowUpRight :size="16" />
               </RouterLink>
               <p v-if="loading" class="muted" role="status">正在加载公开资料…</p>
-              <p v-else-if="error" class="muted">公开资料暂时无法加载，可通过学校官方站点查阅。</p>
-              <p v-else-if="!contents.length" class="muted">暂无已发布公开内容。</p>
-              <a
-                class="public-catalog-source"
-                href="https://www.zzuit.edu.cn/"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <span>更多学校公开信息</span>
-                <ArrowUpRight :size="13" />
-              </a>
+              <p v-else-if="!error && !filteredContents.length" class="muted">当前分类暂无已发布公开内容。</p>
+              <div class="disclosure-footer-links">
+                <RouterLink class="public-catalog-source" to="/verify/certificate">
+                  <span>在校证明防伪验真</span>
+                  <ArrowUpRight :size="13" />
+                </RouterLink>
+                <a
+                  class="public-catalog-source"
+                  href="https://www.zzuit.edu.cn/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <span>更多学校公开信息</span>
+                  <ArrowUpRight :size="13" />
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -618,16 +900,38 @@ onUnmounted(() => {
             </span>
             <p>转动视角，认识校园楼宇与公共空间。</p>
           </RouterLink>
-          <RouterLink to="/login">
+          <RouterLink :to="currentUser ? landingPage() : '/login'">
             <small>02 / CAMPUS SERVICES</small>
             <span>
-              进入校园服务
+              {{ currentUser ? '进入个人门户' : '进入校园服务' }}
               <ArrowUpRight :size="18" />
             </span>
-            <p>登录个人门户，查看学习与办事信息。</p>
+            <p>
+              {{
+                currentUser ? '已登录校园账号，立即查看课表、日程与日常办事。' : '登录个人门户，查看学习与办事信息。'
+              }}
+            </p>
           </RouterLink>
         </div>
-        <small>校园综合服务平台 · 毕业设计演示</small>
+        <div class="closing-meta">
+          <div v-if="school?.campuses.length" class="closing-campuses">
+            <span v-for="campus in school.campuses" :key="campus.id">
+              <strong>{{ campus.name }}</strong>
+              {{ campus.address }}
+            </span>
+          </div>
+          <div class="closing-links">
+            <RouterLink to="/verify/certificate">
+              证明验真
+              <ArrowUpRight :size="12" />
+            </RouterLink>
+            <a href="https://www.zzuit.edu.cn/" target="_blank" rel="noopener noreferrer">
+              学校官网
+              <ArrowUpRight :size="12" />
+            </a>
+            <small>校园综合服务平台 · 毕业设计演示</small>
+          </div>
+        </div>
       </footer>
     </div>
     <div class="chapter-progress page-width">
@@ -650,6 +954,8 @@ onUnmounted(() => {
         </button>
       </div>
     </div>
-    <span class="sr-only" aria-live="polite">{{ chapters[active]?.name }}，第 {{ active + 1 }} 章，共 9 章。</span>
+    <span class="sr-only" aria-live="polite">
+      {{ active === 0 ? '首页序章' : `${chapters[active]?.name}，第 ${active} 章，共 ${chapters.length - 1} 章。` }}
+    </span>
   </div>
 </template>

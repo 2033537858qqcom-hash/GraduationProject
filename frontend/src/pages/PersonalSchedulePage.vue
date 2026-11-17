@@ -14,6 +14,8 @@ import {
   TriangleAlert,
 } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import {
   addScheduleDays,
   safeScheduleDestination,
@@ -56,7 +58,7 @@ const selectedDay = computed(() =>
     : '',
 );
 const filtered = computed(
-  () => data.value?.events.filter(e => source.value === 'ALL' || e.source === source.value) ?? [],
+  () => data.value?.events?.filter(e => source.value === 'ALL' || e.source === source.value) ?? [],
 );
 const days = computed(() => splitScheduleDays(filtered.value, monday.value));
 const shownDays = computed(() =>
@@ -65,10 +67,10 @@ const shownDays = computed(() =>
 const visibleCount = computed(() =>
   selectedDay.value ? new Set(shownDays.value.flatMap(d => d.events.map(e => e.key))).size : filtered.value.length,
 );
-const overlapCount = computed(() => data.value?.events.filter(e => e.overlapKeys.length > 0).length ?? 0);
-const pendingCount = computed(() => data.value?.events.filter(e => e.tentative).length ?? 0);
+const overlapCount = computed(() => data.value?.events?.filter(e => (e.overlapKeys?.length ?? 0) > 0).length ?? 0);
+const pendingCount = computed(() => data.value?.events?.filter(e => e.tentative).length ?? 0);
 const unavailableLabels = computed(
-  () => data.value?.unavailableSources.map(key => scheduleSources[key]).join('、') ?? '',
+  () => data.value?.unavailableSources?.map(key => scheduleSources[key]).join('、') ?? '',
 );
 const weekday = (day: string) =>
   new Intl.DateTimeFormat('zh-CN', { weekday: 'short', timeZone: 'UTC' }).format(new Date(day + 'T12:00:00Z'));
@@ -76,7 +78,7 @@ const dateLabel = (day: string) =>
   new Intl.DateTimeFormat('zh-CN', { month: 'long', day: 'numeric', timeZone: 'UTC' }).format(
     new Date(day + 'T12:00:00Z'),
   );
-const sourceCount = (key: ScheduleSource) => data.value?.events.filter(e => e.source === key).length ?? 0;
+const sourceCount = (key: ScheduleSource) => data.value?.events?.filter(e => e.source === key).length ?? 0;
 function stateLabel(event: ScheduleEvent) {
   if (event.source === 'LESSON') return '课程安排';
   if (event.source === 'EXAM') return '已发布';
@@ -89,7 +91,7 @@ function stateLabel(event: ScheduleEvent) {
   );
 }
 function overlapText(event: ScheduleEvent) {
-  const matches = data.value?.events.filter(e => event.overlapKeys.includes(e.key)) ?? [];
+  const matches = data.value?.events?.filter(e => event.overlapKeys?.includes(e.key)) ?? [];
   return `与${[...new Set(matches.map(e => scheduleSources[e.source]))].join('、')}时间重叠${event.tentative || matches.some(e => e.tentative) ? '（含待审预约）' : ''}`;
 }
 async function changeWeek(day: string) {
@@ -130,14 +132,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="personal-schedule" :aria-busy="loading">
-    <header class="schedule-page-heading">
-      <div>
-        <span class="portal-context">学生服务中心 · 时间安排</span>
-        <h1>我的日程</h1>
-        <p class="muted">把学习与校园事务放在同一周，提前看见时间上的交集。</p>
-      </div>
-      <div class="schedule-heading-actions">
+  <div class="personal-schedule service-workflow" :aria-busy="loading">
+    <ServicePageHeader
+      context="学生服务中心 · 时间安排"
+      title="我的日程"
+      description="把学习与校园事务放在同一周，提前看见时间上的交集。"
+    >
+      <template #actions>
         <RouterLink to="/portal/learning/timetable" class="text-button">
           每周课程表
           <ArrowUpRight :size="14" />
@@ -146,8 +147,8 @@ onBeforeUnmount(() => {
           <RefreshCw :size="14" />
           刷新日程
         </button>
-      </div>
-    </header>
+      </template>
+    </ServicePageHeader>
     <p v-if="range.invalid" class="content-context-note">日期参数无效，已显示本周。可重新选择日期。</p>
     <section class="portal-panel schedule-overview" aria-labelledby="schedule-week-heading">
       <div class="schedule-range-row">
@@ -164,7 +165,7 @@ onBeforeUnmount(() => {
                 ? '正在同步安排…'
                 : error
                   ? '本周日程尚未读取'
-                  : `共 ${data?.events.length ?? 0} 项安排 · ${pendingCount} 项待审批`
+                  : `共 ${data?.events?.length ?? 0} 项安排 · ${pendingCount} 项待审批`
             }}
           </p>
         </div>
@@ -195,7 +196,7 @@ onBeforeUnmount(() => {
       <nav class="schedule-source-filters" aria-label="日程类型筛选">
         <button :aria-pressed="source === 'ALL'" @click="filterBy('ALL')">
           全部
-          <span>{{ loading || error ? '—' : (data?.events.length ?? 0) }}</span>
+          <span>{{ loading || error ? '—' : (data?.events?.length ?? 0) }}</span>
         </button>
         <button
           v-for="key in sources"
@@ -226,17 +227,14 @@ onBeforeUnmount(() => {
         </button>
       </nav>
     </section>
-    <div v-if="loading" class="portal-panel schedule-loading" role="status">
-      <CalendarDays :size="24" />
-      <span>正在同步你的课程、考试、请假与预约…</span>
-    </div>
+    <SkeletonBlock v-if="loading" variant="schedule" :rows="4" label="正在同步你的课程、考试、请假与预约…" />
     <section v-else-if="error" class="portal-panel schedule-error" role="alert">
       <h2>暂时无法读取日程</h2>
       <p>{{ error }}</p>
       <button class="button compact" @click="load">重新读取</button>
     </section>
     <template v-else-if="data">
-      <p v-if="data.unavailableSources.length" class="content-context-note">
+      <p v-if="data.unavailableSources?.length" class="content-context-note">
         当前账号尚无{{ unavailableLabels }}的查询权限，这些来源未汇总。
       </p>
       <div v-if="overlapCount" class="schedule-overlap-note" role="status">
@@ -251,7 +249,7 @@ onBeforeUnmount(() => {
         <button v-if="selectedDay || source !== 'ALL'" class="text-button" @click="filterBy('ALL', '')">
           查看整周全部安排
         </button>
-        <span v-else class="muted">更新于 {{ data.generatedAt.slice(11, 16) }}</span>
+        <span v-else class="muted">更新于 {{ data.generatedAt?.slice(11, 16) ?? '' }}</span>
       </div>
       <section v-if="!visibleCount" class="portal-panel schedule-empty">
         <CalendarDays :size="28" />
@@ -259,7 +257,7 @@ onBeforeUnmount(() => {
           {{
             selectedDay || source !== 'ALL'
               ? '当前筛选下没有日程'
-              : data.availableSources.length
+              : data.availableSources?.length
                 ? '这一周暂无已汇总的安排'
                 : '当前没有可读取的日程来源'
           }}
@@ -311,7 +309,7 @@ onBeforeUnmount(() => {
                 <MapPin :size="13" />
                 {{ event.location }}
               </p>
-              <p v-if="event.overlapKeys.length" class="schedule-event-overlap">
+              <p v-if="event.overlapKeys?.length" class="schedule-event-overlap">
                 <TriangleAlert :size="13" />
                 {{ overlapText(event) }}
               </p>
@@ -341,9 +339,7 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   padding-bottom: 28px;
 }
-.schedule-page-heading,
 .schedule-range-row,
-.schedule-heading-actions,
 .schedule-week-controls,
 .schedule-agenda-heading {
   display: flex;
@@ -351,23 +347,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 16px;
 }
-.schedule-page-heading {
-  align-items: flex-start;
-  margin-bottom: 28px;
-  flex-wrap: wrap;
-}
-.schedule-page-heading h1 {
-  margin: 8px 0 12px;
-}
-.schedule-heading-actions {
-  flex-wrap: wrap;
-  padding-top: 8px;
-}
 .schedule-overview {
   padding: 24px;
 }
 .schedule-period {
-  color: #60778e;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
   letter-spacing: 0.15em;
 }
@@ -377,7 +361,7 @@ onBeforeUnmount(() => {
 }
 .schedule-range-row h2 small {
   margin-left: 12px;
-  color: #7a8997;
+  color: var(--color-text-tertiary);
   font-family: inherit;
   font-size: var(--text-body);
   font-weight: 400;
@@ -398,7 +382,7 @@ onBeforeUnmount(() => {
   gap: 8px;
   font-size: var(--text-supporting);
   font-weight: 400;
-  color: #65788a;
+  color: var(--color-text-secondary);
 }
 .schedule-date-picker input {
   width: 148px;
@@ -417,27 +401,27 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 7px;
   padding: 7px 12px;
-  border: 1px solid #e3e8ee;
-  background: var(--color-white);
-  color: #51687d;
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
   border-radius: var(--radius-md);
   font-size: var(--text-supporting);
 }
 .schedule-source-filters button span {
-  color: #6d7e8f;
+  color: var(--color-text-tertiary);
   padding-left: 4px;
   font-size: var(--text-supporting);
 }
 .schedule-source-filters button[aria-pressed='true'] {
-  background: #edf3fa;
-  border-color: #b6c9df;
+  background: var(--color-surface-soft);
+  border-color: var(--color-border-strong);
   color: var(--color-brand);
   font-weight: 600;
 }
 .schedule-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  border: 1px solid #e5eaf0;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
@@ -447,12 +431,12 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 7px;
   border: 0;
-  border-right: 1px solid #e5eaf0;
+  border-right: 1px solid var(--color-border-subtle);
   border-radius: 0;
-  background: #fafbfd;
+  background: var(--color-surface);
   padding: 13px 16px;
   text-align: left;
-  color: #62768a;
+  color: var(--color-text-secondary);
 }
 .schedule-days button:last-child {
   border-right: 0;
@@ -466,7 +450,7 @@ onBeforeUnmount(() => {
 .schedule-days strong {
   font-size: 23px;
   font-weight: 500;
-  color: #243e58;
+  color: var(--color-ink);
   font-variant-numeric: tabular-nums;
 }
 .schedule-days small {
@@ -474,26 +458,26 @@ onBeforeUnmount(() => {
   font-weight: 400;
 }
 .schedule-days .is-today strong {
-  color: #244f82;
+  color: var(--color-brand);
 }
 .schedule-days .is-today > span small {
-  color: #365c83;
+  color: var(--color-heading);
 }
 .schedule-days button[aria-pressed='true'] {
-  background: #edf3fa;
-  box-shadow: inset 0 -3px #315c89;
+  background: var(--color-surface-active);
+  box-shadow: inset 0 -3px var(--color-brand);
 }
 .schedule-source-filters button:hover,
 .schedule-days button:hover {
-  background: #f0f5fa;
+  background: var(--color-surface-hover);
 }
 .schedule-overlap-note {
   display: flex;
   gap: 10px;
   align-items: center;
-  border: 1px solid #e8d9b8;
-  background: #fffcf5;
-  color: #876427;
+  border: 1px solid var(--color-warning-border);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
   padding: 13px 16px;
   border-radius: var(--radius-lg);
   margin: 18px 0;
@@ -512,7 +496,7 @@ onBeforeUnmount(() => {
 .schedule-agenda-heading h2 small {
   margin-left: 12px;
   font-size: var(--text-meta);
-  color: #6a7c8c;
+  color: var(--color-text-secondary);
   font-weight: 400;
 }
 .schedule-agenda-heading > span {
@@ -532,8 +516,9 @@ onBeforeUnmount(() => {
 }
 .schedule-day-label > strong {
   font-size: 30px;
-  color: #294b6a;
+  color: var(--color-heading);
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 .schedule-day-label h3 {
@@ -542,7 +527,7 @@ onBeforeUnmount(() => {
 }
 .schedule-day-label span {
   font-size: var(--text-meta);
-  color: #758495;
+  color: var(--color-text-tertiary);
   white-space: nowrap;
 }
 .schedule-event-list {
@@ -550,28 +535,37 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 .schedule-event {
-  --event-accent: #315c89;
+  --event-accent: var(--color-brand);
   display: grid;
   grid-template-columns: 86px minmax(0, 1fr) auto;
   gap: 20px;
   align-items: center;
-  border: 1px solid #e2e8ee;
-  border-left: 3px solid var(--event-accent);
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border);
+  border-top: 2px solid var(--event-accent);
+  border-radius: var(--radius-xs);
   background: var(--color-white);
   padding: 19px 22px;
+  transition:
+    border-color 0.16s ease,
+    box-shadow 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.schedule-event:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: 0 4px 12px rgb(41 62 52 / 6%);
+  transform: translateY(-1px);
 }
 .schedule-event[data-source='EXAM'] {
-  --event-accent: #9c6d36;
+  --event-accent: var(--color-warning);
 }
 .schedule-event[data-source='LEAVE'] {
-  --event-accent: #468077;
+  --event-accent: rgb(70 128 119);
 }
 .schedule-event[data-source='RESERVATION'] {
-  --event-accent: #69749d;
+  --event-accent: var(--color-gold);
 }
 .schedule-event.tentative {
-  border-left-style: dashed;
+  border-style: dashed;
 }
 .schedule-event-time {
   display: grid;
@@ -582,11 +576,11 @@ onBeforeUnmount(() => {
 .schedule-event-time strong {
   font-size: var(--text-title-sm);
   font-weight: 600;
-  color: #263e56;
+  color: var(--color-ink);
 }
 .schedule-event-time span,
 .schedule-event-time small {
-  color: #758494;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
 }
 .schedule-event-kicker {
@@ -594,7 +588,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   align-items: center;
   font-size: var(--text-meta);
-  color: #718191;
+  color: var(--color-text-tertiary);
 }
 .schedule-event-kicker > span:first-child {
   display: inline-flex;
@@ -603,7 +597,7 @@ onBeforeUnmount(() => {
   color: var(--event-accent);
 }
 .schedule-event-kicker .is-pending {
-  color: #946920;
+  color: var(--color-warning);
 }
 .schedule-event-body {
   min-width: 0;
@@ -621,7 +615,7 @@ onBeforeUnmount(() => {
   gap: 5px;
   margin: 5px 0 0;
   font-size: var(--text-supporting);
-  color: #697e91;
+  color: var(--color-text-secondary);
 }
 .schedule-event-location svg,
 .schedule-event-overlap svg {
@@ -629,7 +623,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .schedule-event-overlap {
-  color: #946a2e;
+  color: var(--color-warning);
 }
 .schedule-event-link {
   white-space: nowrap;
@@ -643,7 +637,7 @@ onBeforeUnmount(() => {
   justify-content: center;
   gap: 12px;
   padding: 44px 20px;
-  color: #657c91;
+  color: var(--color-text-secondary);
   text-align: center;
 }
 .schedule-empty h3,
@@ -651,14 +645,14 @@ onBeforeUnmount(() => {
   margin: 0;
 }
 .schedule-footnote {
-  color: #7a8995;
+  color: var(--color-text-tertiary);
   font-size: var(--text-meta);
   line-height: 1.8;
   margin-top: 26px;
 }
 .personal-schedule button:focus-visible,
 .personal-schedule a:focus-visible {
-  outline: 2px solid #315c89;
+  outline: 2px solid var(--color-brand);
   outline-offset: 3px;
 }
 
@@ -680,27 +674,36 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 600px) {
-  .schedule-page-heading {
-    margin-bottom: 20px;
-    gap: 8px;
-  }
-  .schedule-heading-actions {
-    padding-top: 0;
-    width: 100%;
-  }
   .schedule-overview {
     padding: 18px 14px;
   }
   .schedule-range-row h2 {
     font-size: 19px;
   }
+  .schedule-week-controls {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  .schedule-date-picker {
+    flex: 1 0 100%;
+    width: 100%;
+    white-space: nowrap;
+  }
+  .schedule-date-picker input {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
   .schedule-days {
+    grid-template-columns: repeat(7, minmax(56px, 1fr));
+    gap: 6px;
     overflow-x: auto;
+    padding-bottom: 4px;
   }
   .schedule-days button {
     padding: 10px 6px;
     align-items: center;
-    min-width: 0;
+    min-width: 56px;
   }
   .schedule-days button > span {
     font-size: var(--text-meta);
@@ -760,6 +763,15 @@ onBeforeUnmount(() => {
   .schedule-agenda-heading {
     flex-wrap: wrap;
     gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .schedule-event {
+    transition-duration: 0.01ms;
+  }
+  .schedule-event:hover {
+    transform: none;
   }
 }
 </style>

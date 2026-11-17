@@ -1,13 +1,16 @@
-import overview from '../../../assets/campus/official/admissions-banner02.jpg'
-import learning from '../../../assets/campus/official/admissions-banner01.jpg'
-import spring from '../../../assets/campus/official/XMT_9742.jpg'
-import architecture from '../../../assets/campus/official/XMT_9744.jpg'
+import overview from '../../../assets/campus/official/admissions-banner02.webp'
+import learning from '../../../assets/campus/official/admissions-banner01.webp'
+import spring from '../../../assets/campus/official/XMT_9742.webp'
+import architecture from '../../../assets/campus/official/XMT_9744.webp'
 import lakeside from '../../../assets/campus/official/campus-lakeside.webp'
 import practice from '../../../assets/campus/official/engineering-practice.webp'
 import seminar from '../../../assets/campus/official/discipline-seminar.webp'
 import freshmen from '../../../assets/campus/official/freshmen-ceremony.webp'
 import international from '../../../assets/campus/official/international-agreement.webp'
 import performance from '../../../assets/campus/official/welcome-performance.webp'
+import mingde from '../../../assets/campus/official/campus-mingde.webp'
+import library from '../../../assets/campus/official/campus-library.webp'
+import boardwalk from '../../../assets/campus/official/campus-boardwalk.webp'
 
 export interface SchoolPhoto {
   url: string
@@ -109,5 +112,32 @@ export const schoolMedia = {
     height: 683,
     position: '58% 44%',
     sourceUrl: 'https://www.zzuit.edu.cn/info/1016/8687.htm',
+  },
+  mingde: {
+    url: mingde,
+    label: '明德楼光影',
+    alt: '学校官网校园风光中的明德楼拱门与绿荫草地',
+    width: 1600,
+    height: 1041,
+    position: '54% 46%',
+    sourceUrl: 'https://www.zzuit.edu.cn/gyxy/xyfg.htm',
+  },
+  library: {
+    url: library,
+    label: '图书馆阶梯',
+    alt: '学校官网校园风光中的图书馆红砖建筑与晴空阶梯',
+    width: 1400,
+    height: 901,
+    position: '50% 45%',
+    sourceUrl: 'https://www.zzuit.edu.cn/gyxy/xyfg.htm',
+  },
+  boardwalk: {
+    url: boardwalk,
+    label: '翠湖木栈道',
+    alt: '学校官网校园风光中的垂柳翠湖与木栈道风光',
+    width: 1400,
+    height: 787,
+    position: '50% 50%',
+    sourceUrl: 'https://www.zzuit.edu.cn/gyxy/xyfg.htm',
   },
 } satisfies Record<string, SchoolPhoto>

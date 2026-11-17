@@ -8,6 +8,14 @@ const dialog = ref<HTMLDialogElement>();
 const trigger = ref<HTMLButtonElement>();
 const opened = ref(false);
 
+const activeIndex = () =>
+  Math.max(
+    0,
+    chapters.findIndex(item => item.id === activeChapter.value),
+  );
+function chapterCode(index: number) {
+  return String(index).padStart(2, '0');
+}
 async function open() {
   dialog.value?.showModal();
   opened.value = true;
@@ -43,11 +51,8 @@ onBeforeUnmount(() => {
       :aria-label="'打开章节目录，当前' + (chapters.find(item => item.id === activeChapter)?.name ?? '首页')"
       @click="open"
     >
-      <span>
-        {{ String(chapters.findIndex(item => item.id === activeChapter) + 1).padStart(2, '0') }} /
-        {{ String(chapters.length).padStart(2, '0') }}
-      </span>
-      <span>{{ chapters.find(item => item.id === activeChapter)?.name }}</span>
+      <span>{{ chapterCode(activeIndex()) }} / {{ chapterCode(chapters.length - 1) }}</span>
+      <span>{{ chapters[activeIndex()]?.name }}</span>
       <List :size="15" />
     </button>
     <dialog
@@ -74,7 +79,7 @@ onBeforeUnmount(() => {
             :aria-current="chapter.id === activeChapter ? 'location' : undefined"
             @click="select($event, index)"
           >
-            <small>{{ String(index + 1).padStart(2, '0') }}</small>
+            <small>{{ chapterCode(index) }}</small>
             <span>{{ chapter.name }}</span>
             <ArrowUpRight :size="14" />
           </a>
@@ -100,30 +105,30 @@ onBeforeUnmount(() => {
   cursor: pointer;
 }
 .chapter-directory-trigger > span:first-child {
-  font-size: 10px;
+  font-size: var(--text-meta);
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
 }
 .chapter-directory-trigger > span:nth-child(2) {
-  font-size: 11px;
+  font-size: var(--text-meta);
 }
 .chapter-directory-dialog {
   width: min(430px, calc(100vw - 36px));
   max-height: min(84svh, 760px);
   padding: 0;
-  border: 1px solid #c5cdbb;
-  border-radius: 0;
-  color: #315244;
-  background: #f3f1eb;
-  box-shadow: 0 24px 80px #102a2d26;
+  border: 1px solid rgb(52 85 66 / 22%);
+  border-radius: var(--radius-xs);
+  color: var(--color-brand);
+  background: var(--site-surface);
+  box-shadow: 0 28px 80px rgb(16 42 45 / 22%);
   overflow-y: auto;
 }
 .chapter-directory-dialog::backdrop {
-  background: #102a2d70;
-  backdrop-filter: blur(3px);
+  background: rgb(16 42 45 / 46%);
+  backdrop-filter: blur(6px);
 }
 .directory-sheet {
-  padding: 25px 30px 18px;
+  padding: 26px 30px 20px;
 }
 .directory-heading {
   display: flex;
@@ -133,9 +138,9 @@ onBeforeUnmount(() => {
   padding-bottom: 20px;
 }
 .directory-heading span {
-  font-size: 9px;
+  font-size: var(--text-eyebrow);
   letter-spacing: 2px;
-  color: #879575;
+  color: var(--muted);
 }
 .directory-heading h2 {
   font-family: var(--site-serif);
@@ -151,43 +156,55 @@ onBeforeUnmount(() => {
   height: 32px;
   padding: 0;
   border: 0;
-  border-radius: 0;
+  border-radius: var(--radius-xs);
   color: inherit;
   background: none;
+  transition: background-color 0.2s ease;
+}
+.directory-close:hover {
+  background: rgb(49 82 68 / 8%);
 }
 .directory-chapters {
   display: grid;
 }
 .directory-chapters a {
   display: grid;
-  grid-template-columns: 24px 1fr 18px;
+  grid-template-columns: 28px 1fr 18px;
   align-items: center;
-  gap: 16px;
-  min-height: 47px;
-  border-top: 1px solid #cdd4c4;
-  font-size: 13px;
+  gap: 14px;
+  min-height: 48px;
+  padding-inline: 10px;
+  border-top: 1px solid rgb(52 85 66 / 14%);
+  font-size: var(--text-body);
+  transition:
+    background-color 0.2s ease,
+    padding-left 0.22s var(--ease-campus);
+}
+.directory-chapters a:hover {
+  background: rgb(196 206 177 / 18%);
+  padding-left: 15px;
 }
 .directory-chapters small {
-  color: #899679;
-  font-size: 10px;
+  color: var(--muted);
+  font-size: var(--text-meta);
   font-variant-numeric: tabular-nums;
 }
 .directory-chapters a[aria-current='location'] {
-  color: #2c5739;
-  background: #c4ceb129;
+  color: var(--color-brand);
+  background: rgb(196 206 177 / 26%);
 }
 .directory-chapters a[aria-current='location'] > span {
   font-weight: 600;
 }
 .directory-hint {
   margin: 20px 0 0;
-  color: #809071;
-  font-size: 10px;
+  color: var(--muted);
+  font-size: var(--text-meta);
   letter-spacing: 1px;
 }
 .chapter-directory a:focus-visible,
 .chapter-directory button:focus-visible {
-  outline: 2px solid #94a47c;
+  outline: 2px solid var(--color-brand);
   outline-offset: 3px;
 }
 

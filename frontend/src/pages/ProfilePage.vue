@@ -4,6 +4,7 @@ import { ArrowUpRight, Camera, Trash2, Upload } from '@lucide/vue';
 import { currentUser } from '../stores/auth';
 import { api, errorMessage } from '../lib/api';
 import { schoolMedia } from '../content/schoolMedia';
+import { publicMotionPreference, setPublicMotionPreference } from '../lib/publicMotion';
 import UserAvatar from '../components/UserAvatar.vue';
 import AccountPasswordForm from '../components/AccountPasswordForm.vue';
 import type { Profile } from '../types';
@@ -84,7 +85,7 @@ async function handleRemoveAvatar() {
 </script>
 
 <template>
-  <div class="profile-split-grid">
+  <div class="profile-split-grid service-workflow">
     <section class="portal-panel profile-info-panel">
       <div class="profile-avatar-header">
         <div class="avatar-container">
@@ -174,16 +175,44 @@ async function handleRemoveAvatar() {
         <div>
           <div class="scenic-motto">励学 · 敦行 · 明理 · 至善</div>
           <p class="scenic-desc">
-            郑州工业应用技术学院坐落于郑州市南大学城。笃学尚行、求真至善，在静谧优雅的校园环境中，专注探求学业新知与专业实践。
+            郑州工业应用技术学院坐落于郑州市南大学城。励学敦行、明理至善，在静谧优雅的校园环境中，专注探求学业新知与专业实践。
           </p>
         </div>
         <RouterLink to="/campus/explore" class="scenic-link">
-          进入 3D 校园探索
+          进入三维校园探索
           <ArrowUpRight :size="14" aria-hidden="true" />
         </RouterLink>
       </div>
     </aside>
-    <section class="portal-panel profile-password-panel"><AccountPasswordForm /></section>
+    <section class="portal-panel profile-password-panel">
+      <AccountPasswordForm />
+      <div class="profile-preference-row">
+        <div class="profile-preference-copy">
+          <h2>界面动效</h2>
+          <p class="muted">默认跟随操作系统设置；选择“减弱动效”可减少页面切换与滚动动画。</p>
+        </div>
+        <div class="profile-preference-actions" role="group" aria-label="界面动效偏好">
+          <button
+            type="button"
+            class="button compact"
+            :class="{ primary: publicMotionPreference === 'auto' }"
+            :aria-pressed="publicMotionPreference === 'auto'"
+            @click="setPublicMotionPreference('auto')"
+          >
+            跟随系统
+          </button>
+          <button
+            type="button"
+            class="button compact"
+            :class="{ primary: publicMotionPreference === 'reduce' }"
+            :aria-pressed="publicMotionPreference === 'reduce'"
+            @click="setPublicMotionPreference('reduce')"
+          >
+            减弱动效
+          </button>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -206,6 +235,29 @@ async function handleRemoveAvatar() {
   border-top: 0;
   margin-top: 0;
 }
+.profile-preference-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+.profile-preference-copy h2 {
+  margin: 0 0 6px;
+  font-size: var(--text-title-sm);
+  font-weight: 600;
+  color: var(--color-heading);
+}
+.profile-preference-copy p {
+  margin: 0;
+}
+.profile-preference-actions {
+  display: flex;
+  gap: 8px;
+}
 
 /* Avatar header layout */
 .profile-avatar-header {
@@ -213,7 +265,7 @@ async function handleRemoveAvatar() {
   align-items: center;
   gap: 24px;
   padding-bottom: 24px;
-  border-bottom: 1px solid #edf2f7;
+  border-bottom: 1px solid var(--color-border-subtle);
   margin-bottom: 8px;
 }
 
@@ -225,7 +277,7 @@ async function handleRemoveAvatar() {
 .avatar-camera-btn {
   position: absolute;
   right: -2px;
-  bottom: 0px;
+  bottom: 0;
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -244,7 +296,7 @@ async function handleRemoveAvatar() {
 }
 
 .avatar-camera-btn:hover {
-  background: #183354;
+  background: var(--color-brand-hover);
   transform: scale(1.06);
 }
 
@@ -259,9 +311,10 @@ async function handleRemoveAvatar() {
 
 .profile-avatar-header h1 {
   margin: 0 0 6px;
-  font-size: 24px;
-  font-weight: 600;
-  color: var(--color-ink);
+  font-family: var(--campus-display-serif);
+  font-size: 26px;
+  font-weight: 400;
+  color: var(--color-heading);
 }
 
 .account-identity-row {
@@ -281,6 +334,7 @@ async function handleRemoveAvatar() {
 .role-pill {
   font-size: var(--text-meta);
   background: var(--color-surface-soft);
+  border: 1px solid var(--color-border-subtle);
   color: var(--color-text-secondary);
   padding: 2px 8px;
   border-radius: var(--radius-sm);
@@ -317,9 +371,9 @@ async function handleRemoveAvatar() {
 }
 
 .avatar-btn.remove:hover {
-  background: #fff1f2;
-  border-color: #fecdd3;
-  color: #e11d48;
+  background: var(--color-danger-soft);
+  border-color: var(--color-danger-border);
+  color: var(--color-danger);
 }
 
 .feedback-banner {
@@ -332,8 +386,8 @@ async function handleRemoveAvatar() {
 
 .feedback-banner.error {
   background: var(--color-danger-soft);
-  color: #991b1b;
-  border: 1px solid #fecaca;
+  color: var(--color-danger-strong);
+  border: 1px solid var(--color-danger-border);
 }
 
 .profile-list {
@@ -346,12 +400,12 @@ async function handleRemoveAvatar() {
 
 .profile-list > div {
   padding: 14px 0;
-  border-top: 1px solid #edf2f7;
+  border-top: 1px solid var(--color-border-subtle);
 }
 
 .profile-list dt {
   font-size: var(--text-supporting);
-  color: #788494;
+  color: var(--color-text-secondary);
   margin-bottom: 4px;
 }
 
@@ -370,7 +424,7 @@ async function handleRemoveAvatar() {
   font-size: var(--text-meta);
   color: var(--color-text-tertiary);
   margin-top: 20px;
-  border-top: 1px dashed #edf2f7;
+  border-top: 1px dashed var(--color-border-subtle);
   padding-top: 12px;
 }
 
@@ -391,18 +445,31 @@ async function handleRemoveAvatar() {
   overflow: hidden;
 }
 
+.scenic-photo-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 45% 0 0;
+  background: linear-gradient(transparent, rgb(16 42 45 / 38%));
+  pointer-events: none;
+}
+
 .scenic-photo-wrap img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  transition: transform 0.6s ease;
+}
+
+.profile-scenic-card:hover .scenic-photo-wrap img {
+  transform: scale(1.03);
 }
 
 .scenic-badge {
   position: absolute;
   top: 14px;
   left: 14px;
-  background: rgb(20, 35, 55, 0.72);
+  background: rgb(33 60 53 / 72%);
   backdrop-filter: blur(8px);
   color: var(--color-white);
   font-size: var(--text-meta);
@@ -458,6 +525,25 @@ async function handleRemoveAvatar() {
   .profile-avatar-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+}
+
+@media (max-width: 640px) {
+  .profile-avatar-header {
+    align-items: center;
+    text-align: center;
+  }
+  .profile-avatar-header h1 {
+    font-size: 24px;
+  }
+  .profile-badges {
+    justify-content: center;
+  }
+  .profile-list {
+    grid-template-columns: 1fr;
+  }
+  .profile-list dd {
+    overflow-wrap: anywhere;
   }
 }
 </style>

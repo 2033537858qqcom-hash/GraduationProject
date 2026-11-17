@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
-import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
+import { computed, onMounted, ref } from 'vue';
 import { RefreshCw, UsersRound } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { useLeaveGuard } from '../composables/useEditProtection';
 import BaseSelect from '../components/BaseSelect.vue';
-import { currentUser } from '../stores/auth';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
 import type { AssignmentCatalog, CounselorAssignment } from '../leave';
 const catalog = ref<AssignmentCatalog | null>(null),
   selected = ref<CounselorAssignment | null>(null);
@@ -14,7 +14,6 @@ const counselorId = ref(''),
   loading = ref(true),
   error = ref(''),
   success = ref('');
-const dialog = ref<HTMLDialogElement | null>(null);
 const counselorOptions = computed(() => [
   { value: '', label: '暂不分配' },
   ...(catalog.value?.counselors
@@ -24,24 +23,14 @@ const counselorOptions = computed(() => [
 const dirty = computed(
   () => !!selected.value && (counselorId.value !== String(selected.value.counselorId ?? '') || !!reason.value.trim()),
 );
-let resolveLeave: ((result: boolean) => void) | null = null;
-function finish(value: boolean) {
-  dialog.value?.close();
-  resolveLeave?.(value);
-  resolveLeave = null;
-}
-async function allowLeave() {
-  if (!currentUser.value) return true;
-  if (busy.value) {
+const { allowLeave } = useLeaveGuard(busy, dirty, '还有未保存的负责人员或修改原因，确定放弃修改并继续？', {
+  title: '处理未保存的负责关系',
+  routeUpdate: true,
+  requireAuth: true,
+  onBusy: () => {
     error.value = '正在保存，请稍后离开。';
-    return false;
-  }
-  if (!dirty.value) return true;
-  return new Promise<boolean>(resolve => {
-    resolveLeave = resolve;
-    dialog.value?.showModal();
-  });
-}
+  },
+});
 async function load() {
   loading.value = true;
   error.value = '';
@@ -61,8 +50,12 @@ async function edit(item: CounselorAssignment) {
   counselorId.value = String(item.counselorId ?? '');
   reason.value = '';
   success.value = '';
-  await nextTick();
-  document.getElementById('assignment-editor-heading')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+async function closeEditor() {
+  if (await allowLeave()) {
+    selected.value = null;
+    reason.value = '';
+  }
 }
 async function refresh() {
   if (await allowLeave()) await load();
@@ -91,49 +84,22 @@ async function save() {
     busy.value = false;
   }
 }
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (dirty.value || busy.value) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-}
-onMounted(() => {
-  window.addEventListener('beforeunload', beforeUnload);
-  void load();
-});
-onBeforeUnmount(() => {
-  window.removeEventListener('beforeunload', beforeUnload);
-  finish(false);
-});
-onBeforeRouteLeave(allowLeave);
-onBeforeRouteUpdate(allowLeave);
+onMounted(load);
 </script>
 <template>
   <div>
-    <dialog
-      ref="dialog"
-      class="foundation-dialog"
-      aria-labelledby="assignment-dialog-heading"
-      @cancel.prevent="finish(false)"
+    <ServicePageHeader
+      context="学生事务配置"
+      title="辅导员负责班级"
+      description="按行政班配置请假处理人员；岗位身份在账号与组织管理中维护。"
     >
-      <h2 id="assignment-dialog-heading">处理未保存的负责关系</h2>
-      <p>还有未保存的负责人员或修改原因。</p>
-      <div class="form-actions">
-        <button class="button compact" @click="finish(false)">继续编辑</button>
-        <button class="button primary compact" @click="finish(true)">放弃修改并继续</button>
-      </div>
-    </dialog>
-    <div class="page-heading-row">
-      <div>
-        <span class="portal-context">学生事务配置</span>
-        <h1>辅导员负责班级</h1>
-        <p class="muted">按行政班配置请假处理人员；岗位身份在账号与组织管理中维护。</p>
-      </div>
-      <button class="button compact" :disabled="loading || busy" @click="refresh">
-        <RefreshCw :size="15" />
-        刷新关系
-      </button>
-    </div>
+      <template #actions>
+        <button class="button compact" :disabled="loading || busy" @click="refresh">
+          <RefreshCw :size="15" />
+          刷新关系
+        </button>
+      </template>
+    </ServicePageHeader>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
     <section class="portal-panel leave-list">
@@ -157,49 +123,75 @@ onBeforeRouteUpdate(allowLeave);
             </tr>
           </thead>
           <tbody>
-            <tr v-for="item in catalog.assignments" :key="item.classGroupId">
-              <td>{{ item.className }}</td>
-              <td>{{ item.departmentName }}</td>
-              <td>{{ item.counselorName ?? '未分配，学生暂不能提交' }}</td>
-              <td>V{{ item.version }}</td>
-              <td><button class="text-button" :disabled="busy" @click="edit(item)">维护负责关系</button></td>
-            </tr>
+            <template v-for="item in catalog.assignments" :key="item.classGroupId">
+              <tr :class="{ 'resource-selected': selected?.classGroupId === item.classGroupId }">
+                <td>{{ item.className }}</td>
+                <td>{{ item.departmentName }}</td>
+                <td>{{ item.counselorName ?? '未分配，学生暂不能提交' }}</td>
+                <td>V{{ item.version }}</td>
+                <td>
+                  <button
+                    class="text-button"
+                    :disabled="busy"
+                    @click="selected?.classGroupId === item.classGroupId ? closeEditor() : edit(item)"
+                  >
+                    {{ selected?.classGroupId === item.classGroupId ? '收起维护 ▴' : '维护负责关系 ▾' }}
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="selected && selected.classGroupId === item.classGroupId" class="table-folio-row">
+                <td colspan="5" class="table-folio-cell">
+                  <section class="portal-panel leave-detail service-inline-folio">
+                    <div class="section-heading">
+                      <div>
+                        <h2 id="assignment-editor-heading">{{ selected.className }} · 负责辅导员配置</h2>
+                        <p class="muted">
+                          {{
+                            selected.departmentName
+                          }}。移交后旧人员立即失去申请及材料访问权；有未完成申请时不能清空负责关系。
+                        </p>
+                      </div>
+                      <button class="button compact" type="button" :disabled="busy" @click="closeEditor">收起 ×</button>
+                    </div>
+                    <form class="editor-form" @submit.prevent="save">
+                      <label>
+                        负责辅导员
+                        <BaseSelect v-model="counselorId" :options="counselorOptions" :disabled="busy" />
+                      </label>
+                      <p class="muted">候选人员须为本学院启用账号，同时具备教师与辅导员身份。</p>
+                      <label>
+                        <div class="label-heading-row">
+                          <span>分配或移交原因</span>
+                          <small class="muted">必填 · 最多 200 字</small>
+                        </div>
+                        <textarea
+                          v-model="reason"
+                          required
+                          maxlength="200"
+                          rows="3"
+                          :disabled="busy"
+                          placeholder="说明负责关系调整或移交的具体原因"
+                        />
+                      </label>
+                      <div class="form-actions">
+                        <button
+                          class="button primary compact"
+                          :disabled="busy || counselorId === String(selected.counselorId ?? '')"
+                        >
+                          保存负责关系
+                        </button>
+                        <button class="button compact" type="button" :disabled="busy" @click="closeEditor">
+                          取消编辑
+                        </button>
+                      </div>
+                    </form>
+                  </section>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
-    </section>
-    <section v-if="selected" class="portal-panel leave-detail">
-      <h2 id="assignment-editor-heading">{{ selected.className }}</h2>
-      <p class="muted">
-        {{ selected.departmentName }}。移交后旧人员立即失去申请及材料访问权；有未完成申请时不能清空负责关系。
-      </p>
-      <form class="editor-form" @submit.prevent="save">
-        <label>
-          负责辅导员
-          <BaseSelect v-model="counselorId" :options="counselorOptions" :disabled="busy" />
-        </label>
-        <p class="muted">候选人员须为本学院启用账号，同时具备教师与辅导员身份。</p>
-        <label>
-          <div class="label-heading-row">
-            <span>分配或移交原因</span>
-            <small class="muted">必填 · 最多 200 字</small>
-          </div>
-          <textarea
-            v-model="reason"
-            required
-            maxlength="200"
-            rows="3"
-            :disabled="busy"
-            placeholder="说明负责关系调整或移交的具体原因"
-          />
-        </label>
-        <div class="form-actions">
-          <button class="button primary compact" :disabled="busy || counselorId === String(selected.counselorId ?? '')">
-            保存负责关系
-          </button>
-          <button class="button compact" type="button" :disabled="busy" @click="refresh">取消编辑</button>
-        </div>
-      </form>
     </section>
     <p class="data-note">
       管理员只配置负责关系，不自动获得学生请假原因、联系方式和材料。分配记录保存在账号与组织管理的行政班修改记录中。

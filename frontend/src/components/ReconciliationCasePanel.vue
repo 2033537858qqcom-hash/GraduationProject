@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { confirmDialog } from '../composables/useConfirm';
+import { useLeaveGuard } from '../composables/useEditProtection';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router';
+import { useRoute } from 'vue-router';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime, formatMoney } from '../lib/format';
 import { currentUser } from '../stores/auth';
 import {
   reconActions,
@@ -168,24 +170,12 @@ async function showHistory(item: ReconciliationCase) {
     error.value = errorMessage(cause);
   }
 }
-async function leave() {
-  return !busy.value && (!dirty.value || (await confirmDialog('还有未提交的对账核查说明，确定离开？')));
-}
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (busy.value || dirty.value) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-}
-onBeforeRouteLeave(leave);
-onBeforeRouteUpdate(leave);
+useLeaveGuard(busy, dirty, '还有未提交的对账核查说明，确定离开？', { routeUpdate: true });
 onMounted(() => {
-  window.addEventListener('beforeunload', beforeUnload);
   void load();
 });
 onBeforeUnmount(() => {
   sequence++;
-  window.removeEventListener('beforeunload', beforeUnload);
 });
 </script>
 
@@ -211,107 +201,139 @@ onBeforeUnmount(() => {
       保存差异并跟踪
     </button>
     <p v-if="preview && !savable" class="muted">本次没有需要跟踪的差异。</p>
-    <form v-if="target" class="finance-confirm recon-action" @submit.prevent="submit">
-      <h3>{{ reconActions[action] }} · 事项 #{{ target.id }}</h3>
-      <p>订单 {{ target.orderNo || '无法识别' }}；该操作不会更改账单支付状态。</p>
-      <label>
-        核查说明
-        <textarea v-model="note" required minlength="5" maxlength="500" rows="3" :disabled="busy" />
-      </label>
-      <div class="finance-actions">
-        <button class="button primary" :disabled="busy">确认{{ reconActions[action] }}</button>
-        <button
-          type="button"
-          class="button"
-          :disabled="busy"
-          @click="
-            target = null;
-            note = '';
-          "
-        >
-          取消
-        </button>
-      </div>
-    </form>
     <p v-if="loading" role="status">正在读取差异事项…</p>
     <p v-else-if="!displayed.length && !error" class="empty-state">当前状态下暂无对账差异事项。</p>
-    <article
+    <div
       v-for="item in displayed"
       :key="item.id"
-      class="finance-record"
-      :class="{ 'finance-selected': String(item.id) === String(route.query.case) }"
+      class="finance-ledger-group"
+      :class="{ 'is-expanded': target?.id === item.id || historyId === item.id }"
     >
-      <div>
-        <span class="finance-badge">
-          {{ reconResults[item.result] || item.result }} · {{ reconStatuses[item.status] }}
-        </span>
-        <h3>事项 #{{ item.id }} · {{ item.orderNo || '订单号无法识别' }}</h3>
-        <p>
-          导入第 {{ item.line }} 行 · 明细金额 {{ item.amount || '—' }} 元 · 保存时本地金额
-          {{ item.localAmountCents === null ? '—' : '¥' + (item.localAmountCents / 100).toFixed(2) }}
-        </p>
-        <p>
-          明细状态 {{ item.statementStatus || '—' }} · 交易号 {{ item.tradeNo || '—' }} · 保存时本地状态
-          {{ item.localStatus || '—' }}
-        </p>
-        <p>{{ item.explanation }}</p>
-        <small class="muted">
-          {{ item.assigneeName ? '核查人：' + item.assigneeName : '尚未分配核查人' }}
-          <template v-if="item.lastNote">· 最近说明：{{ item.lastNote }}</template>
-        </small>
-        <ol v-if="historyId === item.id" class="finance-history">
-          <li v-for="(event, index) in history" :key="index">
-            <strong>{{ reconActions[event.action] || event.action }}</strong>
-            <span>{{ event.actorName || '系统' }} · {{ event.createdAt.slice(0, 16).replace('T', ' ') }}</span>
-            <p>{{ event.reason }}</p>
-          </li>
-        </ol>
-      </div>
-      <div class="finance-actions">
-        <button v-if="item.billId" class="button compact" :disabled="busy" @click="emit('openBill', item.billId)">
-          查看原账单
-        </button>
-        <button class="button compact" :disabled="busy" @click="showHistory(item)">
-          {{ historyId === item.id ? '收起记录' : '查看记录' }}
-        </button>
-        <button
-          v-if="canManage && item.status === 'OPEN'"
-          class="button compact"
-          :disabled="busy"
-          @click="choose(item, 'START')"
+      <article
+        class="finance-record"
+        :class="{ 'finance-selected': String(item.id) === String(route.query.case) || target?.id === item.id }"
+      >
+        <div>
+          <div class="finance-title-line">
+            <span class="finance-badge">
+              {{ reconResults[item.result] || item.result }} · {{ reconStatuses[item.status] }}
+            </span>
+            <h3>事项 #{{ item.id }} · {{ item.orderNo || '订单号无法识别' }}</h3>
+          </div>
+          <p>
+            导入第 {{ item.line }} 行 · 明细金额 {{ item.amount || '—' }} 元 · 保存时本地金额
+            {{ item.localAmountCents === null ? '—' : formatMoney(item.localAmountCents) }}
+          </p>
+          <p>
+            明细状态 {{ item.statementStatus || '—' }} · 交易号 {{ item.tradeNo || '—' }} · 保存时本地状态
+            {{ item.localStatus || '—' }}
+          </p>
+          <p>{{ item.explanation }}</p>
+          <small class="muted">
+            {{ item.assigneeName ? '核查人：' + item.assigneeName : '尚未分配核查人' }}
+            <template v-if="item.lastNote">· 最近说明：{{ item.lastNote }}</template>
+          </small>
+        </div>
+        <div class="finance-actions">
+          <button v-if="item.billId" class="button compact" :disabled="busy" @click="emit('openBill', item.billId)">
+            查看原账单
+          </button>
+          <button class="button compact" :disabled="busy" @click="showHistory(item)">
+            {{ historyId === item.id ? '收起记录 ▴' : '查看记录 ▾' }}
+          </button>
+          <button
+            v-if="canManage && item.status === 'OPEN'"
+            class="button compact primary"
+            :disabled="busy"
+            @click="choose(item, 'START')"
+          >
+            开始核查
+          </button>
+          <button
+            v-if="canManage && item.status === 'IN_PROGRESS' && item.assigneeId === currentUser?.id"
+            class="button compact primary"
+            :disabled="busy"
+            @click="choose(item, 'SUBMIT')"
+          >
+            提交复核
+          </button>
+          <button
+            v-if="canManage && item.status === 'IN_PROGRESS' && item.assigneeId !== currentUser?.id"
+            class="button compact"
+            :disabled="busy"
+            @click="choose(item, 'TAKE_OVER')"
+          >
+            接手核查
+          </button>
+          <template v-if="canReview && item.status === 'PENDING_REVIEW' && item.assigneeId !== currentUser?.id">
+            <button class="button compact primary" :disabled="busy" @click="choose(item, 'CLOSE')">复核关闭</button>
+            <button class="button compact" :disabled="busy" @click="choose(item, 'RETURN')">退回核查</button>
+          </template>
+          <button
+            v-if="canManage && item.status === 'CLOSED'"
+            class="button compact"
+            :disabled="busy"
+            @click="choose(item, 'REOPEN')"
+          >
+            重新打开
+          </button>
+        </div>
+      </article>
+      <section v-if="(target && target.id === item.id) || historyId === item.id" class="finance-folio">
+        <form v-if="target && target.id === item.id" class="finance-confirm recon-action" @submit.prevent="submit">
+          <div class="finance-folio-bar">
+            <h3>{{ reconActions[action] }} · 事项 #{{ target.id }}</h3>
+            <button
+              type="button"
+              class="button compact"
+              :disabled="busy"
+              @click="
+                target = null;
+                note = '';
+              "
+            >
+              收起 ×
+            </button>
+          </div>
+          <p class="muted">订单 {{ target.orderNo || '无法识别' }}；该操作不会更改账单支付状态。</p>
+          <label>
+            核查说明
+            <textarea v-model="note" required minlength="5" maxlength="500" rows="2" :disabled="busy" />
+          </label>
+          <div class="finance-actions">
+            <button class="button primary compact" :disabled="busy">确认{{ reconActions[action] }}</button>
+            <button
+              type="button"
+              class="button compact"
+              :disabled="busy"
+              @click="
+                target = null;
+                note = '';
+              "
+            >
+              取消
+            </button>
+          </div>
+        </form>
+        <div
+          v-if="historyId === item.id"
+          class="finance-subsection"
+          style="margin-top: 0; padding-top: 0; border-top: 0"
         >
-          开始核查
-        </button>
-        <button
-          v-if="canManage && item.status === 'IN_PROGRESS' && item.assigneeId === currentUser?.id"
-          class="button compact"
-          :disabled="busy"
-          @click="choose(item, 'SUBMIT')"
-        >
-          提交复核
-        </button>
-        <button
-          v-if="canManage && item.status === 'IN_PROGRESS' && item.assigneeId !== currentUser?.id"
-          class="button compact"
-          :disabled="busy"
-          @click="choose(item, 'TAKE_OVER')"
-        >
-          接手核查
-        </button>
-        <template v-if="canReview && item.status === 'PENDING_REVIEW' && item.assigneeId !== currentUser?.id">
-          <button class="button compact" :disabled="busy" @click="choose(item, 'CLOSE')">复核关闭</button>
-          <button class="button compact" :disabled="busy" @click="choose(item, 'RETURN')">退回核查</button>
-        </template>
-        <button
-          v-if="canManage && item.status === 'CLOSED'"
-          class="button compact"
-          :disabled="busy"
-          @click="choose(item, 'REOPEN')"
-        >
-          重新打开
-        </button>
-      </div>
-    </article>
+          <div class="finance-folio-bar">
+            <h3>核查流转记录</h3>
+            <button type="button" class="button compact" @click="showHistory(item)">收起记录 ×</button>
+          </div>
+          <ol class="finance-history">
+            <li v-for="(event, index) in history" :key="index">
+              <strong>{{ reconActions[event.action] || event.action }}</strong>
+              <span>{{ event.actorName || '系统' }} · {{ formatDateTime(event.createdAt) }}</span>
+              <p>{{ event.reason }}</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+    </div>
     <div v-if="cases.total" class="finance-pagination">
       <span>共 {{ cases.total }} 项 · 第 {{ cases.page }} / {{ Math.ceil(cases.total / cases.pageSize) }} 页</span>
       <div class="finance-actions">
@@ -337,10 +359,10 @@ onBeforeUnmount(() => {
 .recon-action {
   display: grid;
   gap: 12px;
-  margin: 18px 0;
-  padding: 18px;
+  margin: 14px 0;
+  padding: 16px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xs);
 }
 .recon-action p {
   margin: 0;

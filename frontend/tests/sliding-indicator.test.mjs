@@ -100,3 +100,33 @@ test('indicator measures a conditionally recreated container without a filter ch
     scope.stop()
   }
 })
+
+test('sliding indicator measures vertical top offset and height when axis is y', async () => {
+  const scope = effectScope()
+  const trigger = ref(0)
+  let top = 120
+  const container = ref({
+    scrollTop: 24,
+    getBoundingClientRect: () => ({ top: 40, left: 0 }),
+    querySelector: () => ({ getBoundingClientRect: () => ({ top, height: 36 }) }),
+  })
+  const { indicatorStyle, updateIndicator } = scope.run(() =>
+    useSlidingIndicator(container, () => trigger.value, { activeSelector: 'a[aria-current="page"]', axis: 'y' }),
+  )
+  try {
+    updateIndicator()
+    await nextTick()
+    assert.equal(indicatorStyle.value.opacity, 1)
+    assert.equal(indicatorStyle.value.height, '36px')
+    // top = 120 - 40 + 24 = 104
+    assert.equal(indicatorStyle.value.transform, 'translateY(104px)')
+
+    top = 188
+    trigger.value++
+    await nextTick()
+    await nextTick()
+    assert.equal(indicatorStyle.value.transform, 'translateY(172px)')
+  } finally {
+    scope.stop()
+  }
+})

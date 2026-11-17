@@ -80,7 +80,7 @@ public class TaskAggregationService {
             var items=readAll(p -> { var page=certificates.list(user,"review","SUBMITTED",p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); });
             return items.stream().map(item -> new AggregatedTask("CERT-"+item.id(),"CERTIFICATE","学院证明",
                 item.identity().studentName()+" - "+item.purpose(),item.status(),"待学院初审",
-                item.identity().studentName(),item.identity().departmentName(),"/student-affairs/certificates",item.createdAt(),"NORMAL")).toList();
+                item.identity().studentName(),item.identity().departmentName(),"/student-affairs/certificates?id="+item.id()+"&tab=details",item.createdAt(),"NORMAL")).toList();
         });
         source(user, permissions, "reservation:review", "reservation", "场地借用", counts, tasks, errors, () -> {
             var items=java.util.stream.Stream.of("SUBMITTED","APPROVED","IN_USE")
@@ -95,25 +95,41 @@ public class TaskAggregationService {
             housingTransfer.review(user,"SUBMITTED").stream().map(item -> new AggregatedTask(
                 "HOUSING-REV-"+item.id(),"HOUSING_REVIEW","调宿初审",item.studentName()+" - 申请调宿（"+truncate(item.reason(),30)+"）",
                 item.status(),"待学院初审",item.studentName(),item.sourcePlace()+" → 期望区域: "+item.preferredArea(),
-                "/student-affairs/housing",item.updatedAt(),"NORMAL")).toList());
-        source(user, permissions, "housing:assign", "housingAssign", "床位分配", counts, tasks, errors, () ->
-            housingTransfer.assignQueue(user,"waiting").stream().map(item -> new AggregatedTask(
+                "/student-affairs/housing?id="+item.id()+"&tab=details",item.updatedAt(),"NORMAL")).toList());
+        source(user, permissions, "housing:assign", "housingAssign", "床位分配", counts, tasks, errors, () -> {
+            var waiting=housingTransfer.assignQueue(user,"waiting").stream().map(item -> new AggregatedTask(
                 "HOUSING-ASSIGN-"+item.id(),"HOUSING_ASSIGN","床位分配",item.studentName()+" - 调宿待安排床位",
                 item.status(),"待宿管排床",item.studentName(),"原住宿: "+item.sourcePlace()+" / 期望: "+item.preferredArea(),
-                "/housing/assignments",item.updatedAt(),"NORMAL")).toList());
+                "/housing/assignments?id="+item.id()+"&tab=details",item.updatedAt(),"NORMAL"));
+            var cancelPending=housingTransfer.assignQueue(user,"reserved").stream().filter(cn.zzuit.campus.housing.HousingTransferModels.Transfer::cancelRequested).map(item -> new AggregatedTask(
+                "HOUSING-CANCEL-"+item.id(),"HOUSING_ASSIGN","床位分配",item.studentName()+" - 申请取消调宿预留",
+                item.status(),"取消预留待处理",item.studentName(),"预留床位: "+item.targetPlace(),
+                "/housing/assignments?id="+item.id()+"&tab=details",item.updatedAt(),"URGENT"));
+            return java.util.stream.Stream.concat(waiting,cancelPending).toList();
+        });
         source(user, permissions, "repair:dispatch", "repairDispatch", "报修分诊", counts, tasks, errors, () -> {
-            var items=readAll(p -> { var page=repairs.list(user,"dispatch","SUBMITTED",p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); });
+            var seen=new HashSet<Long>();
+            var items=new ArrayList<cn.zzuit.campus.repair.RepairModels.Item>();
+            for(var item:readAll(p -> { var page=repairs.list(user,"dispatch","SUBMITTED",p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); })) {
+                if(seen.add(item.id())) items.add(item);
+            }
+            for(String state:List.of("ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION")) {
+                for(var item:readAll(p -> { var page=repairs.list(user,"dispatch",state,p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); })) {
+                    if(item.cancellationPending() && seen.add(item.id())) items.add(item);
+                }
+            }
             return items.stream().map(item -> new AggregatedTask("REPAIR-DISP-"+item.id(),"REPAIR_DISPATCH","报修分诊",
                 item.title()+" · "+repairCategoryText(item.category()),item.status(),item.cancellationPending()?"取消待处理":"待分诊派单",
-                item.reporterName(),item.campusName()+" · "+item.locationName(),"/logistics/repairs/dispatch",item.updatedAt(),
-                "HIGH".equalsIgnoreCase(item.priority())?"URGENT":"NORMAL")).toList();
+                item.reporterName(),item.campusName()+" · "+item.locationName(),
+                "/logistics/repairs/dispatch?id="+item.id()+"&tab=details"+(item.cancellationPending()?"&cancellationPending=true":""),
+                item.updatedAt(),item.cancellationPending() || "HIGH".equalsIgnoreCase(item.priority())?"URGENT":"NORMAL")).toList();
         });
         source(user, permissions, "repair:work", "repairWork", "维修任务", counts, tasks, errors, () -> {
             var items=readAll(p -> { var page=repairs.list(user,"work","ASSIGNED",p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); });
             items.addAll(readAll(p -> { var page=repairs.list(user,"work","IN_PROGRESS",p,SOURCE_PAGE_SIZE); return new SourcePage<>(page.items(),page.total()); }));
             return items.stream().map(item -> new AggregatedTask("REPAIR-WORK-"+item.id(),"REPAIR_WORK","维修任务",
                 item.title()+" · "+repairCategoryText(item.category()),item.status(),"ASSIGNED".equals(item.status())?"待接单":"维修处理中",
-                item.reporterName(),item.campusName()+" · "+item.locationName(),"/logistics/repairs/tasks",item.updatedAt(),
+                item.reporterName(),item.campusName()+" · "+item.locationName(),"/logistics/repairs/tasks?id="+item.id()+"&tab=details",item.updatedAt(),
                 "HIGH".equalsIgnoreCase(item.priority())?"URGENT":"NORMAL")).toList();
         });
         source(user, permissions, "content:review", "content", "官网审核", counts, tasks, errors, () -> jdbc.sql("""
@@ -354,7 +370,8 @@ public class TaskAggregationService {
 
     private String contentCategoryText(String category) {
         if (category == null) return "综合发布";
-        return switch (category) {
+        return switch (category.toUpperCase(Locale.ROOT)) {
+            case "ABOUT" -> "学校概况";
             case "NEWS" -> "校园动态";
             case "NOTICE" -> "综合通知";
             case "ACADEMIC" -> "学术交流";

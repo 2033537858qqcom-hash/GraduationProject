@@ -1,5 +1,3 @@
-import * as THREE from 'three'
-
 export interface LakeLightEffect {
   setRunning: (running: boolean) => void
   dispose: () => void
@@ -7,7 +5,17 @@ export interface LakeLightEffect {
 
 // This mask follows the water inside campus-lakeside.webp, in source-image coordinates.
 // It stays clear of the building, trees and the fence on the near shore.
-const fragmentShader = `
+const vertexShaderSource = `
+  attribute vec2 aPosition;
+  varying vec2 vUv;
+  void main() {
+    vUv = aPosition * 0.5 + 0.5;
+    gl_Position = vec4(aPosition, 0.0, 1.0);
+  }
+`
+
+const fragmentShaderSource = `
+  precision mediump float;
   uniform float uTime;
   uniform float uFrameAspect;
   uniform float uImageAspect;
@@ -32,67 +40,127 @@ const fragmentShader = `
   }
 `
 
+function compileShader(gl: WebGLRenderingContext, type: number, source: string): WebGLShader {
+  const shader = gl.createShader(type)
+  if (!shader) throw new Error('Unable to create WebGL shader')
+  gl.shaderSource(shader, source)
+  gl.compileShader(shader)
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader) || 'Shader compilation failed'
+    gl.deleteShader(shader)
+    throw new Error(info)
+  }
+  return shader
+}
+
 export function createLakeLight(host: HTMLElement, imageAspect: number, unavailable: () => void): LakeLightEffect {
-  const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: false, powerPreference: 'low-power' })
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25))
-  renderer.setClearColor(0, 0)
-  renderer.domElement.setAttribute('aria-hidden', 'true')
-  renderer.domElement.dataset.effect = 'lake-light'
-  const scene = new THREE.Scene()
-  const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
-  const geometry = new THREE.PlaneGeometry(2, 2)
-  const material = new THREE.ShaderMaterial({
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    uniforms: {
-      uTime: { value: 0 },
-      uFrameAspect: { value: 1 },
-      uImageAspect: { value: imageAspect },
-    },
-    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
-    fragmentShader,
-  })
-  const plane = new THREE.Mesh(geometry, material)
-  plane.frustumCulled = false
-  scene.add(plane)
+  const canvas = document.createElement('canvas')
+  canvas.setAttribute('aria-hidden', 'true')
+  canvas.dataset.effect = 'lake-light'
+
+  const contextOptions: WebGLContextAttributes = {
+    alpha: true,
+    antialias: false,
+    depth: false,
+    stencil: false,
+    powerPreference: 'low-power',
+  }
+  const gl =
+    (canvas.getContext('webgl2', contextOptions) as WebGLRenderingContext | null) ??
+    (canvas.getContext('webgl', contextOptions) as WebGLRenderingContext | null)
+  if (!gl) throw new Error('WebGL context unavailable')
+
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource)
+  const program = gl.createProgram()
+  if (!program) {
+    gl.deleteShader(vertexShader)
+    gl.deleteShader(fragmentShader)
+    throw new Error('Unable to create WebGL program')
+  }
+  gl.attachShader(program, vertexShader)
+  gl.attachShader(program, fragmentShader)
+  gl.linkProgram(program)
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program) || 'Program link failed'
+    gl.deleteProgram(program)
+    gl.deleteShader(vertexShader)
+    gl.deleteShader(fragmentShader)
+    throw new Error(info)
+  }
+
+  const quad = gl.createBuffer()
+  gl.bindBuffer(gl.ARRAY_BUFFER, quad)
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW)
+
+  const aPosition = gl.getAttribLocation(program, 'aPosition')
+  const uTimeLoc = gl.getUniformLocation(program, 'uTime')
+  const uFrameAspectLoc = gl.getUniformLocation(program, 'uFrameAspect')
+  const uImageAspectLoc = gl.getUniformLocation(program, 'uImageAspect')
+
+  let uTime = 0
+  let frameAspect = 1
   let running = false
   let disposed = false
   let lost = false
   let frame = 0
   let lastTime = 0
 
-  function resize() {
-    const width = Math.max(1, host.clientWidth),
-      height = Math.max(1, host.clientHeight)
-    renderer.setSize(width, height, false)
-    material.uniforms.uFrameAspect!.value = width / height
+  function draw() {
+    if (!gl || disposed || lost) return
+    gl.viewport(0, 0, canvas.width, canvas.height)
+    gl.clearColor(0, 0, 0, 0)
+    gl.clear(gl.COLOR_BUFFER_BIT)
+    gl.useProgram(program)
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
+    gl.bindBuffer(gl.ARRAY_BUFFER, quad)
+    gl.enableVertexAttribArray(aPosition)
+    gl.vertexAttribPointer(aPosition, 2, gl.FLOAT, false, 0, 0)
+    gl.uniform1f(uTimeLoc, uTime)
+    gl.uniform1f(uFrameAspectLoc, frameAspect)
+    gl.uniform1f(uImageAspectLoc, imageAspect)
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
   }
+
+  function resize() {
+    const width = Math.max(1, host.clientWidth)
+    const height = Math.max(1, host.clientHeight)
+    const ratio = Math.min(window.devicePixelRatio || 1, 1.25)
+    canvas.width = Math.max(1, Math.round(width * ratio))
+    canvas.height = Math.max(1, Math.round(height * ratio))
+    frameAspect = width / height
+    if (running) draw()
+  }
+
   function render(time: number) {
     frame = 0
     if (!running || disposed || lost) return
-    if (lastTime) material.uniforms.uTime!.value += Math.min((time - lastTime) / 1000, 0.05)
+    if (lastTime) uTime += Math.min((time - lastTime) / 1000, 0.05)
     lastTime = time
-    renderer.render(scene, camera)
+    draw()
     frame = requestAnimationFrame(render)
   }
+
   function setRunning(next: boolean) {
     if (disposed || lost) return
     running = next
     lastTime = 0
     cancelAnimationFrame(frame)
     frame = next ? requestAnimationFrame(render) : 0
-    renderer.domElement.dataset.running = String(next)
+    canvas.dataset.running = String(next)
   }
+
   function contextLost(event: Event) {
     event.preventDefault()
     setRunning(false)
     lost = true
-    renderer.domElement.style.display = 'none'
+    canvas.style.display = 'none'
     unavailable()
   }
-  renderer.domElement.addEventListener('webglcontextlost', contextLost)
-  host.appendChild(renderer.domElement)
+
+  canvas.addEventListener('webglcontextlost', contextLost)
+  host.appendChild(canvas)
   const observer = new ResizeObserver(resize)
   observer.observe(host)
   resize()
@@ -104,12 +172,13 @@ export function createLakeLight(host: HTMLElement, imageAspect: number, unavaila
       setRunning(false)
       disposed = true
       observer.disconnect()
-      renderer.domElement.removeEventListener('webglcontextlost', contextLost)
-      geometry.dispose()
-      material.dispose()
-      renderer.dispose()
-      renderer.forceContextLoss()
-      renderer.domElement.remove()
+      canvas.removeEventListener('webglcontextlost', contextLost)
+      gl.deleteBuffer(quad)
+      gl.deleteProgram(program)
+      gl.deleteShader(vertexShader)
+      gl.deleteShader(fragmentShader)
+      gl.getExtension('WEBGL_lose_context')?.loseContext()
+      canvas.remove()
     },
   }
 }

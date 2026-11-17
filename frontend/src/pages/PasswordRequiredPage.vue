@@ -3,6 +3,7 @@ import { useRouter } from 'vue-router';
 import SchoolIdentity from '../components/SchoolIdentity.vue';
 import AccountPasswordForm from '../components/AccountPasswordForm.vue';
 import { currentUser, logout } from '../stores/auth';
+import '../styles/portal-refinement.css';
 const router = useRouter();
 async function exit() {
   await logout();
@@ -26,7 +27,7 @@ async function exit() {
 <style scoped>
 .password-required-page {
   min-height: 100dvh;
-  background: #f3f6f9;
+  background: var(--color-paper);
   padding: clamp(20px, 4vw, 48px);
 }
 .password-required-header {

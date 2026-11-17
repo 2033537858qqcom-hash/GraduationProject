@@ -40,13 +40,26 @@ class UserAvatarIntegrationTest {
         var meNode = json.readTree(meRes.body());
         assertThat(meNode.path("avatarUrl").isNull()).isTrue();
 
-        // 2. Upload avatar with multipart form data
-        byte[] imageBytes = new byte[]{ (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }; // PNG header
+        // 2. Upload >1KB avatar with multipart form data (regression test for VARCHAR(512) Data URI overflow)
+        byte[] imageBytes = new byte[2048];
+        imageBytes[0] = (byte) 0x89;
+        imageBytes[1] = 0x50;
+        imageBytes[2] = 0x4E;
+        imageBytes[3] = 0x47;
+        imageBytes[4] = 0x0D;
+        imageBytes[5] = 0x0A;
+        imageBytes[6] = 0x1A;
+        imageBytes[7] = 0x0A;
         var uploadRes = student.uploadFile("/api/me/avatar", "avatar.png", "image/png", imageBytes);
         assertThat(uploadRes.statusCode()).as(uploadRes.body()).isEqualTo(200);
         var uploadNode = json.readTree(uploadRes.body());
         String avatarUrl = uploadNode.path("avatarUrl").asText();
-        assertThat(avatarUrl).isNotBlank();
+        assertThat(avatarUrl).startsWith("/api/public/avatars/").hasSizeLessThanOrEqualTo(512);
+
+        var fileReq = HttpRequest.newBuilder().uri(URI.create("http://127.0.0.1:" + port + avatarUrl)).GET().build();
+        var fileRes = student.client.send(fileReq, HttpResponse.BodyHandlers.ofByteArray());
+        assertThat(fileRes.statusCode()).isEqualTo(200);
+        assertThat(fileRes.body()).isEqualTo(imageBytes);
 
         // 3. Verify /api/me reflects updated avatarUrl
         var updatedMe = student.get("/api/me");
@@ -59,9 +72,10 @@ class UserAvatarIntegrationTest {
         var deletedNode = json.readTree(deleteRes.body());
         assertThat(deletedNode.path("avatarUrl").isNull()).isTrue();
 
-        // 5. Verify /api/me reflects null after removal
+        // 5. Verify /api/me reflects null after removal and local file is cleaned up
         var clearedMe = student.get("/api/me");
         assertThat(json.readTree(clearedMe.body()).path("avatarUrl").isNull()).isTrue();
+        assertThat(student.client.send(fileReq, HttpResponse.BodyHandlers.ofByteArray()).statusCode()).isEqualTo(404);
     }
 
     @Test

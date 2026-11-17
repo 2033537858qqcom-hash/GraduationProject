@@ -2,6 +2,7 @@ package cn.zzuit.campus.agent;
 
 import static cn.zzuit.campus.agent.AgentGoalModels.*;
 import cn.zzuit.campus.certificate.*;
+import cn.zzuit.campus.housing.*;
 import cn.zzuit.campus.leave.*;
 import cn.zzuit.campus.repair.*;
 import cn.zzuit.campus.reservation.*;
@@ -23,8 +24,12 @@ public class AgentGoalBusiness {
  private final PersonalScheduleService schedules;
  private final AgentGuides guides;
  private final AgentMissionTools hashes;
+ private final HousingTransferService housingTransfers;
+ private final AgentHousingDrafts housingDrafts;
  private record Snapshot(Object original,String status,int version,List<SubmissionField> fields,List<String> issues,Object eligibility,int guideVersion){}
- public AgentGoalBusiness(AgentMissionService missions,CertificateService certificates,LeaveService leaves,RepairService repairs,VenueReservationService reservations,PersonalScheduleService schedules,AgentGuides guides,AgentMissionTools hashes){this.missions=missions;this.certificates=certificates;this.leaves=leaves;this.repairs=repairs;this.reservations=reservations;this.schedules=schedules;this.guides=guides;this.hashes=hashes;}
+ @org.springframework.beans.factory.annotation.Autowired
+ public AgentGoalBusiness(AgentMissionService missions,CertificateService certificates,LeaveService leaves,RepairService repairs,VenueReservationService reservations,PersonalScheduleService schedules,AgentGuides guides,AgentMissionTools hashes,HousingTransferService housingTransfers,AgentHousingDrafts housingDrafts){this.missions=missions;this.certificates=certificates;this.leaves=leaves;this.repairs=repairs;this.reservations=reservations;this.schedules=schedules;this.guides=guides;this.hashes=hashes;this.housingTransfers=housingTransfers;this.housingDrafts=housingDrafts;}
+ public AgentGoalBusiness(AgentMissionService missions,CertificateService certificates,LeaveService leaves,RepairService repairs,VenueReservationService reservations,PersonalScheduleService schedules,AgentGuides guides,AgentMissionTools hashes){this(missions,certificates,leaves,repairs,reservations,schedules,guides,hashes,null,null);}
  private void field(List<SubmissionField> fields,String label,Object value){fields.add(new SubmissionField(label,Objects.toString(value,"未填写")));}
  private Snapshot snapshot(CampusPrincipal user,Task task,long id){
   var fields=new ArrayList<SubmissionField>();var issues=new ArrayList<String>();Object original,eligibility=List.of();String status;int version,guideVersion=-1;
@@ -51,7 +56,7 @@ public class AgentGoalBusiness {
    case "RESERVATION"->{
     var request=reservations.getDetail(user,id);original=request;status=request.status();version=request.version();var venue=reservations.getVenue(request.venueId());
     var reviewers=reservations.getVenueReviewerIds(venue.id()).stream().filter(reviewer->reviewer!=user.id()).toList();
-    var schedule=schedules.mine(user,request.startsAt().toLocalDate(),request.endsAt().toLocalDate().plusDays(1));var overlaps=schedule.events().stream().filter(event->!event.key().equals("RESERVATION:"+id)&&event.startsAt().isBefore(request.endsAt())&&event.endsAt().isAfter(request.startsAt())).toList();
+    var schedule=schedules.planningConflicts(user,request.startsAt().toLocalDate(),request.endsAt().toLocalDate().plusDays(1));var overlaps=schedule.events().stream().filter(event->!event.key().equals("RESERVATION:"+id)&&event.startsAt().isBefore(request.endsAt())&&event.endsAt().isAfter(request.startsAt())).toList();
     eligibility=Arrays.asList(venue,reviewers,overlaps,schedule.unavailableSources());
     field(fields,"申请人",request.applicantName());field(fields,"学号",request.identityNumber());field(fields,"场地",request.venueName());field(fields,"位置",request.locationDetail());field(fields,"开始时间",request.startsAt());field(fields,"结束时间",request.endsAt());field(fields,"预计人数",request.expectedParticipants());field(fields,"活动主题",request.activityTheme());field(fields,"活动类型",request.activityType());field(fields,"联系方式",request.contactPhone());
     if(!venue.enabled()||venue.capacity()==null||venue.capacity()<request.expectedParticipants())issues.add("场地已停用或容量不足");if(reviewers.isEmpty())issues.add("没有有效的其他审批负责人");
@@ -59,6 +64,15 @@ public class AgentGoalBusiness {
     if(request.contactPhone()==null||request.contactPhone().trim().length()<7)issues.add("请在原页面填写有效活动联系人电话");if(request.activityTheme()==null||request.activityTheme().trim().length()<2)issues.add("请在原页面填写实际活动主题");
     if(!overlaps.isEmpty()||!schedule.unavailableSources().isEmpty())issues.add("本人日程存在冲突或部分来源不可核对");
     if(reservations.checkConflict(new ReservationDtos.CheckConflictCommand(venue.id(),request.startsAt(),request.endsAt(),id)).hasConflict())issues.add("场地已有新的占用，请重新核对方案");
+   }
+   case "HOUSING"->{
+    var request=housingTransfers.mineDetail(user,id);original=request;status=request.status();version=request.version();
+    var preview=housingDrafts.preview(user,"goal-preview",AgentModels.Mode.LOCAL,new AgentModels.HousingFields(request.reason(),request.preferredArea(),request.materialNote()));
+    eligibility=Arrays.asList(preview.stayToken(),preview.currentPlace());
+    field(fields,"申请人",request.studentName());field(fields,"当前住宿",request.sourcePlace());field(fields,"调宿原因",request.reason());field(fields,"意向区域",request.preferredArea());field(fields,"材料说明",request.materialNote());
+    if(!request.allowedActions().contains("submit"))issues.add("当前原调宿申请不能提交");
+    if(preview.currentPlace()==null||preview.stayToken()==null)issues.add("暂无当前入住记录，不能提交调宿申请");
+    if(request.reason().isBlank()||request.preferredArea().isBlank()||request.materialNote().isBlank())issues.add("请在原页面补齐调宿原因、意向区域和材料说明");
    }
    default->throw changed("当前任务没有对应的办理服务");
   }
@@ -84,6 +98,7 @@ public class AgentGoalBusiness {
    case "LEAVE"->{var request=(LeaveModels.Request)current.original;leaves.transition(user,id,"submit",new LeaveModels.Action(request.version(),"本人核对Agent原申请预览后授权提交"));}
    case "REPAIR"->{var request=(RepairModels.Detail)current.original;repairs.transition(user,"mine",id,"submit",new RepairModels.Action(operationKey,request.version(),"本人核对Agent原工单预览后授权提交",null,null,null,null));}
    case "RESERVATION"->{var request=(ReservationDtos.ReservationDetail)current.original;reservations.submit(user,new ReservationDtos.CreateReservationCommand(request.requestKey(),request.venueId(),request.activityTheme(),request.activityType(),request.expectedParticipants(),request.borrowEquipment(),request.startsAt(),request.endsAt(),request.contactPhone()));}
+   case "HOUSING"->{var request=(HousingTransferModels.Transfer)current.original;housingTransfers.submit(user,id,new HousingTransferModels.ActionInput(operationKey,request.version(),null));}
    default->throw changed("当前任务没有对应的提交服务");
   }
   var result=missions.detail(user,session,task.missionId).business();if(result==null||!result.status().equals("SUBMITTED"))throw changed("提交结果未核验，事务未确认成功");
@@ -91,11 +106,11 @@ public class AgentGoalBusiness {
  }
  public String verify(CampusPrincipal user,long session,Task task){
   if(task.missionId==null)throw changed("当前任务尚未关联原申请");var business=missions.detail(user,session,task.missionId).business();
-  var submitted=Set.of("SUBMITTED","RETURNED","APPROVED","IN_USE","COMPLETED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","REJECTED");
+  var submitted=Set.of("SUBMITTED","RETURNED","APPROVED","IN_USE","COMPLETED","ASSIGNED","IN_PROGRESS","AWAITING_CONFIRMATION","AWAITING_ASSIGNMENT","AWAITING_CHECKIN","REJECTED");
   if(business==null||!submitted.contains(business.status())||task.submittedVersion!=null&&business.version()<task.submittedVersion)throw changed("原申请尚未达到可核验的已提交状态");
   task.submissionVerified=true;task.lastBusinessStatus=business.status();return business.status();
  }
  public boolean terminal(String status){return Set.of("COMPLETED","REJECTED","WITHDRAWN","CANCELLED","EXPIRED").contains(status);}
- public String statusLabel(String status){return Map.ofEntries(Map.entry("DRAFT","草稿"),Map.entry("SUBMITTED","待审核"),Map.entry("RETURNED","待补充"),Map.entry("APPROVED","已批准"),Map.entry("IN_USE","使用中"),Map.entry("COMPLETED","已完成"),Map.entry("REJECTED","已拒绝"),Map.entry("WITHDRAWN","已撤回"),Map.entry("CANCELLED","已取消"),Map.entry("EXPIRED","已过期"),Map.entry("ASSIGNED","已派单"),Map.entry("IN_PROGRESS","维修中"),Map.entry("AWAITING_CONFIRMATION","待本人验收")).getOrDefault(Objects.toString(status,""),"待核对");}
+ public String statusLabel(String status){return Map.ofEntries(Map.entry("DRAFT","草稿"),Map.entry("SUBMITTED","待审核"),Map.entry("RETURNED","待补充"),Map.entry("APPROVED","已批准"),Map.entry("IN_USE","使用中"),Map.entry("COMPLETED","已完成"),Map.entry("REJECTED","已拒绝"),Map.entry("WITHDRAWN","已撤回"),Map.entry("CANCELLED","已取消"),Map.entry("EXPIRED","已过期"),Map.entry("ASSIGNED","已派单"),Map.entry("IN_PROGRESS","维修中"),Map.entry("AWAITING_CONFIRMATION","待本人验收"),Map.entry("AWAITING_ASSIGNMENT","待排床"),Map.entry("AWAITING_CHECKIN","待入住")).getOrDefault(Objects.toString(status,""),"待核对");}
  private ApiException changed(String message){return new ApiException(HttpStatus.CONFLICT,"GOAL_SUBMISSION_CHANGED",message);}
 }

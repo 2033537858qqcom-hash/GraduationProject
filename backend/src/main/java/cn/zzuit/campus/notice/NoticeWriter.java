@@ -8,8 +8,16 @@ public class NoticeWriter {
     private final JdbcClient jdbc;
     public NoticeWriter(JdbcClient jdbc) { this.jdbc=jdbc; }
     public void write(long recipient,String title,String type,long requestId,String view,String message) {
+        String label=switch(type) {
+            case "PAYMENT" -> "账单";
+            case "PAYMENT_BASIS" -> "收费依据";
+            case "CONTENT" -> "内容";
+            case "TEACHING" -> "教学班";
+            case "COUNSELOR" -> "班级";
+            default -> "申请";
+        };
         jdbc.sql("INSERT INTO user_notice(user_id,title,body,source_type,source_id,source_view) VALUES(:u,:t,:b,:type,:id,:view)")
-            .param("u",recipient).param("t",title).param("b",(type.equals("PAYMENT")?"账单":type.equals("PAYMENT_BASIS")?"收费依据":"申请")+" #"+requestId+" · "+message)
+            .param("u",recipient).param("t",title).param("b",label+" #"+requestId+" · "+message)
             .param("type",type).param("id",requestId).param("view",view).update();
     }
 }

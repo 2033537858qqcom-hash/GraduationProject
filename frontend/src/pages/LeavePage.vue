@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import DownloadLink from '../components/DownloadLink.vue';
+import FileDropZone from '../components/FileDropZone.vue';
 import ServiceJourney from '../components/ServiceJourney.vue';
 import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { CalendarDays, ClipboardCheck, FileText, History, Plus, RefreshCw } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime as time } from '../lib/format';
 import { currentUser } from '../stores/auth';
 import { leaveStatuses, leaveTypes } from '../leave';
 import type { LeaveEligibility, LeaveEvent, LeaveRequest, LeaveRevision } from '../leave';
@@ -35,8 +38,13 @@ const items = ref<Paged<LeaveRequest>>({ items: [], total: 0, page: 1, pageSize:
 const history = ref<Paged<LeaveRevision>>({ items: [], total: 0, page: 1, pageSize: 10 });
 const events = ref<LeaveEvent[]>([]);
 const selected = ref<LeaveRequest | null>(null);
+const displayedItems = computed(() =>
+  selected.value && !items.value.items.some(item => item.id === selected.value?.id)
+    ? [selected.value, ...items.value.items]
+    : items.value.items,
+);
 const file = ref<File | null>(null),
-  fileInput = ref<HTMLInputElement | null>(null);
+  fileInput = ref<InstanceType<typeof FileDropZone> | null>(null);
 const reviewComment = ref(''),
   month = ref(new Date().getFullYear() + '-' + String(new Date().getMonth() + 1).padStart(2, '0'));
 const form = reactive({
@@ -73,9 +81,6 @@ const confirmation = ref(''),
   confirmKind = ref('leave'),
   dialogComment = ref('');
 let resolveConfirmation: ((value: boolean) => void) | null = null;
-function time(value: string) {
-  return value.slice(0, 16).replace('T', ' ');
-}
 async function ask(message: string, kind = 'leave') {
   confirmation.value = message;
   confirmKind.value = kind;
@@ -164,6 +169,13 @@ async function choose(item: LeaveRequest) {
     if (await allowLeave()) await load();
   } else await router.replace({ query: { ...route.query, id: String(item.id), tab: 'details', historyPage: '1' } });
 }
+async function closeDetail() {
+  if (await allowLeave()) {
+    selected.value = null;
+    editing.value = false;
+    await router.replace({ query: { ...route.query, id: undefined, tab: undefined, historyPage: undefined } });
+  }
+}
 async function view(tab: string) {
   await router.replace({ query: { ...route.query, tab, historyPage: '1' } });
 }
@@ -241,7 +253,7 @@ function selectFile(event: Event) {
   if (file.value && (file.value.size === 0 || file.value.size > 2 * 1024 * 1024)) {
     error.value = '附件须为 1 字节至 2 MB。';
     file.value = null;
-    if (fileInput.value) fileInput.value.value = '';
+    fileInput.value?.clear();
   }
 }
 async function upload() {
@@ -257,7 +269,7 @@ async function upload() {
       body: data,
     });
     file.value = null;
-    if (fileInput.value) fileInput.value.value = '';
+    fileInput.value?.clear();
     await load();
     success.value = '材料已保存，旧版附件保留在办理记录中。';
   } catch (cause) {
@@ -489,7 +501,7 @@ watch(
         </label>
       </div>
       <p class="muted">仅显示该月与本人已通过请假的交集；课程和考勤不会自动改变。</p>
-      <p v-if="loading" role="status">正在读取日程…</p>
+      <SkeletonBlock v-if="loading" variant="list" :rows="3" label="正在读取日程…" />
       <p v-else-if="!events.length" class="empty-state">本月没有已通过的请假日程。</p>
       <article v-for="event in events" :key="event.requestId" class="leave-event">
         <CalendarDays :size="18" />
@@ -526,83 +538,12 @@ watch(
           {{ review ? '待办来自当前申请状态，处理后自动关闭。' : '草稿未提交；待补交申请仍保留原办理记录。' }}
         </span>
       </form>
-      <section class="portal-panel leave-list" aria-label="请假申请列表">
+      <section v-if="editing && !selected" class="portal-panel leave-detail" aria-label="请假资料编辑">
         <div class="section-heading">
-          <h2>
-            <ClipboardCheck :size="17" />
-            {{ review ? '班级申请' : '本人申请' }}
-          </h2>
-          <span class="muted">共 {{ items.total }} 条</span>
+          <h2 id="leave-editor-heading">新建请假草稿</h2>
+          <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">收起表单 ×</button>
         </div>
-        <p v-if="loading && !items.items.length" class="loading-state" role="status">正在读取请假记录…</p>
-        <p v-else-if="!loading && !items.items.length" class="empty-state">
-          {{
-            review
-              ? '当前筛选下没有负责班级的申请；未分配班级时也不会显示他人记录。'
-              : '当前筛选下没有申请，可新建请假草稿。'
-          }}
-        </p>
-        <div v-if="items.items.length" class="table-scroll" :class="{ 'is-loading': loading }">
-          <table class="campus-table foundation-table leave-table">
-            <thead>
-              <tr>
-                <th>申请</th>
-                <th v-if="review">学生与行政班</th>
-                <th>请假时间</th>
-                <th>状态</th>
-                <th>最近更新</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in items.items" :key="item.id" :class="{ 'resource-selected': item.id === selected?.id }">
-                <td>
-                  <strong>{{ leaveTypes[item.reasonType] }}申请 #{{ item.id }}</strong>
-                </td>
-                <td v-if="review">
-                  {{ item.studentName }}
-                  <small>{{ item.identityNumber }} · {{ item.className }}</small>
-                </td>
-                <td>
-                  {{ time(item.startsAt) }}
-                  <small>至 {{ time(item.endsAt) }}</small>
-                </td>
-                <td>
-                  <span class="status-label" :data-status="item.status">{{ leaveStatuses[item.status] }}</span>
-                </td>
-                <td>{{ time(item.updatedAt) }}</td>
-                <td>
-                  <button class="text-button" :disabled="busy" @click="choose(item)">
-                    {{ review ? '查看与处理' : '查看申请' }}
-                  </button>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="foundation-pagination">
-          <span>第 {{ items.page }} 页</span>
-          <div>
-            <button class="button compact" :disabled="loading || busy || items.page <= 1" @click="page(items.page - 1)">
-              上一页
-            </button>
-            <button
-              class="button compact"
-              :disabled="loading || busy || items.page * items.pageSize >= items.total"
-              @click="page(items.page + 1)"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
-      </section>
-      <section v-if="editing" class="portal-panel leave-detail" aria-label="请假资料编辑">
-        <h2 id="leave-editor-heading">{{ selected ? '修改申请资料' : '新建请假草稿' }}</h2>
         <p class="muted">先保存资料，再上传材料及提交。演示流程单次最多 30 天，材料按辅导员处理要求补充。</p>
-        <div v-if="selected?.status === 'RETURNED' && selected.processingComment" class="service-editor-feedback">
-          <strong>本次补交要求</strong>
-          <p>{{ selected.processingComment }}</p>
-        </div>
         <form class="editor-form" @submit.prevent="save">
           <fieldset class="foundation-fields" :disabled="busy">
             <div class="service-form-section">
@@ -659,237 +600,415 @@ watch(
           </div>
         </form>
       </section>
-      <section v-else-if="selected" class="portal-panel leave-detail" aria-label="请假申请详情">
+
+      <section class="portal-panel leave-list" aria-label="请假申请列表">
         <div class="section-heading">
-          <div>
-            <span class="portal-context">申请 #{{ selected.id }} · {{ selected.className }}</span>
-            <h2>
-              {{ leaveTypes[selected.reasonType] }}申请
-              <span v-if="review">· {{ selected.studentName }}</span>
-            </h2>
-          </div>
-          <span class="status-label" :data-status="selected.status">
-            {{ leaveStatuses[selected.status] }} · V{{ selected.version }}
-          </span>
+          <h2>
+            <ClipboardCheck :size="17" />
+            {{ review ? '班级申请' : '本人申请' }}
+          </h2>
+          <span class="muted">共 {{ items.total }} 条</span>
         </div>
-        <nav ref="detailNavRef" class="learning-tabs" aria-label="申请详情栏目">
-          <button :class="{ selected: !historyView }" :disabled="busy" @click="view('details')">
-            <FileText :size="15" />
-            申请资料
-          </button>
-          <button :class="{ selected: historyView }" :disabled="busy" @click="view('history')">
-            <History :size="15" />
-            办理记录
-          </button>
-          <div class="learning-tabs-indicator" :style="detailIndicatorStyle" aria-hidden="true"></div>
-        </nav>
-        <template v-if="!historyView">
-          <dl class="resource-facts">
-            <div>
-              <dt>请假时间</dt>
-              <dd>{{ time(selected.startsAt) }} 至 {{ time(selected.endsAt) }}</dd>
-            </div>
-            <div>
-              <dt>联系方式</dt>
-              <dd>{{ selected.contact }}</dd>
-            </div>
-            <div class="leave-wide">
-              <dt>请假事由</dt>
-              <dd class="preserve-lines">{{ selected.reason }}</dd>
-            </div>
-            <div>
-              <dt>当前材料</dt>
-              <dd>
-                <DownloadLink
-                  v-if="selected.fileId"
-                  class="text-button"
-                  :href="`/api/leave/files/${selected.fileId}?view=${mode}`"
-                >
-                  下载 {{ selected.fileName }}
-                </DownloadLink>
-                <span v-else>尚无附件</span>
-              </dd>
-            </div>
-            <div class="service-processing-note">
-              <dt>最近处理意见</dt>
-              <dd class="preserve-lines">{{ selected.processingComment ?? '尚无处理意见' }}</dd>
-            </div>
-          </dl>
-          <template v-if="!review && editable">
-            <form class="leave-upload" @submit.prevent="upload">
-              <label>
-                补充材料（PDF / UTF-8 文本，最多 2 MB）
-                <input ref="fileInput" type="file" accept=".pdf,.txt" :disabled="busy" @change="selectFile" />
-              </label>
-              <button class="button compact" :disabled="busy || !file">上传材料</button>
-              <button
-                v-if="file"
-                class="text-button"
-                type="button"
-                :disabled="busy"
-                @click="
-                  file = null;
-                  fileInput && (fileInput.value = '');
-                "
-              >
-                清除选择
-              </button>
-            </form>
-            <div class="form-actions">
-              <button class="button compact" :disabled="busy" @click="edit(selected)">修改申请资料</button>
-              <button
-                class="button primary compact"
-                :disabled="busy || !eligibility?.canSubmit"
-                @click="transition('submit')"
-              >
-                {{ selected.status === 'RETURNED' ? '补交后重新提交' : '提交审核' }}
-              </button>
-            </div>
-          </template>
-          <button
-            v-if="!review && ['DRAFT', 'SUBMITTED', 'RETURNED'].includes(selected.status)"
-            class="text-button leave-withdraw"
-            :disabled="busy"
-            @click="transition('withdraw')"
-          >
-            撤回申请
-          </button>
-          <form
-            v-if="review && selected.status === 'SUBMITTED'"
-            class="leave-review-form"
-            @submit.prevent="decide('APPROVE')"
-          >
-            <label>
-              <div class="label-heading-row">
-                <span>处理意见</span>
-                <small class="muted">必填 · 最多 1000 字</small>
-              </div>
-              <textarea
-                v-model="reviewComment"
-                rows="3"
-                required
-                maxlength="1000"
-                :disabled="busy"
-                placeholder="填写核对结果与审核处理意见；退回时请明确说明需要补充哪些证明材料"
-              />
-            </label>
-            <div class="form-actions">
-              <button class="button primary compact" :disabled="busy || !reviewComment.trim()">已核对，通过</button>
-              <button
-                class="button compact"
-                type="button"
-                :disabled="busy || !reviewComment.trim()"
-                @click="decide('RETURN')"
-              >
-                退回补交
-              </button>
-              <button
-                class="button compact"
-                type="button"
-                :disabled="busy || !reviewComment.trim()"
-                @click="decide('REJECT')"
-              >
-                拒绝申请
-              </button>
-            </div>
-          </form>
-          <div v-if="selected.status === 'APPROVED'" class="content-context-note">
-            <p>请假已批准。返校后请在此申报，由负责班级的辅导员确认销假；课程及考勤不会自动改变。</p>
-            <button v-if="!review" class="button primary compact" :disabled="busy" @click="transition('return')">
-              <ClipboardCheck :size="15" />
-              申报返校销假
+        <SkeletonBlock v-if="loading && !displayedItems.length" variant="table" :rows="4" label="正在读取请假记录…" />
+        <p v-else-if="!loading && !displayedItems.length" class="empty-state">
+          {{
+            review
+              ? '当前筛选下没有负责班级的申请；未分配班级时也不会显示他人记录。'
+              : '当前筛选下没有申请，可新建请假草稿。'
+          }}
+        </p>
+        <div v-if="displayedItems.length" class="table-scroll" :class="{ 'is-loading': loading }">
+          <table class="campus-table foundation-table leave-table">
+            <thead>
+              <tr>
+                <th>申请</th>
+                <th v-if="review">学生与行政班</th>
+                <th>请假时间</th>
+                <th>状态</th>
+                <th>最近更新</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="item in displayedItems" :key="item.id">
+                <tr :class="{ 'resource-selected': item.id === selected?.id }">
+                  <td>
+                    <strong>{{ leaveTypes[item.reasonType] }}申请 #{{ item.id }}</strong>
+                  </td>
+                  <td v-if="review">
+                    {{ item.studentName }}
+                    <small>{{ item.identityNumber }} · {{ item.className }}</small>
+                  </td>
+                  <td>
+                    {{ time(item.startsAt) }}
+                    <small>至 {{ time(item.endsAt) }}</small>
+                  </td>
+                  <td>
+                    <span class="status-label" :data-status="item.status">{{ leaveStatuses[item.status] }}</span>
+                  </td>
+                  <td>{{ time(item.updatedAt) }}</td>
+                  <td>
+                    <button
+                      class="text-button"
+                      :disabled="busy"
+                      @click="selected?.id === item.id ? closeDetail() : choose(item)"
+                    >
+                      {{ selected?.id === item.id ? '收起详情 ▴' : review ? '查看与处理 ▾' : '查看申请 ▾' }}
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="selected && selected.id === item.id" class="table-folio-row">
+                  <td :colspan="review ? 6 : 5" class="table-folio-cell">
+                    <section
+                      v-if="editing"
+                      class="portal-panel leave-detail service-inline-folio"
+                      aria-label="请假资料编辑"
+                    >
+                      <div class="section-heading">
+                        <h2 id="leave-editor-heading">修改申请资料 · #{{ selected.id }}</h2>
+                        <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">
+                          取消修改 ×
+                        </button>
+                      </div>
+                      <p class="muted">
+                        先保存资料，再上传材料及提交。演示流程单次最多 30 天，材料按辅导员处理要求补充。
+                      </p>
+                      <div
+                        v-if="selected.status === 'RETURNED' && selected.processingComment"
+                        class="service-editor-feedback"
+                      >
+                        <strong>本次补交要求</strong>
+                        <p>{{ selected.processingComment }}</p>
+                      </div>
+                      <form class="editor-form" @submit.prevent="save">
+                        <fieldset class="foundation-fields" :disabled="busy">
+                          <div class="service-form-section">
+                            <span>01</span>
+                            <h3>请假类型与时间</h3>
+                          </div>
+                          <label>
+                            请假类型
+                            <BaseSelect
+                              v-model="form.reasonType"
+                              :options="Object.entries(leaveTypes).map(([key, label]) => ({ value: key, label }))"
+                            />
+                          </label>
+                          <div class="form-grid">
+                            <label>
+                              开始时间
+                              <input v-model="form.startsAt" type="datetime-local" required />
+                            </label>
+                            <label>
+                              结束时间
+                              <input v-model="form.endsAt" type="datetime-local" required />
+                            </label>
+                          </div>
+                          <div class="service-form-section">
+                            <span>02</span>
+                            <h3>事由与办理联系</h3>
+                          </div>
+                          <label>
+                            <div class="label-heading-row">
+                              <span>请假事由</span>
+                              <small class="muted">必填 · 最多 2000 字</small>
+                            </div>
+                            <textarea
+                              v-model="form.reason"
+                              required
+                              maxlength="2000"
+                              rows="4"
+                              placeholder="请详细说明请假的具体事由及离返校安排，避免填写与办理无关的个人隐私信息"
+                            />
+                          </label>
+                          <label>
+                            联系手机或邮箱
+                            <input
+                              v-model="form.contact"
+                              required
+                              maxlength="80"
+                              placeholder="用于办理联系，仅本人和负责辅导员可查看"
+                            />
+                          </label>
+                        </fieldset>
+                        <div class="form-actions">
+                          <button class="button primary compact" :disabled="busy">
+                            {{ busy ? '正在保存…' : '保存申请资料' }}
+                          </button>
+                          <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">
+                            取消编辑
+                          </button>
+                        </div>
+                      </form>
+                    </section>
+                    <section v-else class="portal-panel leave-detail service-inline-folio" aria-label="请假申请详情">
+                      <div class="section-heading">
+                        <div>
+                          <span class="portal-context">申请 #{{ selected.id }} · {{ selected.className }}</span>
+                          <h2>
+                            {{ leaveTypes[selected.reasonType] }}申请
+                            <span v-if="review">· {{ selected.studentName }}</span>
+                          </h2>
+                        </div>
+                        <div class="service-folio-header-actions">
+                          <span class="status-label" :data-status="selected.status">
+                            {{ leaveStatuses[selected.status] }} · V{{ selected.version }}
+                          </span>
+                          <button type="button" class="button compact" :disabled="busy" @click="closeDetail">
+                            收起详情 ×
+                          </button>
+                        </div>
+                      </div>
+                      <nav ref="detailNavRef" class="learning-tabs" aria-label="申请详情栏目">
+                        <button :class="{ selected: !historyView }" :disabled="busy" @click="view('details')">
+                          <FileText :size="15" />
+                          申请资料
+                        </button>
+                        <button :class="{ selected: historyView }" :disabled="busy" @click="view('history')">
+                          <History :size="15" />
+                          办理记录
+                        </button>
+                        <div class="learning-tabs-indicator" :style="detailIndicatorStyle" aria-hidden="true"></div>
+                      </nav>
+                      <template v-if="!historyView">
+                        <dl class="resource-facts">
+                          <div>
+                            <dt>请假时间</dt>
+                            <dd>{{ time(selected.startsAt) }} 至 {{ time(selected.endsAt) }}</dd>
+                          </div>
+                          <div>
+                            <dt>联系方式</dt>
+                            <dd>{{ selected.contact }}</dd>
+                          </div>
+                          <div class="leave-wide">
+                            <dt>请假事由</dt>
+                            <dd class="preserve-lines">{{ selected.reason }}</dd>
+                          </div>
+                          <div>
+                            <dt>当前材料</dt>
+                            <dd>
+                              <DownloadLink
+                                v-if="selected.fileId"
+                                class="text-button"
+                                :href="`/api/leave/files/${selected.fileId}?view=${mode}`"
+                              >
+                                下载 {{ selected.fileName }}
+                              </DownloadLink>
+                              <span v-else>尚无附件</span>
+                            </dd>
+                          </div>
+                          <div class="service-processing-note">
+                            <dt>最近处理意见</dt>
+                            <dd class="preserve-lines">{{ selected.processingComment ?? '尚无处理意见' }}</dd>
+                          </div>
+                        </dl>
+                        <template v-if="!review && editable">
+                          <form class="leave-upload" @submit.prevent="upload">
+                            <FileDropZone
+                              ref="fileInput"
+                              compact
+                              accept=".pdf,.txt"
+                              :disabled="busy"
+                              :file-name="file?.name ?? ''"
+                              title="选择或拖入补充证明材料"
+                              hint="支持 PDF 或 UTF-8 文本，最多 2 MB"
+                              @change="selectFile"
+                              @clear="file = null"
+                            />
+                            <div class="form-actions">
+                              <button class="button compact" :disabled="busy || !file">上传材料</button>
+                            </div>
+                          </form>
+                          <div class="form-actions">
+                            <button class="button compact" :disabled="busy" @click="edit(selected)">
+                              修改申请资料
+                            </button>
+                            <button
+                              class="button primary compact"
+                              :disabled="busy || !eligibility?.canSubmit"
+                              @click="transition('submit')"
+                            >
+                              {{ selected.status === 'RETURNED' ? '补交后重新提交' : '提交审核' }}
+                            </button>
+                          </div>
+                        </template>
+                        <button
+                          v-if="!review && ['DRAFT', 'SUBMITTED', 'RETURNED'].includes(selected.status)"
+                          class="text-button leave-withdraw"
+                          :disabled="busy"
+                          @click="transition('withdraw')"
+                        >
+                          撤回申请
+                        </button>
+                        <form
+                          v-if="review && selected.status === 'SUBMITTED'"
+                          class="leave-review-form"
+                          @submit.prevent="decide('APPROVE')"
+                        >
+                          <label>
+                            <div class="label-heading-row">
+                              <span>处理意见</span>
+                              <small class="muted">必填 · 最多 1000 字</small>
+                            </div>
+                            <textarea
+                              v-model="reviewComment"
+                              rows="3"
+                              required
+                              maxlength="1000"
+                              :disabled="busy"
+                              placeholder="填写核对结果与审核处理意见；退回时请明确说明需要补充哪些证明材料"
+                            />
+                          </label>
+                          <div class="form-actions">
+                            <button class="button primary compact" :disabled="busy || !reviewComment.trim()">
+                              已核对，通过
+                            </button>
+                            <button
+                              class="button compact"
+                              type="button"
+                              :disabled="busy || !reviewComment.trim()"
+                              @click="decide('RETURN')"
+                            >
+                              退回补交
+                            </button>
+                            <button
+                              class="button compact"
+                              type="button"
+                              :disabled="busy || !reviewComment.trim()"
+                              @click="decide('REJECT')"
+                            >
+                              拒绝申请
+                            </button>
+                          </div>
+                        </form>
+                        <div v-if="selected.status === 'APPROVED'" class="content-context-note">
+                          <p>请假已批准。返校后请在此申报，由负责班级的辅导员确认销假；课程及考勤不会自动改变。</p>
+                          <button
+                            v-if="!review"
+                            class="button primary compact"
+                            :disabled="busy"
+                            @click="transition('return')"
+                          >
+                            <ClipboardCheck :size="15" />
+                            申报返校销假
+                          </button>
+                        </div>
+                        <p v-if="selected.status === 'RETURN_PENDING'" class="content-context-note">
+                          返校已申报，等待辅导员核对；处理意见和返校说明保留在办理记录中。
+                        </p>
+                        <div
+                          v-if="selected.status === 'RETURN_PENDING' && history.items[0]?.action === 'RETURN_REPORTED'"
+                          class="content-context-note"
+                        >
+                          <strong>本次返校申报 · {{ time(history.items[0].createdAt) }}</strong>
+                          <p class="preserve-lines">{{ history.items[0].comment }}</p>
+                        </div>
+                        <form
+                          v-if="review && selected.status === 'RETURN_PENDING'"
+                          class="leave-review-form"
+                          @submit.prevent="closeLeave('CONFIRM')"
+                        >
+                          <label>
+                            返校核对意见
+                            <textarea
+                              v-model="reviewComment"
+                              required
+                              maxlength="1000"
+                              rows="3"
+                              :disabled="busy"
+                              placeholder="核实返校情况；退回时请说明需要核对的事项"
+                            />
+                          </label>
+                          <div class="form-actions">
+                            <button class="button primary compact" :disabled="busy || !reviewComment.trim()">
+                              已核实返校，确认销假
+                            </button>
+                            <button
+                              type="button"
+                              class="button compact"
+                              :disabled="busy || !reviewComment.trim()"
+                              @click="closeLeave('RETURN')"
+                            >
+                              退回重新核对
+                            </button>
+                          </div>
+                        </form>
+                        <p v-if="selected.status === 'COMPLETED'" class="content-context-note">
+                          本次请假已确认销假。原批准时间和材料保留，日程按实际返校申报时间结束。
+                        </p>
+                        <p v-if="['REJECTED', 'WITHDRAWN'].includes(selected.status)" class="muted">
+                          该记录已关闭，历史保留。需要重新办理时请新建申请。
+                        </p>
+                      </template>
+                      <template v-else>
+                        <p class="muted">每次保存、补交和处理均保留当时的资料，共 {{ history.total }} 条。</p>
+                        <article v-for="record in history.items" :key="record.id" class="resource-history">
+                          <div class="section-heading">
+                            <h3>{{ actions[record.action] ?? record.action }} · V{{ record.version }}</h3>
+                            <span class="status-label" :data-status="record.status">
+                              {{ leaveStatuses[record.status] }}
+                            </span>
+                          </div>
+                          <p class="preserve-lines">{{ record.comment }}</p>
+                          <small class="muted">{{ record.actorName }} · {{ time(record.createdAt) }}</small>
+                          <details class="leave-revision">
+                            <summary>查看当时资料和附件</summary>
+                            <p>
+                              {{ leaveTypes[record.reasonType] }} · {{ time(record.startsAt) }} 至
+                              {{ time(record.endsAt) }}
+                            </p>
+                            <p class="preserve-lines">{{ record.reason }}</p>
+                            <p>联系方式：{{ record.contact }}</p>
+                            <DownloadLink
+                              v-if="record.fileId"
+                              class="text-button"
+                              :href="`/api/leave/files/${record.fileId}?view=${mode}`"
+                            >
+                              下载当时材料：{{ record.fileName }}
+                            </DownloadLink>
+                          </details>
+                        </article>
+                        <div v-if="history.total > 0" class="foundation-pagination">
+                          <span>第 {{ history.page }} 页</span>
+                          <div>
+                            <button
+                              class="button compact"
+                              :disabled="loading || busy || history.page <= 1"
+                              @click="page(history.page - 1, true)"
+                            >
+                              上一页
+                            </button>
+                            <button
+                              class="button compact"
+                              :disabled="loading || busy || history.page * history.pageSize >= history.total"
+                              @click="page(history.page + 1, true)"
+                            >
+                              下一页
+                            </button>
+                          </div>
+                        </div>
+                      </template>
+                    </section>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="items.total > 0" class="foundation-pagination">
+          <span>第 {{ items.page }} 页</span>
+          <div>
+            <button class="button compact" :disabled="loading || busy || items.page <= 1" @click="page(items.page - 1)">
+              上一页
+            </button>
+            <button
+              class="button compact"
+              :disabled="loading || busy || items.page * items.pageSize >= items.total"
+              @click="page(items.page + 1)"
+            >
+              下一页
             </button>
           </div>
-          <p v-if="selected.status === 'RETURN_PENDING'" class="content-context-note">
-            返校已申报，等待辅导员核对；处理意见和返校说明保留在办理记录中。
-          </p>
-          <div
-            v-if="selected.status === 'RETURN_PENDING' && history.items[0]?.action === 'RETURN_REPORTED'"
-            class="content-context-note"
-          >
-            <strong>本次返校申报 · {{ time(history.items[0].createdAt) }}</strong>
-            <p class="preserve-lines">{{ history.items[0].comment }}</p>
-          </div>
-          <form
-            v-if="review && selected.status === 'RETURN_PENDING'"
-            class="leave-review-form"
-            @submit.prevent="closeLeave('CONFIRM')"
-          >
-            <label>
-              返校核对意见
-              <textarea
-                v-model="reviewComment"
-                required
-                maxlength="1000"
-                rows="3"
-                :disabled="busy"
-                placeholder="核实返校情况；退回时请说明需要核对的事项"
-              />
-            </label>
-            <div class="form-actions">
-              <button class="button primary compact" :disabled="busy || !reviewComment.trim()">
-                已核实返校，确认销假
-              </button>
-              <button
-                type="button"
-                class="button compact"
-                :disabled="busy || !reviewComment.trim()"
-                @click="closeLeave('RETURN')"
-              >
-                退回重新核对
-              </button>
-            </div>
-          </form>
-          <p v-if="selected.status === 'COMPLETED'" class="content-context-note">
-            本次请假已确认销假。原批准时间和材料保留，日程按实际返校申报时间结束。
-          </p>
-          <p v-if="['REJECTED', 'WITHDRAWN'].includes(selected.status)" class="muted">
-            该记录已关闭，历史保留。需要重新办理时请新建申请。
-          </p>
-        </template>
-        <template v-else>
-          <p class="muted">每次保存、补交和处理均保留当时的资料，共 {{ history.total }} 条。</p>
-          <article v-for="record in history.items" :key="record.id" class="resource-history">
-            <div class="section-heading">
-              <h3>{{ actions[record.action] ?? record.action }} · V{{ record.version }}</h3>
-              <span class="status-label" :data-status="record.status">{{ leaveStatuses[record.status] }}</span>
-            </div>
-            <p class="preserve-lines">{{ record.comment }}</p>
-            <small class="muted">{{ record.actorName }} · {{ time(record.createdAt) }}</small>
-            <details class="leave-revision">
-              <summary>查看当时资料和附件</summary>
-              <p>{{ leaveTypes[record.reasonType] }} · {{ time(record.startsAt) }} 至 {{ time(record.endsAt) }}</p>
-              <p class="preserve-lines">{{ record.reason }}</p>
-              <p>联系方式：{{ record.contact }}</p>
-              <DownloadLink
-                v-if="record.fileId"
-                class="text-button"
-                :href="`/api/leave/files/${record.fileId}?view=${mode}`"
-              >
-                下载当时材料：{{ record.fileName }}
-              </DownloadLink>
-            </details>
-          </article>
-          <div class="foundation-pagination">
-            <span>第 {{ history.page }} 页</span>
-            <div>
-              <button
-                class="button compact"
-                :disabled="loading || busy || history.page <= 1"
-                @click="page(history.page - 1, true)"
-              >
-                上一页
-              </button>
-              <button
-                class="button compact"
-                :disabled="loading || busy || history.page * history.pageSize >= history.total"
-                @click="page(history.page + 1, true)"
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        </template>
+        </div>
       </section>
     </template>
     <p class="data-note">

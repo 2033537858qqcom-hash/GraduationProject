@@ -5,6 +5,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router';
 import { RefreshCw } from '@lucide/vue';
 import HousingTransferMaterials from '../components/HousingTransferMaterials.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
+import '../styles/repair-workflow.css';
+import '../styles/repair-settings.css';
 import { api, errorMessage } from '../lib/api';
 import { housingRequestKey, housingWhen, transferStatus, type HousingTransfer } from '../housing';
 const route = useRoute();
@@ -38,7 +41,7 @@ function beforeUnload(event: BeforeUnloadEvent) {
 const error = ref('');
 const success = ref('');
 const form = ref({ reason: '', preferredArea: '', materialNote: '' });
-const comment = ref('');
+const comments = ref<Record<number, string>>({});
 const editing = ref<HousingTransfer | null>(null);
 function editDraft(item: HousingTransfer) {
   editing.value = item;
@@ -125,7 +128,8 @@ async function act(item: HousingTransfer, action: string) {
     error.value = '请先保存资料修改，并上传或清除所选材料。';
     return;
   }
-  if (!comment.value.trim() && !['submit', 'supplement'].includes(action)) {
+  const note = (comments.value[item.id] ?? '').trim();
+  if (!note && !['submit', 'supplement', 'delete'].includes(action)) {
     error.value = '请填写说明';
     return;
   }
@@ -145,14 +149,16 @@ async function act(item: HousingTransfer, action: string) {
             preferredArea: item.preferredArea,
             materialNote: item.materialNote,
           }
-        : { requestKey: key, version: item.version, comment: comment.value.trim() || '提交' };
+        : { requestKey: key, version: item.version, comment: note || (action === 'delete' ? '删除草稿' : '提交') };
     await api(path, { method: 'POST', body: JSON.stringify(body) });
     key = housingRequestKey();
-    comment.value = '';
-    success.value = '已记录本次处理。';
+    comments.value[item.id] = '';
+    success.value = action === 'delete' ? '草稿已删除。' : '已记录本次处理。';
     await load();
-    await nextTick();
-    document.getElementById('transfer-' + item.id)?.scrollIntoView({ block: 'start' });
+    if (action !== 'delete') {
+      await nextTick();
+      document.getElementById('transfer-' + item.id)?.scrollIntoView({ block: 'start' });
+    }
   } catch (cause) {
     error.value = errorMessage(cause);
     key = housingRequestKey();
@@ -261,7 +267,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </form>
-    <p v-if="loading" role="status">正在读取调宿申请…</p>
+    <SkeletonBlock v-if="loading" variant="cards" :rows="3" label="正在读取调宿申请…" />
     <p v-else-if="!items.length" class="empty-state">
       {{ review ? '当前没有待初审的调宿申请。' : '还没有调宿申请。' }}
     </p>
@@ -293,6 +299,28 @@ onBeforeUnmount(() => {
           </template>
         </p>
         <p v-if="item.cancelRequested && item.status === 'AWAITING_CHECKIN'">已请求取消，等待宿管确认。</p>
+        <div
+          v-if="
+            item.allowedActions.some(action =>
+              ['withdraw', 'cancel-request', 'approve', 'return', 'reject'].includes(action),
+            )
+          "
+          style="margin-top: 12px"
+        >
+          <label>
+            <div class="label-heading-row">
+              <span>处理说明 / 审批意见</span>
+              <small class="muted">撤回、取消或审核时填写（最多 200 字）</small>
+            </div>
+            <textarea
+              v-model="comments[item.id]"
+              maxlength="200"
+              rows="2"
+              :disabled="busy || materialBusy"
+              placeholder="在此直接填写处理意见、退回补充要求或撤回说明…"
+            />
+          </label>
+        </div>
         <div class="repair-card-actions">
           <button
             v-if="!review && (item.allowedActions.includes('edit') || item.allowedActions.includes('supplement'))"
@@ -340,6 +368,15 @@ onBeforeUnmount(() => {
             请求取消
           </button>
           <button
+            v-if="!review && item.allowedActions.includes('delete')"
+            class="text-button"
+            type="button"
+            :disabled="busy || materialBusy"
+            @click="act(item, 'delete')"
+          >
+            删除草稿
+          </button>
+          <button
             v-if="item.allowedActions.includes('approve')"
             class="text-button"
             type="button"
@@ -378,19 +415,6 @@ onBeforeUnmount(() => {
         />
       </article>
     </div>
-    <label v-if="items.some(item => item.allowedActions.length)" class="repair-editor">
-      <div class="label-heading-row">
-        <span>处理说明</span>
-        <small class="muted">最多 200 字</small>
-      </div>
-      <textarea
-        v-model="comment"
-        maxlength="200"
-        rows="3"
-        :disabled="busy || materialBusy"
-        placeholder="撤回、取消或审核时填写处理意见或补充说明"
-      />
-    </label>
   </div>
 </template>
 

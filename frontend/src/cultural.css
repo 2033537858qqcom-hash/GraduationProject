@@ -4,7 +4,7 @@
   isolation: isolate;
 }
 .public-header {
-  background: radial-gradient(130% 120% at 50% 0%, #f4f7fb 0%, var(--color-white) 82%);
+  background: radial-gradient(130% 120% at 50% 0%, var(--color-surface-hover) 0%, var(--color-white) 82%);
 }
 .portal-header,
 .school-brand-row,
@@ -72,7 +72,7 @@
 
 /* Chapters alternate the position of the same motifs around the reading area. */
 .photo-frame {
-  --culture-color: #e4ecf7;
+  --culture-color: var(--color-surface-active);
   --frame-opacity: 0.48;
 }
 .hero-copy {
@@ -130,7 +130,7 @@
 }
 .chapter-life .chapter-cloud,
 .chapter-life .chapter-birds {
-  --culture-color: #e4ecf7;
+  --culture-color: var(--color-surface-active);
   --culture-opacity: 0.25;
 }
 
@@ -243,7 +243,7 @@
   z-index: 1;
 }
 .login-photo-frame {
-  --culture-color: #e4ecf7;
+  --culture-color: var(--color-surface-active);
   --frame-top: 120px;
   --frame-bottom: 52px;
   --frame-size: 40px;

@@ -1,9 +1,9 @@
 /* The repair workspace shares the portal palette; emphasis belongs to the current task. */
 .repair-workflow {
-  --repair-ink: #263c51;
-  --repair-muted: #697d90;
-  --repair-line: #e4eaf0;
-  --repair-soft: #f5f8fb;
+  --repair-ink: var(--color-ink);
+  --repair-muted: var(--color-text-secondary);
+  --repair-line: var(--color-border-subtle);
+  --repair-soft: var(--color-surface-soft);
   max-width: 1480px;
   margin-inline: auto;
 }
@@ -41,7 +41,7 @@
   color: var(--repair-muted);
 }
 .repair-workflow .repair-refresh:hover {
-  background: #eaf0f6;
+  background: var(--color-surface-soft);
   color: var(--brand);
 }
 .repair-workflow :is(button, a, summary):focus-visible {
@@ -57,9 +57,9 @@
   flex-wrap: wrap;
   padding: 10px 14px;
   margin: 0 0 14px;
-  border: 1px solid #e4eaf0;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
-  background: #f0f5fa;
+  background: var(--color-surface-hover);
   font-size: var(--text-supporting);
 }
 .repair-queue-note > span {
@@ -79,7 +79,7 @@
   font-size: var(--text-supporting);
 }
 .repair-queue-note button:hover {
-  background: #e1eaf3;
+  background: var(--color-surface-active);
 }
 .repair-queue-note strong {
   font-variant-numeric: tabular-nums;
@@ -90,7 +90,7 @@
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 18px;
-  border-bottom: 1px solid #dfe6ee;
+  border-bottom: 1px solid var(--color-border-subtle);
 }
 .repair-queue-tabs {
   display: flex;
@@ -105,7 +105,7 @@
   padding: 12px 1px 14px;
   border: 0;
   background: transparent;
-  color: #65788a;
+  color: var(--color-text-secondary);
   font-size: var(--text-supporting);
   cursor: pointer;
   white-space: nowrap;
@@ -177,7 +177,7 @@
 .repair-workflow .portal-panel {
   border: 1px solid var(--repair-line);
   border-radius: var(--radius-lg);
-  box-shadow: 0 2px 5px #223d5814;
+  box-shadow: 0 2px 5px rgb(41 62 52 / 8%);
 }
 .repair-workflow .repair-request-list {
   padding: 0;
@@ -206,21 +206,18 @@
   gap: 8px;
   padding: 17px 17px 15px;
   border: 0;
-  border-left: 3px solid transparent;
   border-bottom: 1px solid var(--color-border);
   border-radius: 0;
   transition: background 0.15s;
 }
 .repair-workflow .repair-request-card.selected {
-  padding-left: 17px;
-  border-left-color: var(--brand);
   background: var(--color-surface-soft);
 }
 .repair-workflow .repair-request-card:hover {
-  background: #f3f6fa;
+  background: var(--color-surface-hover);
 }
 .repair-workflow .repair-request-card.selected:hover {
-  background: #e9f0f7;
+  background: var(--color-surface-active);
 }
 .repair-workflow .repair-request-card .repair-card-top {
   display: flex;
@@ -242,7 +239,7 @@
 .repair-workflow .repair-request-card .repair-card-location {
   display: flex;
   gap: 5px;
-  color: #6a7e91;
+  color: var(--color-text-secondary);
   font-size: var(--text-supporting);
   line-height: 1.7;
 }
@@ -260,7 +257,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  color: #6b7c8d;
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
   line-height: 1.5;
 }
@@ -273,7 +270,7 @@
   justify-content: space-between;
   gap: 8px;
   font-size: var(--text-meta);
-  color: #8291a0;
+  color: var(--color-text-tertiary);
   margin-top: 2px;
 }
 .repair-card-footer time {
@@ -301,7 +298,7 @@
   color: var(--repair-muted);
 }
 .repair-list-empty > svg {
-  color: #a5b5c5;
+  color: var(--color-text-tertiary);
 }
 .repair-list-empty strong {
   font-size: var(--text-supporting);
@@ -325,12 +322,12 @@
   line-height: 1.5;
   white-space: nowrap;
   font-weight: 500;
-  background: #eef2f6;
-  color: #65768a;
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
 }
 .repair-workflow .repair-status:is(.status-submitted, .status-assigned, .status-in_progress) {
-  background: #eaf1f9;
-  color: #305d8b;
+  background: #edf3ee;
+  color: var(--color-brand);
 }
 .repair-workflow .repair-status:is(.status-returned, .status-awaiting_confirmation) {
   background: #fbf2e3;
@@ -359,10 +356,10 @@
   align-items: center;
   gap: 10px;
   font-size: var(--text-meta);
-  color: #7a8c9d;
+  color: var(--color-text-tertiary);
 }
 .repair-detail-identity > span + span {
-  border-left: 1px solid #dbe3eb;
+  border-left: 1px solid var(--color-border-subtle);
   padding-left: 10px;
 }
 .repair-workflow .repair-detail-title {
@@ -396,14 +393,14 @@
 }
 .repair-detail-location strong {
   font-weight: 400;
-  color: #455c72;
+  color: var(--color-heading);
   margin-left: 12px;
 }
 .repair-workflow .repair-stepper-container {
   padding: 16px 18px;
   margin: 0 0 16px;
   background: var(--repair-soft);
-  border: 1px solid #e6ecf2;
+  border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   box-shadow: none;
 }
@@ -443,7 +440,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: #334e68;
+  color: var(--color-ink);
   font-size: var(--text-supporting);
   font-weight: 600;
   line-height: 1.6;
@@ -460,7 +457,7 @@
   display: block;
   font-size: var(--text-meta);
   margin-top: 4px;
-  color: #7c8fa2;
+  color: var(--color-text-tertiary);
 }
 .repair-stepper-header > .button {
   display: inline-flex;
@@ -469,13 +466,13 @@
   flex-shrink: 0;
   background: var(--color-white);
   color: var(--brand);
-  border-color: #cddae7;
+  border-color: var(--color-border-strong);
 }
 .repair-workflow .repair-stepper {
   display: flex;
   padding: 15px 0 0;
   margin-top: 13px;
-  border-top: 1px solid #e1e8f0;
+  border-top: 1px solid var(--color-border-subtle);
 }
 .repair-workflow .repair-step-item {
   flex: 1;
@@ -495,15 +492,15 @@
   font-size: var(--text-meta);
   border-width: 1px;
   background: var(--color-white);
-  border-color: #d2dce5;
-  color: #91a1b1;
+  border-color: var(--color-border);
+  color: var(--color-text-tertiary);
   box-shadow: none;
   animation: none;
 }
 .repair-workflow .repair-step-item.is-completed .repair-step-circle {
-  background: #e7eef6;
-  border-color: #d7e2ee;
-  color: #52779b;
+  background: var(--color-surface-active);
+  border-color: var(--color-border-strong);
+  color: var(--color-brand);
 }
 .repair-workflow .repair-step-item.is-active .repair-step-circle {
   background: var(--brand);
@@ -530,7 +527,7 @@
 .repair-workflow .repair-step-title {
   font-size: var(--text-meta);
   line-height: 1.5;
-  color: #607589;
+  color: var(--color-text-secondary);
   font-weight: 500;
 }
 .repair-workflow .repair-step-item.is-active .repair-step-title {
@@ -542,7 +539,7 @@
 }
 .repair-workflow .repair-step-time {
   font-size: var(--text-meta);
-  color: #8b9cac;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .repair-detail-tabs {
   gap: 24px;
@@ -551,7 +548,7 @@
 .repair-workflow .repair-detail-tabs .text-button {
   font-size: var(--text-supporting);
   padding: 11px 0;
-  color: #7c8b9b;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .repair-detail-tabs .text-button.selected {
   color: var(--brand);
@@ -594,7 +591,7 @@
   border-radius: 0;
 }
 .repair-workflow .repair-bubble-box .bubble-title {
-  color: #526f89;
+  color: var(--color-heading);
   font-size: var(--text-supporting);
   margin-bottom: 6px;
   font-weight: 500;
@@ -602,7 +599,7 @@
 .repair-workflow .preserve-lines {
   font-size: var(--text-supporting);
   line-height: 1.85;
-  color: #405569;
+  color: var(--color-ink);
 }
 .repair-workflow .fault-bubble p {
   margin: 0;
@@ -617,26 +614,26 @@
 }
 .repair-workflow .images-block-title {
   font-size: var(--text-supporting);
-  color: #62788d;
+  color: var(--color-text-secondary);
 }
 .repair-workflow .images-block-title strong {
   font-weight: 400;
 }
 .images-block-title strong > span {
-  color: #8e9dad;
+  color: var(--color-text-tertiary);
   margin-left: 5px;
 }
 .repair-workflow .muted-note {
   font-size: var(--text-meta);
-  color: #8595a5;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .empty-media-note {
   font-size: var(--text-supporting);
   font-style: normal;
-  color: #8b9aa8;
+  color: var(--color-text-tertiary);
   padding: 10px 12px;
   margin: 0;
-  background: #f7f9fb;
+  background: var(--color-surface-soft);
   border-radius: var(--radius-sm);
 }
 .repair-workflow .repair-gallery-grid {
@@ -664,7 +661,7 @@
 }
 .repair-workflow .repair-gallery-tag {
   font-size: var(--text-meta);
-  background: #344d63d9;
+  background: rgb(33 60 53 / 85%);
 }
 .repair-workflow .repair-gallery-info {
   padding: 7px 8px;
@@ -672,7 +669,7 @@
 }
 .repair-workflow .repair-gallery-name {
   font-size: var(--text-meta);
-  color: #738396;
+  color: var(--color-text-tertiary);
   font-weight: 400;
 }
 .repair-workflow .repair-gallery-actions {
@@ -682,7 +679,7 @@
   font-size: var(--text-meta);
 }
 .repair-metadata {
-  border-top: 1px dashed #e6ebf1;
+  border-top: 1px dashed var(--color-border-subtle);
   padding-top: 12px;
 }
 .repair-metadata > summary {
@@ -691,7 +688,7 @@
   gap: 6px;
   cursor: pointer;
   font-size: var(--text-supporting);
-  color: #668097;
+  color: var(--color-text-secondary);
   list-style: none;
 }
 .repair-metadata > summary::-webkit-details-marker {
@@ -720,21 +717,21 @@
 }
 .repair-workflow .fact-item dt {
   font-size: var(--text-meta);
-  color: #8191a0;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .fact-item dd {
   font-size: var(--text-supporting);
-  color: #4b6277;
+  color: var(--color-heading);
 }
 .repair-workflow .technician-highlight {
   font-weight: 500;
-  color: #456c8d;
+  color: var(--color-brand);
 }
 .repair-workflow .repair-completion-item {
   padding: 0 0 14px;
   margin: 0;
   border: 0;
-  border-bottom: 1px solid #edf1f5;
+  border-bottom: 1px solid var(--color-border-subtle);
   border-radius: 0;
   background: transparent;
 }
@@ -747,12 +744,12 @@
   font-size: var(--text-supporting);
 }
 .repair-workflow .completion-header strong {
-  color: #466680;
+  color: var(--color-heading);
   font-weight: 500;
 }
 .repair-workflow .completion-header small {
   font-size: var(--text-meta);
-  color: #8594a3;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .repair-completion-item p {
   margin: 0;
@@ -765,13 +762,14 @@
 }
 .repair-workflow .repair-assignment-card {
   background: var(--color-surface);
-  border: 1px solid #e7edf3;
+  border: 1px solid var(--color-border-subtle);
   font-size: var(--text-supporting);
   padding: 12px;
   border-radius: var(--radius-md);
 }
 .repair-workflow .repair-assignment-card.current {
-  border-left: 2px solid #6a8aa8;
+  border-color: var(--color-border-strong);
+  border-top: 2px solid var(--color-brand);
 }
 .repair-workflow .assignment-index {
   font-size: var(--text-supporting);
@@ -785,8 +783,8 @@
   font-weight: 400;
 }
 .repair-workflow .assignment-badge {
-  background: #e9eff5;
-  color: #60798f;
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
   font-size: var(--text-meta);
 }
 .repair-workflow .repair-cancellation {
@@ -814,7 +812,7 @@
 }
 .repair-workflow .evaluation-display-box .stars-label {
   font-size: var(--text-supporting);
-  color: #6e8193;
+  color: var(--color-text-secondary);
 }
 .repair-workflow .stars-visual {
   font-size: 16px;
@@ -828,7 +826,7 @@
 }
 .repair-workflow .evaluation-comment {
   font-size: var(--text-supporting);
-  color: #536b80;
+  color: var(--color-text-secondary);
 }
 .repair-workflow .repair-timestamps {
   margin: 12px 0 0;
@@ -843,9 +841,9 @@
 
 .repair-workflow .repair-operation-panel {
   padding: 18px;
-  border: 1px solid #dce5ee;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  background: #f7f9fc;
+  background: var(--color-surface-soft);
   gap: 14px;
   scroll-margin-top: 28px;
 }
@@ -864,7 +862,7 @@
   margin: 0;
 }
 .repair-workflow .repair-operation-panel .repair-inline-actions {
-  border-top: 1px solid #e2e9f0;
+  border-top: 1px solid var(--color-border-subtle);
   padding-top: 14px;
 }
 .repair-workflow .repair-operation-panel .repair-inline-actions .button.primary {
@@ -887,7 +885,7 @@
   position: relative;
   margin-left: 6px;
   padding: 0 0 22px 22px;
-  border-left: 1px solid #dce5ee;
+  border-left: 1px solid var(--color-border);
   border-bottom: 0;
   gap: 8px;
 }
@@ -899,7 +897,7 @@
   width: 7px;
   height: 7px;
   border: 2px solid var(--color-white);
-  background: #7894ac;
+  background: var(--color-brand);
   border-radius: 50%;
 }
 .repair-workflow .repair-history-card:last-of-type {
@@ -910,8 +908,8 @@
   font-weight: 500;
 }
 .repair-workflow .history-role-badge {
-  background: #f1f5f8;
-  color: #6b8092;
+  background: var(--color-surface-soft);
+  color: var(--color-text-secondary);
   border: 0;
   font-size: var(--text-meta);
 }
@@ -920,7 +918,7 @@
   margin: 0;
   border: 0;
   border-radius: var(--radius-sm);
-  background: #f6f8fb;
+  background: var(--color-surface-hover);
   font-size: var(--text-supporting);
 }
 .repair-workflow .repair-history-card small,
@@ -931,12 +929,12 @@
   padding: 80px 24px;
 }
 .repair-workflow .repair-empty-detail svg {
-  color: #93a8ba;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .repair-empty-detail h2 {
   font-size: 17px;
   font-weight: 500;
-  color: #526d85;
+  color: var(--color-text-secondary);
 }
 .repair-workflow .repair-empty-detail p {
   font-size: var(--text-supporting);
@@ -982,8 +980,8 @@
   height: 22px;
   display: grid;
   place-items: center;
-  background: #edf2f7;
-  color: #537696;
+  background: var(--color-surface-soft);
+  color: var(--color-brand);
   border-radius: var(--radius-sm);
   font-size: var(--text-meta);
 }
@@ -994,7 +992,7 @@
 }
 .repair-workflow .repair-workflow-form label,
 .repair-workflow .repair-operation-panel label {
-  color: #52697d;
+  color: var(--color-text-secondary);
   font-size: var(--text-supporting);
 }
 .repair-workflow .repair-workflow-form .form-grid {
@@ -1053,7 +1051,7 @@
   font-size: var(--text-meta);
   padding: 3px 4px;
   color: var(--color-white);
-  background: #36536dcc;
+  background: rgb(33 60 53 / 80%);
   text-align: center;
 }
 .repair-workflow .repair-thumb-badge.pending {
@@ -1062,7 +1060,7 @@
 .repair-workflow .repair-upload-picker {
   min-height: 96px;
   aspect-ratio: 1;
-  border: 1px dashed #bccbd9;
+  border: 1px dashed var(--color-border);
   background: var(--color-surface);
   border-radius: var(--radius-md);
   padding: 8px;
@@ -1072,11 +1070,11 @@
   display: none;
 }
 .repair-workflow .repair-upload-picker svg {
-  color: #7c94aa;
+  color: var(--color-text-secondary);
 }
 .repair-workflow .repair-image-tip {
   font-size: var(--text-meta);
-  color: #8292a2;
+  color: var(--color-text-tertiary);
   margin-top: 10px;
 }
 .repair-form-footer {
@@ -1089,7 +1087,7 @@
 }
 .repair-form-footer > span {
   font-size: var(--text-meta);
-  color: #7e91a3;
+  color: var(--color-text-tertiary);
 }
 .repair-workflow .repair-image-modal {
   overflow: visible;
@@ -1097,7 +1095,7 @@
 .repair-workflow .repair-image-modal-close {
   top: 8px;
   right: 8px;
-  background: #243d58cc;
+  background: rgb(33 60 53 / 80%);
   z-index: 1;
 }
 

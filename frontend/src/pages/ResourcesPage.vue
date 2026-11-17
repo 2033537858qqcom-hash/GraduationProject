@@ -3,11 +3,14 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { Building2, CalendarClock, History, Plus, RefreshCw } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime as time } from '../lib/format';
 import { currentUser } from '../stores/auth';
 import { roomStatus, roomTypes } from '../resources';
 import type { ClassroomResource, RoomAudit, RoomOccupancy } from '../resources';
 import type { Paged } from '../foundation';
 import BaseSelect from '../components/BaseSelect.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { useSlidingIndicator } from '../composables/useSlidingIndicator';
 
 const route = useRoute(),
@@ -21,6 +24,11 @@ const selected = ref<ClassroomResource | null>(null),
   editing = ref(false),
   loading = ref(true),
   busy = ref(false);
+const displayedRooms = computed(() =>
+  selected.value && !rooms.value.items.some(room => room.id === selected.value?.id)
+    ? [selected.value, ...rooms.value.items]
+    : rooms.value.items,
+);
 const error = ref(''),
   success = ref('');
 const filters = reactive({ q: '', campusId: '', type: '', enabled: '', ready: '' });
@@ -76,9 +84,6 @@ const confirmation = ref(''),
   stateTarget = ref<ClassroomResource | null>(null),
   stateReason = ref('');
 let resolveConfirmation: ((accept: boolean) => void) | null = null;
-function time(value: string) {
-  return value.slice(0, 16).replace('T', ' ');
-}
 async function ask(message: string, target: ClassroomResource | null = null) {
   if (resolveConfirmation) finishConfirmation(false);
   confirmation.value = message;
@@ -168,6 +173,13 @@ async function choose(item: ClassroomResource) {
   if (route.query.id === String(item.id) && view.value === 'detail') {
     if (await allowLeave()) await load();
   } else await router.replace({ query: { ...route.query, id: String(item.id), view: 'detail', detailPage: '1' } });
+}
+async function closeDetail() {
+  if (await allowLeave()) {
+    selected.value = null;
+    editing.value = false;
+    await router.replace({ query: { ...route.query, id: undefined, view: undefined, detailPage: undefined } });
+  }
 }
 async function changeView(next: string) {
   await router.replace({ query: { ...route.query, view: next, detailPage: '1' } });
@@ -314,13 +326,12 @@ onBeforeUnmount(() => {
         </div>
       </form>
     </dialog>
-    <div class="section-heading manager-heading">
-      <div>
-        <span class="portal-context">校园资源管理</span>
-        <h1>教室资源目录</h1>
-        <p class="muted">维护教学地点、容量与使用状态，核对未来占用。</p>
-      </div>
-      <div class="form-actions">
+    <ServicePageHeader
+      context="校园资源管理"
+      title="教室资源目录"
+      description="维护教学地点、容量与使用状态，核对未来占用。"
+    >
+      <template #actions>
         <button class="button compact" :disabled="busy || loading" @click="refresh">
           <RefreshCw :size="15" />
           刷新目录
@@ -329,8 +340,8 @@ onBeforeUnmount(() => {
           <Plus :size="15" />
           新建教室
         </button>
-      </div>
-    </div>
+      </template>
+    </ServicePageHeader>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
     <form class="foundation-filters resource-filters" @submit.prevent="search">
@@ -356,84 +367,11 @@ onBeforeUnmount(() => {
       </label>
       <button class="button compact" :disabled="busy || loading">查询</button>
     </form>
-    <section class="portal-panel resource-directory" aria-label="教室目录">
+    <section v-if="editing && !selected" class="portal-panel resource-detail" aria-label="教室资料编辑">
       <div class="section-heading">
-        <h2>
-          <Building2 :size="17" />
-          教室目录
-        </h2>
-        <small class="muted">共 {{ rooms.total }} 间</small>
+        <h2 id="room-editor-heading">新建教室资源</h2>
+        <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">收起表单 ×</button>
       </div>
-      <p v-if="loading && !rooms.items.length" class="loading-state" role="status">正在读取教室资源…</p>
-      <p v-else-if="!loading && !rooms.items.length" class="empty-state">没有符合条件的教室，可调整筛选或新建记录。</p>
-      <div v-if="rooms.items.length" class="table-scroll" :class="{ 'is-loading': loading }">
-        <table class="campus-table foundation-table resource-table">
-          <thead>
-            <tr>
-              <th>教室与编号</th>
-              <th>校区与楼栋</th>
-              <th>类型</th>
-              <th>容量</th>
-              <th>使用状态</th>
-              <th>未结束占用</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="room in rooms.items" :key="room.id" :class="{ 'resource-selected': selected?.id === room.id }">
-              <td>
-                <strong>{{ room.name }}</strong>
-                <small>{{ room.code }}</small>
-              </td>
-              <td>
-                {{ room.campusName }}
-                <small>
-                  {{ room.buildingName ?? '楼栋待补录' }} · {{ room.roomNumber ?? '房间号待补录'
-                  }}{{ room.floorLabel ? ' · ' + room.floorLabel : '' }}
-                </small>
-              </td>
-              <td>{{ roomTypes[room.type] }}</td>
-              <td>
-                教学 {{ room.teachingCapacity ?? '待补录' }}
-                <small>考试 {{ room.examCapacity ?? '待补录' }}</small>
-              </td>
-              <td>
-                <span class="status-label">{{ roomStatus(room) }}</span>
-                <small v-if="room.origin === 'MIGRATED'">既有安排导入</small>
-              </td>
-              <td>
-                课程 {{ room.upcomingLessonCount }}
-                <small>已发布考试 {{ room.publishedExamCount }}</small>
-              </td>
-              <td><button class="text-button" :disabled="busy" @click="choose(room)">查看与维护</button></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="foundation-pagination">
-        <span>第 {{ rooms.page }} 页</span>
-        <div>
-          <button class="button compact" :disabled="loading || busy || rooms.page <= 1" @click="page(rooms.page - 1)">
-            上一页
-          </button>
-          <button
-            class="button compact"
-            :disabled="loading || busy || rooms.page * rooms.pageSize >= rooms.total"
-            @click="page(rooms.page + 1)"
-          >
-            下一页
-          </button>
-        </div>
-      </div>
-    </section>
-    <section v-if="editing" class="portal-panel resource-detail" aria-label="教室资料编辑">
-      <h2 id="room-editor-heading">{{ selected ? '维护教室资料' : '新建教室资源' }}</h2>
-      <p v-if="selected?.origin === 'MIGRATED'" class="content-context-note">
-        该条目由既有安排导入。请核对楼栋、房间号和容量后补录；已有课表仍保留原文字。
-      </p>
-      <p v-if="selected?.referenced" class="muted">
-        教室已有教学引用，校区、编号与已确定的楼栋房间保持固定。名称和容量变更会记录原因。
-      </p>
       <form class="editor-form" @submit.prevent="save">
         <fieldset class="foundation-fields" :disabled="busy">
           <div class="form-grid">
@@ -448,7 +386,6 @@ onBeforeUnmount(() => {
                 required
                 pattern="[A-Za-z0-9_-]{1,64}"
                 maxlength="64"
-                :readonly="selected?.referenced"
                 placeholder="如 EAST-A-201"
               />
             </label>
@@ -456,7 +393,7 @@ onBeforeUnmount(() => {
           <div class="form-grid">
             <label>
               所属校区
-              <BaseSelect v-model="form.campusId" :options="formCampusOptions" :disabled="selected?.referenced" />
+              <BaseSelect v-model="form.campusId" :options="formCampusOptions" />
             </label>
             <label>
               教室类型
@@ -466,21 +403,11 @@ onBeforeUnmount(() => {
           <div class="form-grid">
             <label>
               楼栋名称
-              <input
-                v-model="form.buildingName"
-                required
-                maxlength="100"
-                :readonly="selected?.referenced && !!selected.buildingName"
-              />
+              <input v-model="form.buildingName" required maxlength="100" />
             </label>
             <label>
               房间号
-              <input
-                v-model="form.roomNumber"
-                required
-                maxlength="50"
-                :readonly="selected?.referenced && !!selected.roomNumber"
-              />
+              <input v-model="form.roomNumber" required maxlength="50" />
             </label>
           </div>
           <label>
@@ -525,161 +452,384 @@ onBeforeUnmount(() => {
         </div>
       </form>
     </section>
-    <section v-else-if="selected" class="portal-panel resource-detail" aria-label="教室详情">
+
+    <section class="portal-panel resource-directory" aria-label="教室目录">
       <div class="section-heading">
-        <div>
-          <span class="portal-context">{{ selected.campusName }} · {{ selected.code }}</span>
-          <h2>{{ selected.name }}</h2>
-        </div>
-        <span class="status-label">{{ roomStatus(selected) }} · V{{ selected.version }}</span>
+        <h2>
+          <Building2 :size="17" />
+          教室目录
+        </h2>
+        <small class="muted">共 {{ rooms.total }} 间</small>
       </div>
-      <nav ref="resourcesNavRef" class="learning-tabs" aria-label="教室详情栏目">
-        <button :class="{ selected: view === 'detail' }" :disabled="busy" @click="changeView('detail')">
-          教室资料
-        </button>
-        <button :class="{ selected: view === 'occupancy' }" :disabled="busy" @click="changeView('occupancy')">
-          <CalendarClock :size="15" />
-          未来占用
-        </button>
-        <button :class="{ selected: view === 'history' }" :disabled="busy" @click="changeView('history')">
-          <History :size="15" />
-          修改记录
-        </button>
-        <div class="learning-tabs-indicator" :style="resourcesIndicatorStyle" aria-hidden="true"></div>
-      </nav>
-      <template v-if="view === 'detail'">
-        <dl class="resource-facts">
-          <div>
-            <dt>楼栋与房间</dt>
-            <dd>{{ selected.buildingName ?? '待补录' }} · {{ selected.roomNumber ?? '待补录' }}</dd>
-          </div>
-          <div>
-            <dt>楼层与类型</dt>
-            <dd>{{ selected.floorLabel || '未填楼层' }} · {{ roomTypes[selected.type] }}</dd>
-          </div>
-          <div>
-            <dt>教学容量</dt>
-            <dd>{{ selected.teachingCapacity == null ? '待补录' : selected.teachingCapacity + ' 人' }}</dd>
-          </div>
-          <div>
-            <dt>考试容量</dt>
-            <dd>{{ selected.examCapacity == null ? '待补录' : selected.examCapacity + ' 人' }}</dd>
-          </div>
-          <div>
-            <dt>未结束的课程／考试</dt>
-            <dd>{{ selected.upcomingLessonCount }} 次课程 · {{ selected.publishedExamCount }} 次已发布考试</dd>
-          </div>
-          <div>
-            <dt>待发布考试草稿</dt>
-            <dd>{{ selected.draftExamCount }} 次，草稿不占用时间</dd>
-          </div>
-        </dl>
-        <p v-if="selected.enabled && !selected.schedulable" class="content-context-note">
-          资料待补录，当前不能新增课程或发布考试。请先维护楼栋、房间号及教学／考试容量。
-        </p>
-        <p class="muted">
-          最近修改：{{ time(selected.updatedAt) }}。历史安排保留当时的地点文字，冲突校验使用固定资源编号。
-        </p>
-        <div class="form-actions">
-          <button class="button primary compact" :disabled="busy || loading" @click="edit(selected)">
-            维护教室资料
-          </button>
-          <button class="button compact" :disabled="busy || loading" @click="changeState(selected)">
-            {{ selected.enabled ? '停用教室' : '启用教室' }}
-          </button>
-        </div>
-      </template>
-      <template v-else-if="view === 'occupancy'">
-        <p class="muted">
-          显示尚未结束的课程、已发布考试及已关联的预约；超时未交接的使用持续占用。未发布草稿不占用时间。共
-          {{ occupancy.total }} 条。
-        </p>
-        <p v-if="!loading && !occupancy.items.length" class="empty-state">当前没有未结束的有效占用。</p>
-        <div class="table-scroll">
-          <table v-if="occupancy.items.length" class="campus-table">
-            <thead>
-              <tr>
-                <th>类型与课程</th>
-                <th>教学班</th>
-                <th>时间</th>
-                <th>人数</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="record in occupancy.items" :key="record.kind + record.id">
+      <SkeletonBlock v-if="loading && !displayedRooms.length" variant="table" :rows="5" label="正在读取教室资源…" />
+      <p v-else-if="!loading && !displayedRooms.length" class="empty-state">
+        没有符合条件的教室，可调整筛选或新建记录。
+      </p>
+      <div v-if="displayedRooms.length" class="table-scroll" :class="{ 'is-loading': loading }">
+        <table class="campus-table foundation-table resource-table">
+          <thead>
+            <tr>
+              <th>教室与编号</th>
+              <th>校区与楼栋</th>
+              <th>类型</th>
+              <th>容量</th>
+              <th>使用状态</th>
+              <th>未结束占用</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="room in displayedRooms" :key="room.id">
+              <tr :class="{ 'resource-selected': selected?.id === room.id }">
                 <td>
-                  {{
-                    record.kind === 'EXAM'
-                      ? '已发布考试'
-                      : record.kind === 'RESERVATION_IN_USE'
-                        ? '预约使用中'
-                        : record.kind === 'RESERVATION'
-                          ? '场地预约'
-                          : '课程安排'
-                  }}
-                  <small>{{ record.courseName }}</small>
+                  <strong>{{ room.name }}</strong>
+                  <small>{{ room.code }}</small>
                 </td>
-                <td>{{ record.className }}</td>
                 <td>
-                  {{ time(record.startsAt) }}
-                  <small>至 {{ time(record.endsAt) }}</small>
+                  {{ room.campusName }}
+                  <small>
+                    {{ room.buildingName ?? '楼栋待补录' }} · {{ room.roomNumber ?? '房间号待补录'
+                    }}{{ room.floorLabel ? ' · ' + room.floorLabel : '' }}
+                  </small>
                 </td>
-                <td>{{ record.memberCount }} 人</td>
+                <td>{{ roomTypes[room.type] }}</td>
+                <td>
+                  教学 {{ room.teachingCapacity ?? '待补录' }}
+                  <small>考试 {{ room.examCapacity ?? '待补录' }}</small>
+                </td>
+                <td>
+                  <span class="status-label">{{ roomStatus(room) }}</span>
+                  <small v-if="room.origin === 'MIGRATED'">既有安排导入</small>
+                </td>
+                <td>
+                  课程 {{ room.upcomingLessonCount }}
+                  <small>已发布考试 {{ room.publishedExamCount }}</small>
+                </td>
+                <td>
+                  <button
+                    class="text-button"
+                    :disabled="busy"
+                    @click="selected?.id === room.id ? closeDetail() : choose(room)"
+                  >
+                    {{ selected?.id === room.id ? '收起详情 ▴' : '查看与维护 ▾' }}
+                  </button>
+                </td>
               </tr>
-            </tbody>
-          </table>
+              <tr v-if="selected && selected.id === room.id" class="table-folio-row">
+                <td colspan="7" class="table-folio-cell">
+                  <section
+                    v-if="editing"
+                    class="portal-panel resource-detail service-inline-folio"
+                    aria-label="教室资料编辑"
+                  >
+                    <div class="section-heading">
+                      <h2 id="room-editor-heading">维护教室资料 · {{ selected.name }}</h2>
+                      <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">
+                        取消编辑 ×
+                      </button>
+                    </div>
+                    <p v-if="selected.origin === 'MIGRATED'" class="content-context-note">
+                      该条目由既有安排导入。请核对楼栋、房间号和容量后补录；已有课表仍保留原文字。
+                    </p>
+                    <p v-if="selected.referenced" class="muted">
+                      教室已有教学引用，校区、编号与已确定的楼栋房间保持固定。名称和容量变更会记录原因。
+                    </p>
+                    <form class="editor-form" @submit.prevent="save">
+                      <fieldset class="foundation-fields" :disabled="busy">
+                        <div class="form-grid">
+                          <label>
+                            教室名称
+                            <input v-model="form.name" required maxlength="100" />
+                          </label>
+                          <label>
+                            资源编号
+                            <input
+                              v-model="form.code"
+                              required
+                              pattern="[A-Za-z0-9_-]{1,64}"
+                              maxlength="64"
+                              :readonly="selected.referenced"
+                              placeholder="如 EAST-A-201"
+                            />
+                          </label>
+                        </div>
+                        <div class="form-grid">
+                          <label>
+                            所属校区
+                            <BaseSelect
+                              v-model="form.campusId"
+                              :options="formCampusOptions"
+                              :disabled="selected.referenced"
+                            />
+                          </label>
+                          <label>
+                            教室类型
+                            <BaseSelect v-model="form.type" :options="formTypeOptions" />
+                          </label>
+                        </div>
+                        <div class="form-grid">
+                          <label>
+                            楼栋名称
+                            <input
+                              v-model="form.buildingName"
+                              required
+                              maxlength="100"
+                              :readonly="selected.referenced && !!selected.buildingName"
+                            />
+                          </label>
+                          <label>
+                            房间号
+                            <input
+                              v-model="form.roomNumber"
+                              required
+                              maxlength="50"
+                              :readonly="selected.referenced && !!selected.roomNumber"
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          楼层说明
+                          <input v-model="form.floorLabel" maxlength="30" placeholder="如二层，可不填写" />
+                        </label>
+                        <div class="form-grid">
+                          <label>
+                            教学容量（人）
+                            <input
+                              v-model.number="form.teachingCapacity"
+                              type="number"
+                              min="1"
+                              max="1000"
+                              step="1"
+                              required
+                            />
+                          </label>
+                          <label>
+                            考试容量（人）
+                            <input
+                              v-model.number="form.examCapacity"
+                              type="number"
+                              min="1"
+                              :max="form.teachingCapacity ?? 1000"
+                              step="1"
+                              required
+                            />
+                            <small class="muted">考试容量不得超过教学容量，发布考试时再次校验。</small>
+                          </label>
+                        </div>
+                        <label>
+                          <div class="label-heading-row">
+                            <span>修改或建档原因</span>
+                            <small class="muted">必填 · 最多 480 字</small>
+                          </div>
+                          <textarea
+                            v-model="form.reason"
+                            required
+                            maxlength="480"
+                            rows="3"
+                            placeholder="说明资料来源或修改原因，供后续追溯核验"
+                          />
+                        </label>
+                      </fieldset>
+                      <div class="form-actions">
+                        <button class="button primary compact" :disabled="busy">
+                          {{ busy ? '正在保存…' : '保存教室资料' }}
+                        </button>
+                        <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">
+                          取消编辑
+                        </button>
+                      </div>
+                    </form>
+                  </section>
+                  <section v-else class="portal-panel resource-detail service-inline-folio" aria-label="教室详情">
+                    <div class="section-heading">
+                      <div>
+                        <span class="portal-context">{{ selected.campusName }} · {{ selected.code }}</span>
+                        <h2>{{ selected.name }}</h2>
+                      </div>
+                      <div class="service-folio-header-actions">
+                        <span class="status-label">{{ roomStatus(selected) }} · V{{ selected.version }}</span>
+                        <button type="button" class="button compact" :disabled="busy" @click="closeDetail">
+                          收起详情 ×
+                        </button>
+                      </div>
+                    </div>
+                    <nav ref="resourcesNavRef" class="learning-tabs" aria-label="教室详情栏目">
+                      <button :class="{ selected: view === 'detail' }" :disabled="busy" @click="changeView('detail')">
+                        教室资料
+                      </button>
+                      <button
+                        :class="{ selected: view === 'occupancy' }"
+                        :disabled="busy"
+                        @click="changeView('occupancy')"
+                      >
+                        <CalendarClock :size="15" />
+                        未来占用
+                      </button>
+                      <button :class="{ selected: view === 'history' }" :disabled="busy" @click="changeView('history')">
+                        <History :size="15" />
+                        修改记录
+                      </button>
+                      <div class="learning-tabs-indicator" :style="resourcesIndicatorStyle" aria-hidden="true"></div>
+                    </nav>
+                    <template v-if="view === 'detail'">
+                      <dl class="resource-facts">
+                        <div>
+                          <dt>楼栋与房间</dt>
+                          <dd>{{ selected.buildingName ?? '待补录' }} · {{ selected.roomNumber ?? '待补录' }}</dd>
+                        </div>
+                        <div>
+                          <dt>楼层与类型</dt>
+                          <dd>{{ selected.floorLabel || '未填楼层' }} · {{ roomTypes[selected.type] }}</dd>
+                        </div>
+                        <div>
+                          <dt>教学容量</dt>
+                          <dd>
+                            {{ selected.teachingCapacity == null ? '待补录' : selected.teachingCapacity + ' 人' }}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>考试容量</dt>
+                          <dd>{{ selected.examCapacity == null ? '待补录' : selected.examCapacity + ' 人' }}</dd>
+                        </div>
+                        <div>
+                          <dt>未结束的课程／考试</dt>
+                          <dd>
+                            {{ selected.upcomingLessonCount }} 次课程 · {{ selected.publishedExamCount }} 次已发布考试
+                          </dd>
+                        </div>
+                        <div>
+                          <dt>待发布考试草稿</dt>
+                          <dd>{{ selected.draftExamCount }} 次，草稿不占用时间</dd>
+                        </div>
+                      </dl>
+                      <p v-if="selected.enabled && !selected.schedulable" class="content-context-note">
+                        资料待补录，当前不能新增课程或发布考试。请先维护楼栋、房间号及教学／考试容量。
+                      </p>
+                      <p class="muted">
+                        最近修改：{{ time(selected.updatedAt) }}。历史安排保留当时的地点文字，冲突校验使用固定资源编号。
+                      </p>
+                      <div class="form-actions">
+                        <button class="button primary compact" :disabled="busy || loading" @click="edit(selected)">
+                          维护教室资料
+                        </button>
+                        <button class="button compact" :disabled="busy || loading" @click="changeState(selected)">
+                          {{ selected.enabled ? '停用教室' : '启用教室' }}
+                        </button>
+                      </div>
+                    </template>
+                    <template v-else-if="view === 'occupancy'">
+                      <p class="muted">
+                        显示尚未结束的课程、已发布考试及已关联的预约；超时未交接的使用持续占用。未发布草稿不占用时间。共
+                        {{ occupancy.total }} 条。
+                      </p>
+                      <p v-if="!loading && !occupancy.items.length" class="empty-state">当前没有未结束的有效占用。</p>
+                      <div class="table-scroll">
+                        <table v-if="occupancy.items.length" class="campus-table">
+                          <thead>
+                            <tr>
+                              <th>类型与课程</th>
+                              <th>教学班</th>
+                              <th>时间</th>
+                              <th>人数</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="record in occupancy.items" :key="record.kind + record.id">
+                              <td>
+                                {{
+                                  record.kind === 'EXAM'
+                                    ? '已发布考试'
+                                    : record.kind === 'RESERVATION_IN_USE'
+                                      ? '预约使用中'
+                                      : record.kind === 'RESERVATION'
+                                        ? '场地预约'
+                                        : '课程安排'
+                                }}
+                                <small>{{ record.courseName }}</small>
+                              </td>
+                              <td>{{ record.className }}</td>
+                              <td>
+                                {{ time(record.startsAt) }}
+                                <small>至 {{ time(record.endsAt) }}</small>
+                              </td>
+                              <td>{{ record.memberCount }} 人</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                      <div v-if="occupancy.total > 0" class="foundation-pagination">
+                        <span>第 {{ occupancy.page }} 页</span>
+                        <div>
+                          <button
+                            class="button compact"
+                            :disabled="loading || occupancy.page <= 1"
+                            @click="page(occupancy.page - 1, true)"
+                          >
+                            上一页
+                          </button>
+                          <button
+                            class="button compact"
+                            :disabled="loading || occupancy.page * occupancy.pageSize >= occupancy.total"
+                            @click="page(occupancy.page + 1, true)"
+                          >
+                            下一页
+                          </button>
+                        </div>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <p class="muted">保留建档、资料修改和启停原因，共 {{ history.total }} 条。</p>
+                      <article v-for="record in history.items" :key="record.id" class="foundation-audit">
+                        <strong>{{ actionNames[record.action] }} · V{{ record.version }}</strong>
+                        <p>{{ record.reason }}</p>
+                        <p>{{ record.detail }}</p>
+                        <small>{{ record.actorName }} · {{ time(record.createdAt) }}</small>
+                      </article>
+                      <p v-if="!loading && !history.items.length" class="empty-state">
+                        暂无资源修改记录。由旧安排导入的条目从本次维护开始记录。
+                      </p>
+                      <div v-if="history.total > 0" class="foundation-pagination">
+                        <span>第 {{ history.page }} 页</span>
+                        <div>
+                          <button
+                            class="button compact"
+                            :disabled="loading || history.page <= 1"
+                            @click="page(history.page - 1, true)"
+                          >
+                            上一页
+                          </button>
+                          <button
+                            class="button compact"
+                            :disabled="loading || history.page * history.pageSize >= history.total"
+                            @click="page(history.page + 1, true)"
+                          >
+                            下一页
+                          </button>
+                        </div>
+                      </div>
+                    </template>
+                  </section>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="rooms.total > 0" class="foundation-pagination">
+        <span>第 {{ rooms.page }} 页</span>
+        <div>
+          <button class="button compact" :disabled="loading || busy || rooms.page <= 1" @click="page(rooms.page - 1)">
+            上一页
+          </button>
+          <button
+            class="button compact"
+            :disabled="loading || busy || rooms.page * rooms.pageSize >= rooms.total"
+            @click="page(rooms.page + 1)"
+          >
+            下一页
+          </button>
         </div>
-        <div class="foundation-pagination">
-          <span>第 {{ occupancy.page }} 页</span>
-          <div>
-            <button
-              class="button compact"
-              :disabled="loading || occupancy.page <= 1"
-              @click="page(occupancy.page - 1, true)"
-            >
-              上一页
-            </button>
-            <button
-              class="button compact"
-              :disabled="loading || occupancy.page * occupancy.pageSize >= occupancy.total"
-              @click="page(occupancy.page + 1, true)"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
-      </template>
-      <template v-else>
-        <p class="muted">保留建档、资料修改和启停原因，共 {{ history.total }} 条。</p>
-        <article v-for="record in history.items" :key="record.id" class="foundation-audit">
-          <strong>{{ actionNames[record.action] }} · V{{ record.version }}</strong>
-          <p>{{ record.reason }}</p>
-          <p>{{ record.detail }}</p>
-          <small>{{ record.actorName }} · {{ time(record.createdAt) }}</small>
-        </article>
-        <p v-if="!loading && !history.items.length" class="empty-state">
-          暂无资源修改记录。由旧安排导入的条目从本次维护开始记录。
-        </p>
-        <div class="foundation-pagination">
-          <span>第 {{ history.page }} 页</span>
-          <div>
-            <button
-              class="button compact"
-              :disabled="loading || history.page <= 1"
-              @click="page(history.page - 1, true)"
-            >
-              上一页
-            </button>
-            <button
-              class="button compact"
-              :disabled="loading || history.page * history.pageSize >= history.total"
-              @click="page(history.page + 1, true)"
-            >
-              下一页
-            </button>
-          </div>
-        </div>
-      </template>
+      </div>
     </section>
     <p class="data-note">
       楼栋、容量和教室安排为毕业设计演示。管理员维护资源目录，教务维护本学院课程与考试；尚未接入学校真实教室资产。

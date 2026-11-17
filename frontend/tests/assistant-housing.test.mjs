@@ -32,10 +32,15 @@ test('housing queries use only the student detail context and whitelisted destin
   assert.equal(assistantContext('/housing/assignments', '8'), null)
   assert.equal(assistantContext('/housing/transfer', ['8']), null)
   assert.match(assistantContextLabel({ type: 'HOUSING_MINE', id: 8 }), /本人范围/)
-  for (const path of ['/housing/mine', '/housing/transfer', '/housing/transfer?id=8&tab=details'])
+  for (const path of [
+    '/housing/mine',
+    '/housing/transfer',
+    '/housing/transfer?id=8&tab=details',
+    '/housing/assignments',
+  ])
     assert.equal(safeAssistantDestination(path), path)
   for (const path of [
-    '/housing/assignments',
+    '/housing/assignments?studentId=9',
     '/housing/transfer?id=8&studentId=9',
     '//evil.test/housing/mine',
     '/housing/../admin',

@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateRange(1024,65535)][int]$FrontendPort = 5173,
+    [ValidateRange(1024,65535)][int]$FrontendPort = 18090,
     [ValidateRange(1024,65535)][int]$BackendPort = 7080,
     [switch]$SkipServices,
     [string]$OutputDirectory

@@ -9,6 +9,8 @@
 | XMT_9742.jpg | https://www.zzuit.edu.cn/gyxy/xyfg.htm | https://www.zzuit.edu.cn/images/22/04/21/1jarylhk3e/XMT_9742.jpg | 春日花枝与建筑：首屏轮播 |
 | XMT_9744.jpg | https://www.zzuit.edu.cn/gyxy/xyfg.htm | https://www.zzuit.edu.cn/images/22/04/21/1jarylhk3e/XMT_9744.jpg | 校园建筑配图 |
 
+> 原 JPG 文件保留在仓库中作为原始留存；前端引用同目录下的无缩放 `.webp` 编码版本（`admissions-banner01.webp`、`admissions-banner02.webp`、`XMT_9742.webp`、`XMT_9744.webp`）以优化首屏加载体积。
+
 素材仅根据官方发布页面说明来源，不推断拍摄日期或科研项目背景。影像配置集中在 frontend/src/content/schoolMedia.ts。
 
 ## 2026-10-19 首页章节影像替换
@@ -23,6 +25,9 @@
 | freshmen-ceremony.webp | 招生就业：2026级新生开学典礼上的国旗护卫队 | [校方新闻，2026-09-19](https://www.zzuit.edu.cn/info/1016/8686.htm) |
 | international-agreement.webp | 合作交流：与俄罗斯南乌拉尔国立人文师范大学签署合作备忘录 | [校方新闻，2026-10-17](https://www.zzuit.edu.cn/info/1016/8716.htm) |
 | welcome-performance.webp | 校园生活：2026年迎新文艺晚会舞蹈演出 | [校方新闻，2026-09-20](https://www.zzuit.edu.cn/info/1016/8687.htm) |
+| campus-mingde.webp | 明德楼拱门与青草光影（首屏轮播与院系风物） | [校园风光](https://www.zzuit.edu.cn/gyxy/xyfg.htm) |
+| campus-library.webp | 图书馆红砖阶梯与晴空（科学研究章节） | [校园风光](https://www.zzuit.edu.cn/gyxy/xyfg.htm) |
+| campus-boardwalk.webp | 翠湖木栈道与垂柳风光（合作交流章节） | [校园风光](https://www.zzuit.edu.cn/gyxy/xyfg.htm) |
 
 网页图注保留各自的来源链接；校园生活背景图增加可访问的图片说明和出处。概况图片的裁切位置由素材配置控制。文件的 WebP 转码未改变照片内容，也未扩大原图尺寸。
 

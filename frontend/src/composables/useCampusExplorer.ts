@@ -3,8 +3,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { BedDouble, Building2, Compass, Dumbbell, MapPin, Stethoscope, Trees, Utensils } from '@lucide/vue'
 import { campusPlaces, campusTour } from '../campus/manifest'
 import type { CampusCategory, CampusPlace } from '../campus/manifest'
-import { createCampusScene } from '../campus/createCampusScene'
-import type { CampusView, PlaceLabel } from '../campus/createCampusScene'
+import type { CampusView, createCampusScene, PlaceLabel } from '../campus/createCampusScene'
 import {
   westCampusMeta,
   eastCampusMeta,
@@ -13,8 +12,7 @@ import {
   westMapPlaces,
   westMapTour,
 } from '../campus/westCampusData'
-import { createAMapCampusScene } from '../campus/createAMapCampusScene'
-import { loadAMap } from '../campus/amapSdk'
+import type { createAMapCampusScene } from '../campus/createAMapCampusScene'
 import { campusPlaceId, campusReservationLink } from '../lib/campusServiceNavigation'
 import { publicReducedMotion } from '../lib/publicMotion'
 
@@ -66,6 +64,7 @@ export function useCampusExplorer() {
     if (!calibration || surveyLoading.value) return
     surveyLoading.value = true
     try {
+      const { loadAMap } = await import('../campus/amapSdk')
       const sdk = await loadAMap(mapKey)
       if (!sdk.PlaceSearch) await new Promise<void>(resolve => sdk.plugin?.(['AMap.PlaceSearch'], resolve))
       if (!sdk.PlaceSearch) throw new Error('地点检索插件未加载')
@@ -370,7 +369,9 @@ export function useCampusExplorer() {
       } satisfies import('../campus/createCampusScene').SceneCallbacks
       const created =
         mode.value === 'map'
-          ? await createAMapCampusScene(host, callbacks, {
+          ? await (
+              await import('../campus/createAMapCampusScene')
+            ).createAMapCampusScene(host, callbacks, {
               key: mapKey,
               initialCampus: currentCampus.value,
               signal: sceneAbort.signal,
@@ -383,7 +384,9 @@ export function useCampusExplorer() {
                 if (run === generation) modelReady.value = ready
               },
             })
-          : createCampusScene(host, callbacks, { campusId: currentCampus.value })
+          : (await import('../campus/createCampusScene')).createCampusScene(host, callbacks, {
+              campusId: currentCampus.value,
+            })
       if (run !== generation) {
         created.dispose()
         host.remove()

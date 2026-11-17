@@ -107,6 +107,11 @@ public class HousingTransferService {
         var repeated=repeat(user,input.requestKey(),digest);if(repeated!=null) return view(own(user,repeated),"mine");
         var row=own(user,id);if(!List.of("SUBMITTED","RETURNED","AWAITING_ASSIGNMENT").contains(row.status())) conflict("当前状态不能撤回");if(row.version()!=input.version()) stale();
         close(id,input.version(),row.status(),"WITHDRAWN");
+        if("SUBMITTED".equals(row.status())) {
+            notifyReviewers(row.departmentId(),user.id(),id,"调宿申请已撤回","学生已撤回调宿申请，原初审待办已关闭。");
+        } else if("AWAITING_ASSIGNMENT".equals(row.status())) {
+            notifyCampusManagers(row.sourceBedId(),id,"调宿申请已撤回","学生已撤回待排床的调宿申请，原排床待办已关闭。");
+        }
         act(user,id,"WITHDRAW",input.requestKey(),digest);audit(user,"TRANSFER_WITHDRAW",id,row.sourcePlace(),input.comment());
         return view(load(id),"mine");
     }
@@ -158,6 +163,9 @@ public class HousingTransferService {
         if("REJECTED".equals(next)) jdbc.sql("UPDATE housing_transfer SET review_comment=:comment WHERE id=:id").param("comment",input.comment().trim()).param("id",id).update();
         act(user,id,action.toUpperCase(),input.requestKey(),digest);
         notify(row.studentId(),id,"approve".equals(action)?"调宿初审已通过":"return".equals(action)?"调宿申请需补交":"调宿申请未通过","请打开申请查看初审结果与后续办理要求。");
+        if("approve".equals(action)) {
+            notifyCampusManagers(row.sourceBedId(),id,"新的调宿待排床申请","学院初审已通过，请进入住宿办理为学生分配目标床位。");
+        }
         audit(user,"TRANSFER_"+action.toUpperCase(),id,row.sourcePlace(),input.comment());
         return view(load(id),"review");
     }
@@ -333,6 +341,15 @@ public class HousingTransferService {
             JOIN dorm_building b ON b.id=s.building_id AND b.enabled=TRUE WHERE s.building_id=:building AND s.enabled=TRUE
             AND EXISTS(SELECT 1 FROM user_role ur JOIN role_permission rp ON rp.role_code=ur.role_code AND rp.permission_code='housing:assign' WHERE ur.user_id=s.user_id)
             """).param("building",building).query(Long.class).list()) notices.write(id,title,"HOUSING",transfer,"ASSIGN",body);
+    }
+    private void notifyCampusManagers(long sourceBedId,long transfer,String title,String body) {
+        for(long id:jdbc.sql("""
+            SELECT DISTINCT s.user_id FROM dorm_manager_scope s JOIN app_user u ON u.id=s.user_id AND u.enabled=TRUE
+            JOIN dorm_building managed ON managed.id=s.building_id AND managed.enabled=TRUE
+            JOIN dorm_bed sb ON sb.id=:bed JOIN dorm_room sr ON sr.id=sb.room_id JOIN dorm_building sbld ON sbld.id=sr.building_id
+            WHERE s.enabled=TRUE AND managed.campus_id=sbld.campus_id
+            AND EXISTS(SELECT 1 FROM user_role ur JOIN role_permission rp ON rp.role_code=ur.role_code AND rp.permission_code='housing:assign' WHERE ur.user_id=s.user_id)
+            """).param("bed",sourceBedId).query(Long.class).list()) notices.write(id,title,"HOUSING",transfer,"ASSIGN",body);
     }
     private void audit(CampusPrincipal user,String action,long id,String summary,String reason) {String name=jdbc.sql("SELECT full_name FROM app_user WHERE id=:id").param("id",user.id()).query(String.class).single();jdbc.sql("INSERT INTO foundation_audit(actor_id,actor_name,action,entity_type,entity_id,summary,reason) VALUES(:u,:n,:a,'HOUSING_TRANSFER',:id,:s,:r)").param("u",user.id()).param("n",name).param("a",action).param("id",id).param("s",summary==null?"":summary).param("r",reason==null || reason.isBlank()?"调宿办理":reason.trim()).update();}
     private void auditSystem(long id,String action,String summary) {jdbc.sql("INSERT INTO foundation_audit(actor_id,actor_name,action,entity_type,entity_id,summary,reason) SELECT id,'系统',:a,'HOUSING_TRANSFER',:transfer,:s,'入住期限已到' FROM app_user WHERE username='admin'").param("a",action).param("transfer",id).param("s",summary==null?"":summary).update();}

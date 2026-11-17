@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ClipboardCheck, MapPin, User, Wrench } from '@lucide/vue';
+import SkeletonBlock from '../SkeletonBlock.vue';
 import type { Paged } from '../../foundation';
 import { repairCategories, repairStatuses, type RepairItem } from '../../repairs';
 defineProps<{
@@ -18,7 +19,7 @@ const emit = defineEmits<{ choose: [item: RepairItem]; page: [page: number]; res
       <h2>{{ mode === 'work' ? '任务列表' : '报修记录' }}</h2>
       <span>{{ loading ? '更新中…' : `共 ${list.total} 条` }}</span>
     </div>
-    <p v-if="loading && !list.items.length" role="status" class="loading-state">正在读取报修记录…</p>
+    <SkeletonBlock v-if="loading && !list.items.length" variant="list" :rows="4" label="正在读取报修记录…" />
     <div v-else-if="!loading && !list.items.length" class="repair-list-empty">
       <ClipboardCheck :size="26" />
       <strong>暂无相关工单</strong>

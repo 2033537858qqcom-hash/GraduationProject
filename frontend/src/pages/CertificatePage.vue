@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import DownloadLink from '../components/DownloadLink.vue';
 import ServiceJourney from '../components/ServiceJourney.vue';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { FileCheck2, History, Plus, RefreshCw, Download, ShieldCheck } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime as time } from '../lib/format';
 import { useEditProtection } from '../composables/useEditProtection';
 import { certificateStatuses, certificateActions } from '../certificates';
 import type { CertificateEligibility, CertificateRequest, CertificateRevision } from '../certificates';
@@ -25,6 +27,11 @@ const eligibility = ref<CertificateEligibility | null>(null);
 const items = ref<Paged<CertificateRequest>>({ items: [], total: 0, page: 1, pageSize: 20 });
 const history = ref<Paged<CertificateRevision>>({ items: [], total: 0, page: 1, pageSize: 10 });
 const selected = ref<CertificateRequest | null>(null);
+const displayedItems = computed(() =>
+  selected.value && !items.value.items.some(item => item.id === selected.value?.id)
+    ? [selected.value, ...items.value.items]
+    : items.value.items,
+);
 const status = ref(''),
   loading = ref(true),
   busy = ref(false),
@@ -45,9 +52,6 @@ const { confirmMessage, confirmKind, dialogComment, ask, finish, allowLeave } = 
   dialog,
   cancelButton,
 );
-function time(value: string) {
-  return value.slice(0, 16).replace('T', ' ');
-}
 async function load() {
   const request = ++sequence;
   loading.value = true;
@@ -99,6 +103,13 @@ async function choose(item: CertificateRequest) {
   if (String(item.id) === route.query.id && !historyView.value) {
     if (await allowLeave()) await load();
   } else await router.replace({ query: { ...route.query, id: String(item.id), tab: 'details', historyPage: '1' } });
+}
+async function closeDetail() {
+  if (await allowLeave()) {
+    selected.value = null;
+    editing.value = false;
+    await router.replace({ query: { ...route.query, id: undefined, tab: undefined, historyPage: undefined } });
+  }
 }
 async function view(tab: string) {
   await router.replace({ query: { ...route.query, tab, historyPage: '1' } });
@@ -313,68 +324,11 @@ watch(
         {{ review ? '待办只包含本学院已提交且可由本人处理的申请。' : '草稿保存后再提交，补交沿用原办理记录。' }}
       </p>
     </form>
-    <section class="portal-panel leave-list" aria-label="证明申请列表">
+    <section v-if="editing && !selected && eligibility" class="portal-panel leave-detail" aria-label="证明资料编辑">
       <div class="section-heading">
-        <h2>
-          <FileCheck2 :size="17" />
-          {{ review ? '学院证明申请' : '本人证明申请' }}
-        </h2>
-        <span class="muted">共 {{ items.total }} 条</span>
+        <h2 id="certificate-editor-heading">新建证明草稿</h2>
+        <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">收起表单 ×</button>
       </div>
-      <p v-if="loading && !items.items.length" role="status" class="loading-state">正在读取申请…</p>
-      <p v-else-if="!loading && !items.items.length" class="empty-state">
-        {{ review ? '当前筛选下没有可处理申请。' : '当前筛选下没有记录，可新建证明草稿。' }}
-      </p>
-      <div v-else class="table-scroll" :class="{ 'is-loading': loading }">
-        <table class="campus-table foundation-table">
-          <thead>
-            <tr>
-              <th>申请</th>
-              <th v-if="review">学生与行政班</th>
-              <th>状态</th>
-              <th>最近更新</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="item in items.items" :key="item.id">
-              <td>
-                <strong>在校证明 #{{ item.id }}</strong>
-                <small>线上下载</small>
-              </td>
-              <td v-if="review">
-                {{ item.identity.studentName }}
-                <small>{{ item.identity.identityNumber }} · {{ item.identity.className }}</small>
-              </td>
-              <td>
-                <span class="status-label" :data-status="item.status">{{ certificateStatuses[item.status] }}</span>
-              </td>
-              <td>{{ time(item.updatedAt) }}</td>
-              <td>
-                <button class="text-button" :disabled="busy" @click="choose(item)">
-                  {{ review ? '查看与处理' : '查看申请' }}
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="pagination">
-        <span>第 {{ items.page }} 页</span>
-        <button class="button compact" :disabled="busy || loading || items.page <= 1" @click="page(items.page - 1)">
-          上一页
-        </button>
-        <button
-          class="button compact"
-          :disabled="busy || loading || items.page * items.pageSize >= items.total"
-          @click="page(items.page + 1)"
-        >
-          下一页
-        </button>
-      </div>
-    </section>
-    <section v-if="editing && eligibility" class="portal-panel leave-detail" aria-label="证明资料编辑">
-      <h2 id="certificate-editor-heading">{{ selected ? '修改证明申请' : '新建证明草稿' }}</h2>
       <p class="muted">登记资料来自本人账号；如有错误，请先联系管理员核对。保存时采用最新资料。</p>
       <div class="service-form-section">
         <span>01</span>
@@ -398,10 +352,6 @@ watch(
           <dd>{{ eligibility.identity.campusName }}</dd>
         </div>
       </dl>
-      <div v-if="selected?.status === 'RETURNED' && selected.processingComment" class="service-editor-feedback">
-        <strong>本次补交要求</strong>
-        <p>{{ selected.processingComment }}</p>
-      </div>
       <form class="editor-form certificate-form" @submit.prevent="save">
         <div class="service-form-section">
           <span>02</span>
@@ -432,175 +382,337 @@ watch(
         </div>
       </form>
     </section>
-    <section v-else-if="selected" class="portal-panel leave-detail" aria-label="证明申请详情">
+
+    <section class="portal-panel leave-list" aria-label="证明申请列表">
       <div class="section-heading">
-        <div>
-          <span class="eyebrow">申请 #{{ selected.id }} · {{ selected.identity.departmentName }}</span>
-          <h2>{{ review ? '在校证明 · ' + selected.identity.studentName : '在校证明申请' }}</h2>
-        </div>
-        <span class="status-label" :data-status="selected.status">
-          {{ certificateStatuses[selected.status] }} · V{{ selected.version }}
-        </span>
+        <h2>
+          <FileCheck2 :size="17" />
+          {{ review ? '学院证明申请' : '本人证明申请' }}
+        </h2>
+        <span class="muted">共 {{ items.total }} 条</span>
       </div>
-      <nav ref="certNavRef" class="learning-tabs" aria-label="证明详情栏目">
-        <button :class="{ active: !historyView }" :disabled="busy" @click="view('details')">申请资料</button>
-        <button :class="{ active: historyView }" :disabled="busy" @click="view('history')">
-          <History :size="15" />
-          办理记录
+      <SkeletonBlock v-if="loading && !displayedItems.length" variant="table" :rows="4" label="正在读取申请…" />
+      <p v-else-if="!loading && !displayedItems.length" class="empty-state">
+        {{ review ? '当前筛选下没有可处理申请。' : '当前筛选下没有记录，可新建证明草稿。' }}
+      </p>
+      <div v-else class="table-scroll" :class="{ 'is-loading': loading }">
+        <table class="campus-table foundation-table">
+          <thead>
+            <tr>
+              <th>申请</th>
+              <th v-if="review">学生与行政班</th>
+              <th>状态</th>
+              <th>最近更新</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="item in displayedItems" :key="item.id">
+              <tr :class="{ 'resource-selected': item.id === selected?.id }">
+                <td>
+                  <strong>在校证明 #{{ item.id }}</strong>
+                  <small>线上下载</small>
+                </td>
+                <td v-if="review">
+                  {{ item.identity.studentName }}
+                  <small>{{ item.identity.identityNumber }} · {{ item.identity.className }}</small>
+                </td>
+                <td>
+                  <span class="status-label" :data-status="item.status">{{ certificateStatuses[item.status] }}</span>
+                </td>
+                <td>{{ time(item.updatedAt) }}</td>
+                <td>
+                  <button
+                    class="text-button"
+                    :disabled="busy"
+                    @click="selected?.id === item.id ? closeDetail() : choose(item)"
+                  >
+                    {{ selected?.id === item.id ? '收起详情 ▴' : review ? '查看与处理 ▾' : '查看申请 ▾' }}
+                  </button>
+                </td>
+              </tr>
+              <tr v-if="selected && selected.id === item.id" class="table-folio-row">
+                <td :colspan="review ? 5 : 4" class="table-folio-cell">
+                  <section
+                    v-if="editing && eligibility"
+                    class="portal-panel leave-detail service-inline-folio"
+                    aria-label="证明资料编辑"
+                  >
+                    <div class="section-heading">
+                      <h2 id="certificate-editor-heading">修改证明申请 · #{{ selected.id }}</h2>
+                      <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">
+                        取消修改 ×
+                      </button>
+                    </div>
+                    <p class="muted">登记资料来自本人账号；如有错误，请先联系管理员核对。保存时采用最新资料。</p>
+                    <div class="service-form-section">
+                      <span>01</span>
+                      <h3>核对本人登记资料</h3>
+                    </div>
+                    <dl class="resource-facts">
+                      <div>
+                        <dt>姓名 / 学号</dt>
+                        <dd>{{ eligibility.identity.studentName }} / {{ eligibility.identity.identityNumber }}</dd>
+                      </div>
+                      <div>
+                        <dt>学院 / 专业</dt>
+                        <dd>{{ eligibility.identity.departmentName }} / {{ eligibility.identity.majorName }}</dd>
+                      </div>
+                      <div>
+                        <dt>行政班</dt>
+                        <dd>{{ eligibility.identity.className }}</dd>
+                      </div>
+                      <div>
+                        <dt>校区</dt>
+                        <dd>{{ eligibility.identity.campusName }}</dd>
+                      </div>
+                    </dl>
+                    <div
+                      v-if="selected.status === 'RETURNED' && selected.processingComment"
+                      class="service-editor-feedback"
+                    >
+                      <strong>本次补交要求</strong>
+                      <p>{{ selected.processingComment }}</p>
+                    </div>
+                    <form class="editor-form certificate-form" @submit.prevent="save">
+                      <div class="service-form-section">
+                        <span>02</span>
+                        <h3>用途与领取确认</h3>
+                      </div>
+                      <label>
+                        <div class="label-heading-row">
+                          <span>申请用途</span>
+                          <small class="muted">必填 · 最多 300 字</small>
+                        </div>
+                        <textarea
+                          v-model="form.purpose"
+                          required
+                          maxlength="300"
+                          rows="4"
+                          :disabled="busy"
+                          placeholder="请详细说明证明的具体用途（例如：签证申请、社会实践、求职应聘等），避免填写无关的个人敏感信息"
+                        />
+                      </label>
+                      <p class="muted">领取方式：线上下载 PDF。文件将标注“毕业设计演示”，用于项目功能展示。</p>
+                      <label class="confirmation-check">
+                        <input v-model="form.identityConfirmed" type="checkbox" required :disabled="busy" />
+                        <span>已核对以上本人登记资料，了解结果为演示证明。</span>
+                      </label>
+                      <div class="form-actions">
+                        <button class="button primary compact" :disabled="busy">保存证明资料</button>
+                        <button class="button compact" type="button" :disabled="busy" @click="cancelEdit">
+                          取消编辑
+                        </button>
+                      </div>
+                    </form>
+                  </section>
+                  <section v-else class="portal-panel leave-detail service-inline-folio" aria-label="证明申请详情">
+                    <div class="section-heading">
+                      <div>
+                        <span class="eyebrow">申请 #{{ selected.id }} · {{ selected.identity.departmentName }}</span>
+                        <h2>{{ review ? '在校证明 · ' + selected.identity.studentName : '在校证明申请' }}</h2>
+                      </div>
+                      <div class="service-folio-header-actions">
+                        <span class="status-label" :data-status="selected.status">
+                          {{ certificateStatuses[selected.status] }} · V{{ selected.version }}
+                        </span>
+                        <button type="button" class="button compact" :disabled="busy" @click="closeDetail">
+                          收起详情 ×
+                        </button>
+                      </div>
+                    </div>
+                    <nav ref="certNavRef" class="learning-tabs" aria-label="证明详情栏目">
+                      <button :class="{ active: !historyView }" :disabled="busy" @click="view('details')">
+                        申请资料
+                      </button>
+                      <button :class="{ active: historyView }" :disabled="busy" @click="view('history')">
+                        <History :size="15" />
+                        办理记录
+                      </button>
+                      <div class="learning-tabs-indicator" :style="certIndicatorStyle" aria-hidden="true"></div>
+                    </nav>
+                    <template v-if="historyView">
+                      <p class="muted">保存、补交和处理均保留当时的资料，共 {{ history.total }} 条。</p>
+                      <div class="leave-history">
+                        <article v-for="record in history.items" :key="record.id">
+                          <div class="section-heading">
+                            <h3>{{ certificateActions[record.action] }} · V{{ record.version }}</h3>
+                            <span class="status-label" :data-status="record.status">
+                              {{ certificateStatuses[record.status] }}
+                            </span>
+                          </div>
+                          <p>{{ record.comment }}</p>
+                          <small>{{ record.actorName }} · {{ time(record.createdAt) }}</small>
+                          <details>
+                            <summary>查看当时登记资料与用途</summary>
+                            <p>{{ record.studentName }} · {{ record.identityNumber }}</p>
+                            <p>
+                              {{ record.departmentName }} / {{ record.majorName }} / {{ record.className }} /
+                              {{ record.campusName }}
+                            </p>
+                            <p class="preserve-lines">{{ record.purpose }}</p>
+                          </details>
+                        </article>
+                      </div>
+                      <div v-if="history.total > 0" class="pagination">
+                        <span>第 {{ history.page }} 页</span>
+                        <button
+                          class="button compact"
+                          :disabled="busy || loading || history.page <= 1"
+                          @click="page(history.page - 1, true)"
+                        >
+                          上一页
+                        </button>
+                        <button
+                          class="button compact"
+                          :disabled="busy || loading || history.page * history.pageSize >= history.total"
+                          @click="page(history.page + 1, true)"
+                        >
+                          下一页
+                        </button>
+                      </div>
+                    </template>
+                    <template v-else>
+                      <dl class="resource-facts">
+                        <div>
+                          <dt>姓名 / 学号</dt>
+                          <dd>{{ selected.identity.studentName }} / {{ selected.identity.identityNumber }}</dd>
+                        </div>
+                        <div>
+                          <dt>学院 / 专业</dt>
+                          <dd>{{ selected.identity.departmentName }} / {{ selected.identity.majorName }}</dd>
+                        </div>
+                        <div>
+                          <dt>行政班 / 校区</dt>
+                          <dd>{{ selected.identity.className }} / {{ selected.identity.campusName }}</dd>
+                        </div>
+                        <div>
+                          <dt>领取方式</dt>
+                          <dd>线上下载 PDF</dd>
+                        </div>
+                        <div class="leave-wide">
+                          <dt>申请用途</dt>
+                          <dd class="preserve-lines">{{ selected.purpose }}</dd>
+                        </div>
+                        <div class="leave-wide service-processing-note">
+                          <dt>最近处理意见</dt>
+                          <dd class="preserve-lines">{{ selected.processingComment ?? '尚无处理意见' }}</dd>
+                        </div>
+                      </dl>
+                      <div v-if="selected.status === 'COMPLETED'" class="certificate-result">
+                        <FileCheck2 :size="24" />
+                        <div>
+                          <h3>证明已生成，可下载</h3>
+                          <p>{{ selected.documentNumber }} · {{ selected.issuedAt ? time(selected.issuedAt) : '' }}</p>
+                          <small>证明内容以生成时的登记资料为准，不随后续账号信息变更而改变。</small>
+                        </div>
+                        <div class="form-actions certificate-actions-group">
+                          <DownloadLink
+                            class="button primary compact"
+                            :href="`/api/certificates/${mode}/${selected.id}/result`"
+                          >
+                            <Download :size="15" />
+                            下载演示证明
+                          </DownloadLink>
+                          <RouterLink
+                            v-if="selected.documentNumber"
+                            class="button compact verify-link-btn"
+                            :to="`/verify/certificate?number=${encodeURIComponent(selected.documentNumber)}`"
+                            target="_blank"
+                          >
+                            <ShieldCheck :size="15" />
+                            查验真伪备案
+                          </RouterLink>
+                        </div>
+                      </div>
+                      <div v-if="!review" class="form-actions">
+                        <button
+                          v-if="editable"
+                          class="button compact"
+                          :disabled="busy || loading"
+                          @click="edit(selected)"
+                        >
+                          修改申请资料
+                        </button>
+                        <button
+                          v-if="editable"
+                          class="button primary compact"
+                          :disabled="busy || loading || !eligibility?.canSubmit"
+                          @click="transition('submit')"
+                        >
+                          {{ selected.status === 'RETURNED' ? '补交后重新提交' : '提交审核' }}
+                        </button>
+                        <button
+                          v-if="['DRAFT', 'SUBMITTED', 'RETURNED'].includes(selected.status)"
+                          class="text-button"
+                          :disabled="busy || loading"
+                          @click="transition('withdraw')"
+                        >
+                          撤回申请
+                        </button>
+                      </div>
+                      <div v-if="review && selected.status === 'SUBMITTED'" class="leave-review-form">
+                        <label>
+                          <div class="label-heading-row">
+                            <span>处理意见</span>
+                            <small class="muted">必填 · 最多 1000 字</small>
+                          </div>
+                          <textarea
+                            v-model="reviewComment"
+                            maxlength="1000"
+                            rows="3"
+                            :disabled="busy"
+                            placeholder="填写核对结果与审核处理意见；退回时请明确说明需要补充核验的内容"
+                          />
+                        </label>
+                        <div class="form-actions">
+                          <button
+                            class="button primary compact"
+                            :disabled="busy || loading || !reviewComment.trim()"
+                            @click="decide('APPROVE')"
+                          >
+                            已核对，生成证明
+                          </button>
+                          <button
+                            class="button compact"
+                            :disabled="busy || loading || !reviewComment.trim()"
+                            @click="decide('RETURN')"
+                          >
+                            退回补交
+                          </button>
+                          <button
+                            class="button compact"
+                            :disabled="busy || loading || !reviewComment.trim()"
+                            @click="decide('REJECT')"
+                          >
+                            拒绝申请
+                          </button>
+                        </div>
+                      </div>
+                      <p v-if="['COMPLETED', 'REJECTED', 'WITHDRAWN'].includes(selected.status)" class="muted">
+                        该申请已办结关闭，历史记录仍会保留；如需重新开具，请新建申请。
+                      </p>
+                    </template>
+                  </section>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <div v-if="items.total > 0" class="pagination">
+        <span>第 {{ items.page }} 页</span>
+        <button class="button compact" :disabled="busy || loading || items.page <= 1" @click="page(items.page - 1)">
+          上一页
         </button>
-        <div class="learning-tabs-indicator" :style="certIndicatorStyle" aria-hidden="true"></div>
-      </nav>
-      <template v-if="historyView">
-        <p class="muted">保存、补交和处理均保留当时的资料，共 {{ history.total }} 条。</p>
-        <div class="leave-history">
-          <article v-for="record in history.items" :key="record.id">
-            <div class="section-heading">
-              <h3>{{ certificateActions[record.action] }} · V{{ record.version }}</h3>
-              <span class="status-label" :data-status="record.status">{{ certificateStatuses[record.status] }}</span>
-            </div>
-            <p>{{ record.comment }}</p>
-            <small>{{ record.actorName }} · {{ time(record.createdAt) }}</small>
-            <details>
-              <summary>查看当时登记资料与用途</summary>
-              <p>{{ record.studentName }} · {{ record.identityNumber }}</p>
-              <p>
-                {{ record.departmentName }} / {{ record.majorName }} / {{ record.className }} / {{ record.campusName }}
-              </p>
-              <p class="preserve-lines">{{ record.purpose }}</p>
-            </details>
-          </article>
-        </div>
-        <div class="pagination">
-          <span>第 {{ history.page }} 页</span>
-          <button
-            class="button compact"
-            :disabled="busy || loading || history.page <= 1"
-            @click="page(history.page - 1, true)"
-          >
-            上一页
-          </button>
-          <button
-            class="button compact"
-            :disabled="busy || loading || history.page * history.pageSize >= history.total"
-            @click="page(history.page + 1, true)"
-          >
-            下一页
-          </button>
-        </div>
-      </template>
-      <template v-else>
-        <dl class="resource-facts">
-          <div>
-            <dt>姓名 / 学号</dt>
-            <dd>{{ selected.identity.studentName }} / {{ selected.identity.identityNumber }}</dd>
-          </div>
-          <div>
-            <dt>学院 / 专业</dt>
-            <dd>{{ selected.identity.departmentName }} / {{ selected.identity.majorName }}</dd>
-          </div>
-          <div>
-            <dt>行政班 / 校区</dt>
-            <dd>{{ selected.identity.className }} / {{ selected.identity.campusName }}</dd>
-          </div>
-          <div>
-            <dt>领取方式</dt>
-            <dd>线上下载 PDF</dd>
-          </div>
-          <div class="leave-wide">
-            <dt>申请用途</dt>
-            <dd class="preserve-lines">{{ selected.purpose }}</dd>
-          </div>
-          <div class="leave-wide service-processing-note">
-            <dt>最近处理意见</dt>
-            <dd class="preserve-lines">{{ selected.processingComment ?? '尚无处理意见' }}</dd>
-          </div>
-        </dl>
-        <div v-if="selected.status === 'COMPLETED'" class="certificate-result">
-          <FileCheck2 :size="24" />
-          <div>
-            <h3>证明已生成，可下载</h3>
-            <p>{{ selected.documentNumber }} · {{ selected.issuedAt ? time(selected.issuedAt) : '' }}</p>
-            <small>结果保留生成时的资料，不随之后的账号修改而变化。</small>
-          </div>
-          <div class="form-actions certificate-actions-group">
-            <DownloadLink class="button primary compact" :href="`/api/certificates/${mode}/${selected.id}/result`">
-              <Download :size="15" />
-              下载演示证明
-            </DownloadLink>
-            <RouterLink
-              v-if="selected.documentNumber"
-              class="button compact verify-link-btn"
-              :to="`/verify/certificate?number=${encodeURIComponent(selected.documentNumber)}`"
-              target="_blank"
-            >
-              <ShieldCheck :size="15" />
-              查验真伪备案
-            </RouterLink>
-          </div>
-        </div>
-        <div v-if="!review" class="form-actions">
-          <button v-if="editable" class="button compact" :disabled="busy || loading" @click="edit(selected)">
-            修改申请资料
-          </button>
-          <button
-            v-if="editable"
-            class="button primary compact"
-            :disabled="busy || loading || !eligibility?.canSubmit"
-            @click="transition('submit')"
-          >
-            {{ selected.status === 'RETURNED' ? '补交后重新提交' : '提交审核' }}
-          </button>
-          <button
-            v-if="['DRAFT', 'SUBMITTED', 'RETURNED'].includes(selected.status)"
-            class="text-button"
-            :disabled="busy || loading"
-            @click="transition('withdraw')"
-          >
-            撤回申请
-          </button>
-        </div>
-        <div v-if="review && selected.status === 'SUBMITTED'" class="leave-review-form">
-          <label>
-            <div class="label-heading-row">
-              <span>处理意见</span>
-              <small class="muted">必填 · 最多 1000 字</small>
-            </div>
-            <textarea
-              v-model="reviewComment"
-              maxlength="1000"
-              rows="3"
-              :disabled="busy"
-              placeholder="填写核对结果与审核处理意见；退回时请明确说明需要补充核验的内容"
-            />
-          </label>
-          <div class="form-actions">
-            <button
-              class="button primary compact"
-              :disabled="busy || loading || !reviewComment.trim()"
-              @click="decide('APPROVE')"
-            >
-              已核对，生成证明
-            </button>
-            <button
-              class="button compact"
-              :disabled="busy || loading || !reviewComment.trim()"
-              @click="decide('RETURN')"
-            >
-              退回补交
-            </button>
-            <button
-              class="button compact"
-              :disabled="busy || loading || !reviewComment.trim()"
-              @click="decide('REJECT')"
-            >
-              拒绝申请
-            </button>
-          </div>
-        </div>
-        <p v-if="['COMPLETED', 'REJECTED', 'WITHDRAWN'].includes(selected.status)" class="muted">
-          该记录已关闭，资料与历史保留。需要重新办理时请新建申请。
-        </p>
-      </template>
+        <button
+          class="button compact"
+          :disabled="busy || loading || items.page * items.pageSize >= items.total"
+          @click="page(items.page + 1)"
+        >
+          下一页
+        </button>
+      </div>
     </section>
     <p class="data-note">毕业设计演示流程，结果非学校正式证明。资料和下载仅向本人及当前授权的学院学生事务人员开放。</p>
   </div>

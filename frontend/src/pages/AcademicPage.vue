@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { confirmDialog } from '../composables/useConfirm';
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { useLeaveGuard } from '../composables/useEditProtection';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { BookOpen, FileText, CalendarDays, Settings2, Download, Upload } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
 import { saveBlob } from '../lib/download';
 import { roomOption } from '../resources';
 import type { AcademicCatalog, AcademicGrade, AcademicExam, TeachingDetail } from '../types';
 import BaseSelect from '../components/BaseSelect.vue';
+import FileDropZone from '../components/FileDropZone.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
 import { useSlidingIndicator } from '../composables/useSlidingIndicator';
 
 const catalog = ref<AcademicCatalog | null>(null);
@@ -29,8 +30,8 @@ const classForm = reactive({
   teacherIds: [] as number[],
   studentIds: [] as number[],
 });
-const lessonForm = reactive({ teacherId: 0, campusId: 1, roomId: 0, startsAt: '', endsAt: '' });
-const examForm = reactive({ campusId: 1, roomId: 0, startsAt: '', endsAt: '', version: 0 });
+const lessonForm = reactive({ teacherId: 0, campusId: 0, roomId: 0, startsAt: '', endsAt: '' });
+const examForm = reactive({ campusId: 0, roomId: 0, startsAt: '', endsAt: '', version: 0 });
 const lessonRooms = computed(
   () => catalog.value?.rooms.filter(room => room.campusId === lessonForm.campusId && room.schedulable) ?? [],
 );
@@ -121,19 +122,7 @@ const unsaved = computed(
     gradeText.value.trim().length > 0 ||
     (Object.keys(forms) as FormName[]).some(name => JSON.stringify(forms[name]) !== formBaseline[name]),
 );
-async function confirmLeave() {
-  if (busy.value) return false;
-  return (
-    !unsaved.value ||
-    (await confirmDialog('还有未保存的教务输入（学期、课程、教学班、课程安排、成绩或考试安排），确定离开并放弃？'))
-  );
-}
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (busy.value || unsaved.value) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-}
+useLeaveGuard(busy, unsaved, '还有未保存的教务输入（学期、课程、教学班、课程安排、成绩或考试安排），确定离开并放弃？');
 async function loadCatalog() {
   catalog.value = await api<AcademicCatalog>('/academic/catalog');
   const classBaseline = JSON.parse(formBaseline.class) as typeof classForm;
@@ -142,6 +131,15 @@ async function loadCatalog() {
   classForm.termId ||= catalog.value.terms[0]?.id ?? 0;
   classForm.courseId ||= catalog.value.courses[0]?.id ?? 0;
   formBaseline.class = JSON.stringify(classBaseline);
+  const defaultCampus = catalog.value.campuses[0]?.id ?? 0;
+  const lessonBaseline = JSON.parse(formBaseline.lesson) as typeof lessonForm;
+  if (!lessonForm.campusId) lessonBaseline.campusId = defaultCampus;
+  lessonForm.campusId ||= defaultCampus;
+  formBaseline.lesson = JSON.stringify(lessonBaseline);
+  const examBaseline = JSON.parse(formBaseline.exam) as typeof examForm;
+  if (!examForm.campusId) examBaseline.campusId = defaultCampus;
+  examForm.campusId ||= defaultCampus;
+  formBaseline.exam = JSON.stringify(examBaseline);
   if (!catalog.value.classes.some(c => c.id === selected.value)) selected.value = catalog.value.classes[0]?.id ?? 0;
 }
 async function loadDetail() {
@@ -157,7 +155,7 @@ async function loadDetail() {
     detail.value = result;
     const exam = result.exams[0];
     Object.assign(examForm, {
-      campusId: exam?.campusId ?? 1,
+      campusId: exam?.campusId ?? catalog.value?.campuses[0]?.id ?? 0,
       roomId: exam?.roomId ?? 0,
       startsAt: exam?.startsAt.slice(0, 16) ?? '',
       endsAt: exam?.endsAt.slice(0, 16) ?? '',
@@ -353,24 +351,16 @@ function examState(exam: AcademicExam) {
     exam.status === 'DRAFT' ? '考试已发布，学生查询与通知已同步。' : '考试已撤下，学生查询与通知已同步。',
   );
 }
-onMounted(() => {
-  window.addEventListener('beforeunload', beforeUnload);
-  void load();
-});
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
-onBeforeRouteLeave(confirmLeave);
+onMounted(load);
 </script>
 
 <template>
   <div class="learning-page">
-    <div class="learning-heading">
-      <div>
-        <span class="eyebrow">ACADEMIC SERVICES</span>
-        <h1>教务信息维护</h1>
-        <p class="muted">维护本学院教学关系，核对并发布教学信息</p>
-      </div>
-      <button class="button compact" :disabled="busy || loading" @click="load">刷新数据</button>
-    </div>
+    <ServicePageHeader context="教务服务" title="教务信息维护" description="维护本学院教学关系，核对并发布教学信息。">
+      <template #actions>
+        <button class="button compact" :disabled="busy || loading" @click="load">刷新数据</button>
+      </template>
+    </ServicePageHeader>
     <nav ref="academicNavRef" class="learning-tabs" aria-label="教务维护栏目">
       <button :class="{ selected: tab === 'classes' }" :disabled="busy" @click="tab = 'classes'">
         <BookOpen :size="16" />
@@ -516,16 +506,53 @@ onBeforeRouteLeave(confirmLeave);
           </button>
         </div>
         <form class="learning-form" @submit.prevent="previewGrades">
-          <fieldset :disabled="busy">
-            <label>
-              成绩 CSV
-              <input type="file" accept=".csv,.txt" @change="csvFile" />
-            </label>
-            <label>
-              或粘贴成绩
-              <textarea v-model="gradeText" rows="4" placeholder="学号,成绩&#10;20260001,88" required />
-            </label>
-          </fieldset>
+          <FileDropZone
+            accept=".csv,.txt"
+            kind="spreadsheet"
+            compact
+            :disabled="busy"
+            title="选择或拖入成绩 CSV 文件"
+            hint="支持 .csv / .txt（学号,成绩）"
+            @change="csvFile"
+          />
+          <div class="csv-workbench">
+            <div class="csv-workbench-head">
+              <label for="academic-grade-csv">成绩明细内容（CSV 原文）</label>
+              <div class="csv-workbench-meta">
+                <span>
+                  {{
+                    gradeText.trim()
+                      ? `共 ${
+                          gradeText
+                            .trim()
+                            .split(/\r?\n/)
+                            .filter(l => l.trim()).length
+                        } 行`
+                      : '支持文件导入或直接粘贴'
+                  }}
+                </span>
+                <button
+                  v-if="gradeText.trim()"
+                  type="button"
+                  class="text-button"
+                  :disabled="busy"
+                  @click="gradeText = ''"
+                >
+                  清空内容
+                </button>
+              </div>
+            </div>
+            <textarea
+              id="academic-grade-csv"
+              v-model="gradeText"
+              class="csv-workbench-input"
+              rows="5"
+              spellcheck="false"
+              :disabled="busy"
+              placeholder="学号,成绩&#10;20260001,88"
+              required
+            />
+          </div>
           <p class="muted">仅接受当前教学班学号。导入后保存为草稿；更正已发布成绩时，原查询结果先撤下，再核对发布。</p>
           <button class="button compact" :disabled="busy">
             <Upload :size="14" />

@@ -18,6 +18,8 @@ export interface AssistantTurn {
   status: string
   runId: string | null
   createdAt: string
+  answerSummary?: string | null
+  links?: { label: string; path: string }[]
 }
 export interface AssistantTaskSummary {
   id: number

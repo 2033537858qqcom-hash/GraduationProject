@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { confirmDialog } from '../composables/useConfirm';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
+import { useLeaveGuard } from '../composables/useEditProtection';
+import { computed, ref, watch } from 'vue';
 import { api, errorMessage } from '../lib/api';
 import type { PaymentCategory } from '../lib/payment';
 
@@ -73,19 +73,7 @@ async function update() {
     busy.value = false;
   }
 }
-async function leave() {
-  return !busy.value && (!dirty.value || (await confirmDialog('还有未保存的收费项目输入，确定离开？')));
-}
-function beforeUnload(event: BeforeUnloadEvent) {
-  if (busy.value || dirty.value) {
-    event.preventDefault();
-    event.returnValue = '';
-  }
-}
-onBeforeRouteLeave(leave);
-onBeforeRouteUpdate(leave);
-onMounted(() => window.addEventListener('beforeunload', beforeUnload));
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
+useLeaveGuard(busy, dirty, '还有未保存的收费项目输入，确定离开？', { routeUpdate: true });
 </script>
 
 <template>
@@ -117,44 +105,57 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
         </div>
       </fieldset>
     </form>
-    <form v-if="target" class="finance-subsection finance-confirm" @submit.prevent="update">
-      <h3>{{ target.enabled === false ? '启用' : '停用' }}“{{ target.name }}”</h3>
-      <label>
-        调整原因
-        <textarea v-model="stateReason" required minlength="5" maxlength="500" rows="2" :disabled="busy" />
-      </label>
-      <div class="finance-actions">
-        <button class="button primary" :disabled="busy">确认{{ target.enabled === false ? '启用' : '停用' }}</button>
-        <button
-          type="button"
-          class="button"
-          :disabled="busy"
-          @click="
-            target = null;
-            stateReason = '';
-          "
-        >
-          取消
-        </button>
-      </div>
-    </form>
     <p v-if="loading" role="status">正在读取收费项目…</p>
     <p v-else-if="!categories.length" class="empty-state">尚未建立收费项目。</p>
-    <article v-for="item in categories" :key="item.code" class="finance-record">
-      <div>
-        <span class="finance-badge">{{ item.enabled === false ? '已停用' : '启用中' }}</span>
-        <h3>{{ item.name }}</h3>
-        <p>{{ item.description }}</p>
-      </div>
-      <button
-        v-if="canManage && item.code !== 'OTHER'"
-        class="button compact"
-        :disabled="busy || loading"
-        @click="choose(item)"
-      >
-        {{ item.enabled === false ? '启用' : '停用' }}
-      </button>
-    </article>
+    <div
+      v-for="item in categories"
+      :key="item.code"
+      class="finance-ledger-group"
+      :class="{ 'is-expanded': target?.code === item.code }"
+    >
+      <article class="finance-record" :class="{ 'finance-selected': target?.code === item.code }">
+        <div>
+          <div class="finance-title-line">
+            <span class="finance-badge">{{ item.enabled === false ? '已停用' : '启用中' }}</span>
+            <h3>{{ item.name }}</h3>
+          </div>
+          <p class="muted">{{ item.description }}</p>
+        </div>
+        <button
+          v-if="canManage && item.code !== 'OTHER'"
+          class="button compact"
+          :disabled="busy || loading"
+          @click="choose(item)"
+        >
+          {{ item.enabled === false ? '启用' : '停用' }}
+        </button>
+      </article>
+      <section v-if="target && target.code === item.code" class="finance-folio">
+        <form class="finance-confirm" @submit.prevent="update">
+          <h3>{{ target.enabled === false ? '启用' : '停用' }}“{{ target.name }}”</h3>
+          <label>
+            调整原因
+            <textarea v-model="stateReason" required minlength="5" maxlength="500" rows="2" :disabled="busy" />
+          </label>
+          <div class="finance-actions">
+            <button class="button primary compact" :disabled="busy">
+              确认{{ target.enabled === false ? '启用' : '停用' }}
+            </button>
+            <button
+              type="button"
+              class="button compact"
+              :disabled="busy"
+              @click="
+                target = null;
+                stateReason = '';
+              "
+            >
+              取消
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   </section>
 </template>
 
@@ -164,11 +165,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload));
   font-size: var(--text-supporting);
 }
 .finance-confirm {
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-xs);
 }
 .finance-confirm label {
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 </style>

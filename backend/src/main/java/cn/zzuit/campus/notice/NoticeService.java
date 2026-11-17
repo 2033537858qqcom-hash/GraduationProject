@@ -19,8 +19,9 @@ public class NoticeService {
     private final CertificateService certificates;
     private final cn.zzuit.campus.repair.RepairService repairs;
     private final cn.zzuit.campus.housing.HousingTransferService housing;
-    public NoticeService(JdbcClient jdbc,IdentityService identities,LeaveService leaves,CertificateService certificates,cn.zzuit.campus.repair.RepairService repairs,cn.zzuit.campus.housing.HousingTransferService housing) {
-        this.jdbc=jdbc; this.identities=identities; this.leaves=leaves; this.certificates=certificates;this.repairs=repairs;this.housing=housing;
+    private final cn.zzuit.campus.reservation.VenueReservationService reservations;
+    public NoticeService(JdbcClient jdbc,IdentityService identities,LeaveService leaves,CertificateService certificates,cn.zzuit.campus.repair.RepairService repairs,cn.zzuit.campus.housing.HousingTransferService housing,cn.zzuit.campus.reservation.VenueReservationService reservations) {
+        this.jdbc=jdbc; this.identities=identities; this.leaves=leaves; this.certificates=certificates;this.repairs=repairs;this.housing=housing;this.reservations=reservations;
     }
     private void current(CampusPrincipal user) {
         var fresh=identities.current(user.id()).orElseThrow(()->new ApiException(HttpStatus.UNAUTHORIZED,"AUTH_REQUIRED","请重新登录"));
@@ -76,7 +77,47 @@ public class NoticeService {
             }
             if(type.equals("LEAVE")) { leaves.detail(user,mode,id); return (mode.equals("mine")?"/portal/leave":"/student-affairs/leave")+"?id="+id+"&tab=details"; }
             if(type.equals("CERTIFICATE")) { certificates.detail(user,mode,id); return (mode.equals("mine")?"/portal/certificates":"/student-affairs/certificates")+"?id="+id+"&tab=details"; }
-            if(type.equals("RESERVATION")) { return (view.equals("MINE")?"/portal/reservations":"/student-affairs/reservations")+"?id="+id+"&tab=details"; }
+            if(type.equals("RESERVATION")) {
+                var detail=reservations.getDetail(user,id);
+                if(view.equals("MINE")) {
+                    if(detail.applicantId()!=user.id()) return null;
+                    return "/portal/reservations?id="+id+"&tab=details";
+                }
+                if(view.equals("MANAGE")) {
+                    if(!user.permissions().contains("reservation:manage") || !reservations.isVenueManager(user.id(),detail.venueId())) return null;
+                    return "/student-affairs/reservations?id="+id+"&tab=manage";
+                }
+                if(view.equals("REVIEW")) {
+                    if(!user.permissions().contains("reservation:review") || !reservations.isVenueManager(user.id(),detail.venueId())) return null;
+                    return "/student-affairs/reservations?id="+id+"&tab=details";
+                }
+                return null;
+            }
+            if(type.equals("CONTENT")) {
+                if(view.equals("EDIT")) identities.requirePermission(user,"content:edit");
+                else if(view.equals("REVIEW")) identities.requirePermission(user,"content:review");
+                else return null;
+                if(jdbc.sql("SELECT COUNT(*) FROM website_content WHERE id=:id").param("id",id).query(Long.class).single()!=1) return null;
+                return "/admin/content";
+            }
+            if(type.equals("TEACHING")) {
+                if(view.equals("TEACH")) {
+                    identities.requirePermission(user,"teaching:manage");
+                    if(jdbc.sql("SELECT COUNT(*) FROM teaching_instructor WHERE class_id=:c AND teacher_id=:u AND active=TRUE").param("c",id).param("u",user.id()).query(Long.class).single()!=1) return null;
+                    return "/teaching";
+                }
+                if(view.equals("LEARN")) {
+                    identities.requirePermission(user,"learning:read");
+                    if(jdbc.sql("SELECT COUNT(*) FROM teaching_member WHERE class_id=:c AND student_id=:u AND active=TRUE").param("c",id).param("u",user.id()).query(Long.class).single()!=1) return null;
+                    return "/portal/learning";
+                }
+                return null;
+            }
+            if(type.equals("COUNSELOR") && view.equals("REVIEW")) {
+                identities.requirePermission(user,"leave:review");
+                if(jdbc.sql("SELECT COUNT(*) FROM counselor_assignment WHERE class_group_id=:g AND counselor_id=:u").param("g",id).param("u",user.id()).query(Long.class).single()!=1) return null;
+                return "/student-affairs/leave";
+            }
         } catch(ApiException ex) { return null; }
         return null;
     }

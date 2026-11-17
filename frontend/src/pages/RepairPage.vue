@@ -2,8 +2,10 @@
 import RepairProgress from '../components/repair/RepairProgress.vue';
 import RepairRequestList from '../components/repair/RepairRequestList.vue';
 import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import DownloadLink from '../components/DownloadLink.vue';
 import ServiceJourney from '../components/ServiceJourney.vue';
+import '../styles/repair-workflow.css';
 import {
   AlertCircle,
   AlertTriangle,
@@ -125,9 +127,6 @@ const {
     :class="{ 'is-detail-open': mobileDetailOpen, 'is-editing': editing }"
   >
     <ServicePageHeader context="校园设施服务" :title="title" :description="intro">
-      <template #icon>
-        <span class="repair-page-symbol"><Wrench :size="22" /></span>
-      </template>
       <template #actions>
         <div class="repair-inline-actions">
           <RouterLink v-if="mode === 'dispatch'" class="button compact" to="/logistics/repairs/statistics">
@@ -145,7 +144,7 @@ const {
       </template>
     </ServicePageHeader>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
-    <p v-if="success" class="success" role="status">{{ success }}</p>
+    <p v-if="success" class="success-message" role="status">{{ success }}</p>
     <div v-if="queueItems.length && !editing" class="repair-queue-note">
       <ClipboardCheck :size="16" />
       <span>待办提醒</span>
@@ -471,7 +470,7 @@ const {
                 </DownloadLink>
               </details>
             </article>
-            <div class="pagination">
+            <div v-if="records.total > 0" class="pagination">
               <span>共 {{ records.total }} 条记录</span>
               <button
                 class="button compact"
@@ -507,7 +506,7 @@ const {
               </template>
             </section>
             <p v-if="selected.confirmationOverdue" class="repair-overdue-note">
-              本次维修结果已等待验收超过演示提醒时间，请核对结果后确认或反馈问题。提醒不会自动完成工单。
+              本次维修结果已等待验收较久，请核对维修情况后及时确认或反馈问题；系统提醒不会自动完结工单。
             </p>
 
             <section class="repair-role-section applicant-role-card">
@@ -918,9 +917,8 @@ const {
             </section>
           </template>
         </template>
-        <div v-else-if="loading" class="repair-empty-detail" role="status">
-          <Clock :size="28" />
-          <p>正在读取工单详情…</p>
+        <div v-else-if="loading" class="repair-empty-detail">
+          <SkeletonBlock variant="detail" label="正在读取工单详情…" />
         </div>
         <div v-else class="repair-empty-detail">
           <Wrench :size="32" />

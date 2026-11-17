@@ -238,7 +238,11 @@ public class LeaveService {
         else jdbc.sql("UPDATE counselor_assignment SET counselor_id=:id,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE class_group_id=:g").param("id",input.counselorId()).param("g",group).update();
         String summary=current.className()+"："+Objects.toString(current.counselorName(),"未分配")+" → "+(input.counselorId()==null?"未分配":actor(input.counselorId()));
         jdbc.sql("INSERT INTO foundation_audit(actor_id,actor_name,action,entity_type,entity_id,summary,reason) VALUES(:u,:name,'COUNSELOR_ASSIGN','CLASS_GROUP',:g,:summary,:reason)").param("u",user.id()).param("name",actor(user.id())).param("g",group).param("summary",summary).param("reason",input.reason().trim()).update();
-        if(input.counselorId()!=null) jdbc.sql("INSERT INTO user_notice(user_id,title,body) VALUES(:u,'负责班级已更新',:body)").param("u",input.counselorId()).param("body",current.className()+"的负责关系已更新，请进入班级请假处理查看当前待办。").update();
+        if(current.counselorId()!=null && !Objects.equals(current.counselorId(),input.counselorId())) {
+            jdbc.sql("INSERT INTO user_notice(user_id,title,body) VALUES(:u,'负责班级已移交',:body)")
+                .param("u",current.counselorId()).param("body",current.className()+"已调整辅导员负责关系，后续请假待办由新任辅导员接手。").update();
+        }
+        if(input.counselorId()!=null) notices.write(input.counselorId(),"负责班级已更新","COUNSELOR",group,"REVIEW",current.className()+"的负责关系已更新，请进入班级请假处理查看当前待办。");
         return assignments(user).assignments().stream().filter(a->a.classGroupId()==group).findFirst().orElseThrow(this::missing);
     }
     private Assignment assignmentRow(ResultSet r,int n) throws SQLException { return new Assignment(r.getLong("id"),r.getString("name"),r.getString("department_name"),r.getObject("counselor_id",Long.class),r.getString("counselor_name"),r.getInt("version")); }

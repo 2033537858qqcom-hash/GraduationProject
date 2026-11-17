@@ -226,7 +226,7 @@ function clearTime() {
 
 .contact-time-pill {
   appearance: none;
-  border: 1px solid #dbe3ed;
+  border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text-secondary);
   font-size: var(--text-meta);
@@ -236,23 +236,27 @@ function clearTime() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: all 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
   line-height: 1.4;
   user-select: none;
 }
 
 .contact-time-pill:hover:not(:disabled) {
-  border-color: #93c5fd;
-  background: var(--color-info-soft);
-  color: var(--color-info);
+  border-color: var(--color-border-hover);
+  background: var(--color-surface-hover);
+  color: var(--color-brand);
 }
 
 .contact-time-pill.active {
-  border-color: #3b82f6;
-  background: var(--color-info-soft);
-  color: var(--color-info);
+  border-color: var(--color-brand);
+  background: var(--color-surface-active);
+  color: var(--color-brand);
   font-weight: 500;
-  box-shadow: 0 1px 2px rgb(59, 130, 246, 0.1);
+  box-shadow: 0 1px 2px rgb(49 82 68 / 12%);
 }
 
 .contact-time-pill:disabled {
@@ -294,7 +298,7 @@ function clearTime() {
 .contact-time-back-btn {
   background: none;
   border: none;
-  color: var(--color-info);
+  color: var(--color-brand);
   font-size: var(--text-meta);
   cursor: pointer;
   padding: 4px 6px;
@@ -303,7 +307,7 @@ function clearTime() {
 }
 
 .contact-time-back-btn:hover:not(:disabled) {
-  color: var(--color-info);
+  color: var(--color-brand);
 }
 
 .contact-time-current {
@@ -329,7 +333,7 @@ function clearTime() {
 
 .contact-time-tag strong {
   font-weight: 600;
-  color: var(--color-info);
+  color: var(--color-brand);
 }
 
 .contact-time-clear {

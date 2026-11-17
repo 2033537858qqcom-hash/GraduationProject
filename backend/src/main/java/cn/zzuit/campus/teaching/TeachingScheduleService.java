@@ -26,6 +26,8 @@ public class TeachingScheduleService {
         long conflicts=jdbc.sql("SELECT COUNT(*) FROM "+OCCUPANCY+"""
             o WHERE o.starts_at<:end AND o.ends_at>:start AND (o.kind<>'EXAM' OR o.id<>:exam)
             AND (o.class_id=:c OR o.teacher_id=:teacher OR o.room_id=:room
+            OR (:teacher=0 AND o.teacher_id IS NOT NULL AND EXISTS(SELECT 1 FROM teaching_instructor ti WHERE ti.class_id=:c AND ti.teacher_id=o.teacher_id AND ti.active=TRUE))
+            OR (:teacher>0 AND o.kind='EXAM' AND EXISTS(SELECT 1 FROM teaching_instructor ti WHERE ti.class_id=o.class_id AND ti.teacher_id=:teacher AND ti.active=TRUE))
             OR EXISTS(SELECT 1 FROM teaching_member a JOIN teaching_member b ON a.student_id=b.student_id
                 WHERE a.class_id=o.class_id AND b.class_id=:c AND a.active=TRUE AND b.active=TRUE))
             """).param("start",Timestamp.valueOf(start)).param("end",Timestamp.valueOf(end)).param("exam",ignoredExamId)

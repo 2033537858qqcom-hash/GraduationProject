@@ -5,6 +5,7 @@ import { clearSession, currentUser } from './stores/auth';
 import ToastContainer from './components/ToastContainer.vue';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import RouteProgress from './components/RouteProgress.vue';
+import { publicReducedMotion } from './lib/publicMotion';
 
 const router = useRouter();
 function expired() {
@@ -21,5 +22,27 @@ onUnmounted(() => window.removeEventListener('campus:unauthorized', expired));
   <RouteProgress />
   <ToastContainer />
   <ConfirmDialog />
-  <RouterView />
+  <RouterView v-slot="{ Component }">
+    <Transition :name="publicReducedMotion ? '' : 'campus-shell'" mode="out-in">
+      <component :is="Component" />
+    </Transition>
+  </RouterView>
 </template>
+
+<style scoped>
+.campus-shell-enter-active,
+.campus-shell-leave-active {
+  transition: opacity 180ms var(--ease-campus);
+}
+.campus-shell-enter-from,
+.campus-shell-leave-to {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .campus-shell-enter-active,
+  .campus-shell-leave-active {
+    transition: none;
+  }
+}
+</style>

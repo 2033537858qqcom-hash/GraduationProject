@@ -91,6 +91,8 @@ test('safeAssistantDestination validates assistant tool targets across affairs, 
   assert.equal(safeAssistantDestination('/portal/reservations'), '/portal/reservations')
   assert.equal(safeAssistantDestination('/student-affairs/reservations'), '/student-affairs/reservations')
   assert.equal(safeAssistantDestination('/student-affairs/housing'), '/student-affairs/housing')
+  assert.equal(safeAssistantDestination('/housing/assignments'), '/housing/assignments')
+  assert.equal(safeAssistantDestination('/payment-bases'), '/payment-bases')
   assert.equal(safeAssistantDestination('/workbench'), '/workbench')
   assert.equal(safeAssistantDestination('/admin/content'), '/admin/content')
   assert.equal(safeAssistantDestination('/teaching'), '/teaching')
@@ -104,6 +106,5 @@ test('safeAssistantDestination validates assistant tool targets across affairs, 
   // Malformed or dangerous destinations remain rejected
   assert.equal(safeAssistantDestination('https://evil.test'), null)
   assert.equal(safeAssistantDestination('//evil.test'), null)
-  assert.equal(safeAssistantDestination('/housing/assignments'), null)
   assert.equal(safeAssistantDestination('/admin/foundation'), null)
 })

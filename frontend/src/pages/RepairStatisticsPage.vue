@@ -2,6 +2,9 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue';
 import { ChartColumn, RefreshCw } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime } from '../lib/format';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import '../styles/repair-workflow.css';
 import { repairCategories, repairInclusiveEnd, repairStatisticsRange, repairStatuses } from '../repairs';
 import type { RepairStatistics } from '../repairs';
 const result = ref<RepairStatistics | null>(null),
@@ -41,14 +44,15 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div class="repair-statistics">
-    <header class="repair-page-heading">
-      <div>
-        <span class="eyebrow">后勤服务概况</span>
-        <h1>校园报修统计</h1>
-        <p>仅汇总你当前负责范围内，首次提交时间落在所选区间的工单。</p>
-      </div>
-      <RouterLink class="button compact" to="/logistics/repairs/dispatch">分诊与派单</RouterLink>
-    </header>
+    <ServicePageHeader
+      context="后勤服务概况"
+      title="校园报修统计"
+      description="仅汇总你当前负责范围内，首次提交时间落在所选区间的工单。"
+    >
+      <template #actions>
+        <RouterLink class="button compact" to="/logistics/repairs/dispatch">分诊与派单</RouterLink>
+      </template>
+    </ServicePageHeader>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <form class="repair-statistics-filter" @submit.prevent="load()">
       <label>
@@ -123,7 +127,7 @@ onBeforeUnmount(() => {
       <p class="data-note">
         {{ result.from }} 至 {{ through }} · 查询时间
         {{
-          result.queriedAt.slice(0, 16).replace('T', ' ')
+          formatDateTime(result.queriedAt)
         }}。草稿不计入；平均时长只计算区间内已确认完成且时间有效的工单。负责范围调整后统计随当前权限变化。
       </p>
     </template>

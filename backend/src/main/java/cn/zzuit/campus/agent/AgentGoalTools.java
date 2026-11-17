@@ -24,10 +24,10 @@ public class AgentGoalTools {
  private final JdbcClient jdbc;
  private final AgentMissionTools missionTools;
  private final JsonMapper json=JsonMapper.builder().build();
- private static final Map<String,String> PERMISSIONS=Map.of("RESERVATION","reservation:apply","REPAIR","repair:apply","LEAVE","leave:apply","CERTIFICATE","certificate:apply");
+ private static final Map<String,String> PERMISSIONS=Map.of("RESERVATION","reservation:apply","REPAIR","repair:apply","LEAVE","leave:apply","CERTIFICATE","certificate:apply","HOUSING","housing:read");
  public AgentGoalTools(AgentMissionService missions,AgentGuides guides,IdentityService identities,Validator validator,AgentGoalBusiness business,JdbcClient jdbc,AgentMissionTools missionTools){this.missions=missions;this.guides=guides;this.identities=identities;this.validator=validator;this.business=business;this.jdbc=jdbc;this.missionTools=missionTools;}
  public record Outcome(String stage,String status,String message,Map<String,Object> observation){}
- public List<String> kinds(CampusPrincipal user){var permissions=identities.permissions(user.id());return PERMISSIONS.entrySet().stream().filter(e->permissions.contains(e.getValue())&&(!e.getKey().equals("RESERVATION")||permissions.contains("portal:read"))).map(Map.Entry::getKey).sorted().toList();}
+ public List<String> kinds(CampusPrincipal user){var permissions=identities.permissions(user.id());return PERMISSIONS.entrySet().stream().filter(e->permissions.contains(e.getValue())).map(Map.Entry::getKey).sorted().toList();}
  public AgentMissionModels.View mission(CampusPrincipal user,long session,Task task){return task.missionId==null?null:missions.detail(user,session,task.missionId);}
  public Task task(State state,String key){return state.tasks.stream().filter(t->Objects.equals(t.key,key)).findFirst().orElseThrow(()->invalid("GOAL_TASK_UNKNOWN","请选择当前计划中的任务"));}
  public List<TaskView> views(CampusPrincipal user,long session,State state){return state.tasks.stream().map(t->new TaskView(t.key,t.kind,t.label,t.target,t.dependsOn,t.cancelled,mission(user,session,t),t.submissionHash,t.submissionVerified,t.watching,business.preview(user,session,t),t.lastBusinessStatus,t.trackingComplete,t.lastCheckedAt)).toList();}
@@ -152,8 +152,8 @@ public class AgentGoalTools {
   if(!state.tasks.isEmpty()&&state.lastPlanEpoch==state.planEpoch&&planStructure(state.tasks).equals(planStructure(next)))throw invalid("GOAL_PLAN_UNCHANGED","计划没有新增事项、目标或依赖变化；请使用实际字段、查询、核验或等待本人操作，不要重发相同计划");
   state.tasks=next;state.lastPlanEpoch=state.planEpoch;state.directivePending=false;
  }
- private Object currentFields(Task task,AgentMissionModels.View view){return switch(task.kind){case "CERTIFICATE"->view==null?task.certificateFields:view.certificateFields();case "LEAVE"->view==null?task.leaveFields:view.leaveFields();case "REPAIR"->view==null?task.repairFields:view.repairFields();default->view==null?task.fields:view.fields();};}
- private Set<String> fields(String kind){return switch(kind){case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime","startsAt","endsAt");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","startDate","startTime","endDate","endTime","participants","keyword","activityTheme","activityType");};}
+ private Object currentFields(Task task,AgentMissionModels.View view){return switch(task.kind){case "HOUSING"->view==null?task.housingFields:view.housingFields();case "CERTIFICATE"->view==null?task.certificateFields:view.certificateFields();case "LEAVE"->view==null?task.leaveFields:view.leaveFields();case "REPAIR"->view==null?task.repairFields:view.repairFields();default->view==null?task.fields:view.fields();};}
+ private Set<String> fields(String kind){return switch(kind){case "HOUSING"->Set.of("reason","preferredArea","materialNote");case "CERTIFICATE"->Set.of("purpose");case "LEAVE"->Set.of("reasonType","reason","startDate","startTime","endDate","endTime","startsAt","endsAt");case "REPAIR"->Set.of("category","title","description","locationDetail");default->Set.of("campus","startsAt","endsAt","startDate","startTime","endDate","endTime","participants","keyword","activityTheme","activityType");};}
  private String localTime(Object value){
   if(value==null)return null;String raw;if(value instanceof JsonNode node){if(node.isNull())return null;raw=node.asText();}else raw=value.toString();
   raw=raw.trim();if(raw.isBlank())return null;
@@ -187,13 +187,13 @@ public class AgentGoalTools {
    for(String name:List.of("startsAt","endsAt"))if(values.containsKey(name))values.put(name,localTime(values.get(name)));
   }
   Object typed;
-  try{typed=switch(task.kind){case "CERTIFICATE"->missionTools.normalizeCertificate(json.convertValue(values,CertificateFields.class));case "LEAVE"->missionTools.normalizeLeave(json.convertValue(values,LeaveFields.class));case "REPAIR"->missionTools.normalizeRepair(json.convertValue(values,RepairFields.class));default->missionTools.normalize(json.convertValue(values,AgentMissionModels.Fields.class));};}
+  try{typed=switch(task.kind){case "HOUSING"->missionTools.normalizeHousing(json.convertValue(values,HousingFields.class));case "CERTIFICATE"->missionTools.normalizeCertificate(json.convertValue(values,CertificateFields.class));case "LEAVE"->missionTools.normalizeLeave(json.convertValue(values,LeaveFields.class));case "REPAIR"->missionTools.normalizeRepair(json.convertValue(values,RepairFields.class));default->missionTools.normalize(json.convertValue(values,AgentMissionModels.Fields.class));};}
   catch(Exception invalid){throw invalid("GOAL_FIELDS_INVALID","条件类型不正确");}
   if(!validator.validate(typed).isEmpty())throw invalid("GOAL_FIELDS_INVALID","条件格式或长度超出业务限制");
   if(typed instanceof AgentMissionModels.Fields fields&&missionTools.missing(fields).contains("timeRange"))throw invalid("GOAL_TIME_RANGE","预约需要有效的未来时段，结束晚于开始，时长为30分钟至14小时；请按实际要求重新核对");
   boolean changed=!Objects.equals(original,typed);if(!changed&&task.fieldsInstructionCount==instructionCount)throw invalid("GOAL_FIELDS_UNCHANGED","当前任务已有相同条件，无需反复设置；请继续查询、核对预览或等待本人确认");
-  if(view!=null&&changed)missions.action(user,session,view.id(),new AgentMissionModels.Action(operationKey,view.version(),"REVISE",typed instanceof AgentMissionModels.Fields f?f:null,null,null,null,typed instanceof RepairFields f?f:null,typed instanceof LeaveFields f?f:null,typed instanceof CertificateFields f?f:null));
-  if(typed instanceof AgentMissionModels.Fields f)task.fields=f;else if(typed instanceof RepairFields f)task.repairFields=f;else if(typed instanceof LeaveFields f)task.leaveFields=f;else if(typed instanceof CertificateFields f)task.certificateFields=f;
+  if(view!=null&&changed)missions.action(user,session,view.id(),new AgentMissionModels.Action(operationKey,view.version(),"REVISE",typed instanceof AgentMissionModels.Fields f?f:null,null,null,null,typed instanceof RepairFields f?f:null,typed instanceof LeaveFields f?f:null,typed instanceof CertificateFields f?f:null,typed instanceof HousingFields f?f:null));
+  if(typed instanceof AgentMissionModels.Fields f)task.fields=f;else if(typed instanceof RepairFields f)task.repairFields=f;else if(typed instanceof LeaveFields f)task.leaveFields=f;else if(typed instanceof CertificateFields f)task.certificateFields=f;else if(typed instanceof HousingFields f)task.housingFields=f;
   return changed;
  }
  public Outcome execute(CampusPrincipal user,long session,long goalId,int step,State state,Call call){
@@ -209,8 +209,8 @@ public class AgentGoalTools {
     var view=mission(user,session,task);boolean recovered=false;
     if(view==null){var prior=jdbc.sql("SELECT id FROM agent_mission WHERE session_id=:s AND user_id=:u AND request_key=:key").param("s",session).param("u",user.id()).param("key","goal-"+goalId+"-"+task.key).query(Long.class).optional();if(prior.isPresent()){view=missions.detail(user,session,prior.get());if(!task.kind.equals(view.kind()))throw invalid("GOAL_RECOVERY_MISMATCH","原子任务类型与当前计划不一致，请本人核对历史");task.missionId=view.id();recovered=true;}}
     ensureLocalDefaults(user,task);
-    if(view==null){var body=new AgentMissionModels.Create("goal-"+goalId+"-"+task.key,task.label,Mode.LOCAL,false,task.fields,task.kind,task.repairFields,task.leaveFields,task.certificateFields);if(!validator.validate(body).isEmpty())throw invalid("GOAL_FIELDS_INVALID","任务条件未通过业务格式校验");view=missions.create(user,session,body);task.missionId=view.id();}
-    else if(view.business()==null&&canReviseDefaults(view,task))view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation+"-defaults",view.version(),"REVISE",task.fields,null,null,null,task.repairFields,task.leaveFields,task.certificateFields));
+    if(view==null){var body=new AgentMissionModels.Create("goal-"+goalId+"-"+task.key,task.label,Mode.LOCAL,false,task.fields,task.kind,task.repairFields,task.leaveFields,task.certificateFields,task.housingFields);if(!validator.validate(body).isEmpty())throw invalid("GOAL_FIELDS_INVALID","任务条件未通过业务格式校验");view=missions.create(user,session,body);task.missionId=view.id();}
+    else if(view.business()==null&&canReviseDefaults(view,task))view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation+"-defaults",view.version(),"REVISE",task.fields,null,null,null,task.repairFields,task.leaveFields,task.certificateFields,task.housingFields));
     else if(view.canContinue())view=missions.action(user,session,view.id(),new AgentMissionModels.Action(operation,view.version(),"CONTINUE",null,null,null,null,null,null,null));
     else if(!recovered&&!canFulfill(view))throw invalid("GOAL_TASK_ALREADY_PREPARED","任务已有当前结果；缺少真实资料请询问，无候选请改查允许方案，等待确认时不要重复准备");
     view=fulfillOwned(user,session,operation,task,view);task.missionId=view.id();
@@ -252,10 +252,22 @@ public class AgentGoalTools {
  public void cancelTask(CampusPrincipal user,long session,long goalId,Task task){if(task.missionId!=null){var view=mission(user,session,task);if(!Set.of("DONE","CANCELLED").contains(view.stage()))missions.action(user,session,view.id(),new AgentMissionModels.Action("goal-cancel-"+goalId+"-"+task.key,view.version(),"CANCEL",null,null,null,null,null,null,null));}}
  public void cancel(CampusPrincipal user,long session,long goalId,State state){for(var task:state.tasks)cancelTask(user,session,goalId,task);}
  private void ensureLocalDefaults(CampusPrincipal user,Task task){
-  String contact=user.username()+"@campus.demo";String phone=String.format("139%08d",user.id());
+  String contact=recentContact(user,false).orElse(user.username()+"@campus.demo");
+  String phone=recentContact(user,true).orElse(String.format("139%08d",user.id()));
   if("LEAVE".equals(task.kind)){var fields=task.leaveFields==null?new LeaveFields("","","","","","",""):task.leaveFields;if(fields.contact()==null||fields.contact().isBlank())task.leaveFields=new LeaveFields(fields.reasonType(),fields.reason(),contact,fields.startDate(),fields.startTime(),fields.endDate(),fields.endTime());}
   else if("REPAIR".equals(task.kind)){var fields=task.repairFields==null?new RepairFields("","","",null,"","",""):task.repairFields;if(fields.contact()==null||fields.contact().isBlank())task.repairFields=new RepairFields(fields.category(),fields.title(),fields.description(),fields.locationId(),fields.locationDetail(),contact,fields.contactWindow()==null||fields.contactWindow().isBlank()?"工作时间":fields.contactWindow());}
   else if("RESERVATION".equals(task.kind)&&task.fields!=null&&(task.fields.contactPhone()==null||task.fields.contactPhone().isBlank()))task.fields=new AgentMissionModels.Fields(task.fields.campus(),task.fields.startsAt(),task.fields.endsAt(),task.fields.participants(),task.fields.keyword(),task.fields.activityTheme(),task.fields.activityType(),phone);
+ }
+ private Optional<String> recentContact(CampusPrincipal user,boolean phoneOnly){
+  try{
+   List<String> candidates=new ArrayList<>();
+   candidates.addAll(jdbc.sql("SELECT contact_phone FROM venue_reservation WHERE applicant_id=:u AND contact_phone IS NOT NULL AND contact_phone<>'' ORDER BY id DESC LIMIT 3").param("u",user.id()).query(String.class).list());
+   if(!phoneOnly){
+    candidates.addAll(jdbc.sql("SELECT contact FROM leave_request WHERE student_id=:u AND contact IS NOT NULL AND contact<>'' ORDER BY id DESC LIMIT 3").param("u",user.id()).query(String.class).list());
+    candidates.addAll(jdbc.sql("SELECT contact FROM repair_request WHERE reporter_id=:u AND contact IS NOT NULL AND contact<>'' ORDER BY id DESC LIMIT 3").param("u",user.id()).query(String.class).list());
+   }
+   return candidates.stream().map(String::trim).filter(v->!v.isBlank()&&(!phoneOnly||v.matches("[0-9+\\-\\s]{7,20}"))).findFirst();
+  }catch(RuntimeException ignored){return Optional.empty();}
  }
  private boolean canReviseDefaults(AgentMissionModels.View view,Task task){
   if("LEAVE".equals(task.kind)&&task.leaveFields!=null&&view.leaveFields()!=null)return !Objects.equals(task.leaveFields.contact(),view.leaveFields().contact());

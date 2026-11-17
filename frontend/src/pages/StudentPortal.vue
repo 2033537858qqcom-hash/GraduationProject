@@ -25,6 +25,7 @@ import type { Overview, Notice } from '../types';
 import { safeAffairDestination } from '../lib/navigation';
 import { portalPaymentServiceEntry } from '../lib/payment';
 import { useToast } from '../composables/useToast';
+import { decrementUnreadNoticeCount, setUnreadNoticeCount } from '../stores/notices';
 import { useSlidingIndicator } from '../composables/useSlidingIndicator';
 import { schoolMedia } from '../content/schoolMedia';
 import { formatPublicDate } from '../lib/publicReading';
@@ -53,12 +54,17 @@ const { indicatorStyle: categoryIndicatorStyle } = useSlidingIndicator(categoryR
   activeSelector: '.service-segment-btn.active',
 });
 
-const date = new Intl.DateTimeFormat('zh-CN', {
+const now = new Date();
+const monthDay = new Intl.DateTimeFormat('zh-CN', {
   timeZone: 'Asia/Shanghai',
   month: 'long',
   day: 'numeric',
+}).format(now);
+const weekday = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: 'Asia/Shanghai',
   weekday: 'long',
-}).format(new Date());
+}).format(now);
+const date = `${monthDay} · ${weekday}`;
 const nextLesson = computed(() => overview.value?.timetable[0] ?? null);
 
 const commonServices = computed(() =>
@@ -230,7 +236,7 @@ const services = computed<PortalServiceItem[]>(() => {
       description: '探索校园建筑，查找校内地点与可借用场地',
       icon: MapPin,
       categoryKey: 'CAMPUS',
-      category: '校园探索',
+      category: '校园导览',
       badge: '3D 导览',
       badgeType: 'success' as const,
       theme: 'emerald',
@@ -273,7 +279,9 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    overview.value = await api<Overview>('/portal/overview');
+    const result = await api<Overview>('/portal/overview');
+    overview.value = result;
+    if (result) setUnreadNoticeCount(result.unreadCount);
   } catch (cause) {
     error.value = errorMessage(cause);
   } finally {
@@ -288,6 +296,7 @@ async function markRead(notice: Notice) {
     await api('/notices/' + notice.id + '/read', { method: 'POST' });
     notice.read = true;
     if (overview.value) overview.value.unreadCount = Math.max(0, overview.value.unreadCount - 1);
+    decrementUnreadNoticeCount();
     toast.success('已将该消息标记为已读');
   } catch (cause) {
     error.value = errorMessage(cause);
@@ -320,7 +329,7 @@ onMounted(load);
       <section class="student-welcome portal-welcome-feature">
         <div class="portal-welcome-copy">
           <span class="portal-context">
-            CAMPUS, EVERY DAY
+            校园服务门户
             <span>{{ date }}</span>
           </span>
           <h1>
@@ -335,11 +344,11 @@ onMounted(load);
               <small>
                 {{
                   nextLesson
-                    ? `下一堂课 · ${lessonDate(nextLesson.startsAt)} ${nextLesson.startsAt.slice(11, 16)}`
+                    ? `下一堂课 · ${nextLesson.startsAt ? `${lessonDate(nextLesson.startsAt)} ${nextLesson.startsAt.slice(11, 16)}` : ''}`
                     : '我的校园日程'
                 }}
               </small>
-              <strong>{{ nextLesson?.courseName ?? '把这一周，安排从容。' }}</strong>
+              <strong>{{ nextLesson?.courseName ?? '查看本周课程、考试与场地预约' }}</strong>
               <span v-if="nextLesson">{{ nextLesson.classroom }} · {{ nextLesson.teacherName }}</span>
               <span v-else>查看课程、考试与预约安排</span>
             </span>
@@ -349,8 +358,8 @@ onMounted(load);
         <RouterLink to="/campus/explore" class="portal-campus-feature" aria-label="探索校园">
           <img :src="schoolMedia.lakeside.url" :alt="schoolMedia.lakeside.alt" width="800" height="500" />
           <span>
-            <small>一方校园，万千日常</small>
-            去校园里，发现更多
+            <small>东、西校区导览</small>
+            查看校内楼宇与地点
             <ArrowUpRight :size="16" />
           </span>
         </RouterLink>
@@ -382,7 +391,7 @@ onMounted(load);
               个人消息
               <small v-if="overview.unreadCount">{{ overview.unreadCount }} 条未读</small>
             </strong>
-            <span>{{ overview.unreadCount ? '与你有关的新消息，及时了解' : '消息已读完，安心继续今天' }}</span>
+            <span>{{ overview.unreadCount ? '与你有关的新消息，及时查看' : '暂无未读消息' }}</span>
           </div>
           <ArrowUpRight :size="16" />
         </RouterLink>
@@ -407,11 +416,11 @@ onMounted(load);
               <ArrowUpRight :size="14" />
             </RouterLink>
           </div>
-          <p v-if="!overview.timetable.length" class="empty-state">当前没有已导入的课程安排。</p>
-          <article v-for="lesson in overview.timetable.slice(0, 3)" :key="lesson.id" class="lesson-row">
+          <p v-if="!overview.timetable?.length" class="empty-state">当前没有已导入的课程安排。</p>
+          <article v-for="lesson in (overview.timetable ?? []).slice(0, 3)" :key="lesson.id" class="lesson-row">
             <div class="lesson-time">
-              <strong>{{ lessonDate(lesson.startsAt) }}</strong>
-              <span>{{ lesson.startsAt.slice(11, 16) }}—{{ lesson.endsAt.slice(11, 16) }}</span>
+              <strong>{{ lesson.startsAt ? lessonDate(lesson.startsAt) : '' }}</strong>
+              <span>{{ lesson.startsAt?.slice(11, 16) ?? '' }}—{{ lesson.endsAt?.slice(11, 16) ?? '' }}</span>
             </div>
             <div>
               <h3>{{ lesson.courseName }}</h3>
@@ -432,8 +441,8 @@ onMounted(load);
               <ArrowUpRight :size="14" />
             </RouterLink>
           </div>
-          <p v-if="!overview.notices.length" class="empty-state">暂时没有个人消息。</p>
-          <article v-for="notice in overview.notices.slice(0, 2)" :key="notice.id" class="notice-row">
+          <p v-if="!overview.notices?.length" class="empty-state">暂时没有个人消息。</p>
+          <article v-for="notice in (overview.notices ?? []).slice(0, 2)" :key="notice.id" class="notice-row">
             <div class="notice-heading">
               <h3>{{ notice.title }}</h3>
               <span class="status-label" :class="{ read: notice.read }">{{ notice.read ? '已读' : '未读' }}</span>
@@ -442,14 +451,21 @@ onMounted(load);
             <time :datetime="notice.createdAt" class="student-notice-date">
               {{ formatPublicDate(notice.createdAt) }}
             </time>
-            <RouterLink v-if="safeAffairDestination(notice.targetPath)" class="text-button" :to="notice.targetPath!">
-              查看对应申请
-              <ArrowUpRight :size="14" />
-            </RouterLink>
-            <button v-if="!notice.read" class="text-button" :disabled="reading === notice.id" @click="markRead(notice)">
-              <Check :size="14" />
-              {{ reading === notice.id ? '正在更新…' : '标为已读' }}
-            </button>
+            <div v-if="safeAffairDestination(notice.targetPath) || !notice.read" class="notice-actions">
+              <RouterLink v-if="safeAffairDestination(notice.targetPath)" class="text-button" :to="notice.targetPath!">
+                查看对应申请
+                <ArrowUpRight :size="14" />
+              </RouterLink>
+              <button
+                v-if="!notice.read"
+                class="text-button"
+                :disabled="reading === notice.id"
+                @click="markRead(notice)"
+              >
+                <Check :size="14" />
+                {{ reading === notice.id ? '正在更新…' : '标为已读' }}
+              </button>
+            </div>
           </article>
         </section>
       </div>
@@ -506,7 +522,11 @@ onMounted(load);
         </div>
         <div v-else class="service-empty-state">
           <Compass :size="32" />
-          <p>未找到与“{{ serviceSearch }}”相关的学生服务</p>
+          <p>
+            {{
+              serviceSearch.trim() ? `未找到与“${serviceSearch.trim()}”相关的学生服务` : '当前分类下暂无可用的学生服务'
+            }}
+          </p>
           <button type="button" class="button compact" @click="clearFilters">清空检索条件</button>
         </div>
       </section>

@@ -882,6 +882,12 @@ public class VenueReservationService {
             .param("v", nextVersion).param("id", id).update();
 
         recordAction(id, nextVersion, user.id(), detail.applicantName(), "WITHDRAW", "WITHDRAWN", "申请人主动撤回借用申请");
+        for (long reviewerId : getVenueReviewerIds(detail.venueId())) {
+            if (reviewerId != user.id()) {
+                noticeWriter.write(reviewerId, "场地借用申请已撤回", "RESERVATION", id, "REVIEW",
+                    detail.applicantName() + " 已撤回【" + detail.venueName() + "】借用申请，原待办已关闭。");
+            }
+        }
         return getDetail(user, id);
     }
 
@@ -923,6 +929,13 @@ public class VenueReservationService {
         if (isStaff && detail.applicantId() != user.id()) {
             noticeWriter.write(detail.applicantId(), "场地借用预定已被工作人员取消", "RESERVATION", id, "MINE",
                 "【" + detail.venueName() + "】" + comment);
+        } else if (detail.applicantId() == user.id()) {
+            for (long reviewerId : getVenueReviewerIds(detail.venueId())) {
+                if (reviewerId != user.id()) {
+                    noticeWriter.write(reviewerId, "场地借用预约已被申请人取消", "RESERVATION", id, "REVIEW",
+                        detail.applicantName() + " 已取消【" + detail.venueName() + "】借用预约，时段已释放。");
+                }
+            }
         }
         return getDetail(user, id);
     }

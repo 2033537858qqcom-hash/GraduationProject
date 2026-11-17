@@ -3,7 +3,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } 
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from 'vue-router';
 import { ArrowUpRight, Check, FilePlus2, History, RefreshCw, Send } from '@lucide/vue';
 import { api, errorMessage } from '../lib/api';
+import { formatDateTime as formatTime } from '../lib/format';
 import BaseSelect from '../components/BaseSelect.vue';
+import ServicePageHeader from '../components/ServicePageHeader.vue';
+import SkeletonBlock from '../components/SkeletonBlock.vue';
 import { contentActions } from '../lib/contentWorkflow';
 import { currentUser } from '../stores/auth';
 import type { ContentHistory, ContentRevision, ManagedContent } from '../types';
@@ -101,9 +104,6 @@ const confirmation = ref(''),
 let resolveConfirmation: ((accept: boolean) => void) | null = null;
 function categoryName(category: string) {
   return category === 'about' ? '学校概况' : category === 'news' ? '校园新闻' : '通知公告';
-}
-function formatTime(value: string) {
-  return value.slice(0, 16).replace('T', ' ');
 }
 async function ask(message: string, action: Action | null = null) {
   if (resolveConfirmation) finishConfirmation(false);
@@ -373,13 +373,12 @@ onBeforeUnmount(() => {
         </div>
       </form>
     </dialog>
-    <div class="section-heading manager-heading">
-      <div>
-        <span class="portal-context">官网内容管理</span>
-        <h1>内容审核与发布</h1>
-        <p class="muted">编辑工作稿、处理审核意见，维护官网公开版本。</p>
-      </div>
-      <div class="form-actions">
+    <ServicePageHeader
+      context="官网内容管理"
+      title="内容审核与发布"
+      description="编辑工作稿、处理审核意见，维护官网公开版本。"
+    >
+      <template #actions>
         <button class="button compact" :disabled="busy || loading" @click="refresh">
           <RefreshCw :size="15" />
           刷新目录
@@ -388,8 +387,8 @@ onBeforeUnmount(() => {
           <FilePlus2 :size="15" />
           新建草稿
         </button>
-      </div>
-    </div>
+      </template>
+    </ServicePageHeader>
     <p v-if="error" class="alert" role="alert">{{ error }}</p>
     <p v-if="success" class="success-message" role="status">{{ success }}</p>
     <form class="content-filters foundation-filters" @submit.prevent="filterItems">
@@ -413,7 +412,7 @@ onBeforeUnmount(() => {
           <h2>内容目录</h2>
           <small>{{ filtered.length }} 篇内容</small>
         </div>
-        <p v-if="loading && !filtered.length" class="loading-state" role="status">正在读取内容…</p>
+        <SkeletonBlock v-if="loading && !filtered.length" variant="list" :rows="5" label="正在读取内容…" />
         <p v-else-if="!loading && !filtered.length" class="empty-state">没有符合条件的内容，可调整筛选或新建草稿。</p>
         <div v-else class="content-list-scroll" :class="{ 'is-loading': loading }">
           <button
@@ -554,7 +553,7 @@ onBeforeUnmount(() => {
               <span v-else class="muted">早期全文未保留</span>
             </article>
             <p v-if="!historyLoading && !history.items.length" class="empty-state">暂无操作记录。</p>
-            <div class="foundation-pagination">
+            <div v-if="history.total > 0" class="foundation-pagination">
               <span>共 {{ history.total }} 条 · 第 {{ history.page }} 页</span>
               <div>
                 <button

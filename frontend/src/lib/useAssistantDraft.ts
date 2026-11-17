@@ -1,7 +1,8 @@
-import { computed, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, reactive, ref, useTemplateRef, watch } from 'vue'
 import type { Ref } from 'vue'
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute } from 'vue-router'
-import { api, ApiError, errorMessage } from './api'
+import { confirmDialog } from '../composables/useConfirm'
+import { AI_REQUEST_TIMEOUT, api, ApiError, errorMessage } from './api'
 import type { AssistantBusiness, AssistantTaskView } from './assistantSessions'
 import type { AssistantLeavePreview } from './assistantLeave'
 import type { AssistantCertificatePreview } from './assistantCertificate'
@@ -29,6 +30,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
 }) {
   const { props, kind } = options,
     route = useRoute()
+  const sessionConsent = inject<Ref<boolean>>('assistantSessionConsent', ref(false))
   const fields = reactive(options.empty()) as F
   const preview = ref(null) as Ref<P | null>,
     saved = ref<AssistantBusiness | null>(null),
@@ -45,11 +47,8 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
     createKey = ref(crypto.randomUUID())
   const scrollArea = useTemplateRef<HTMLElement>('scrollArea'),
     input = useTemplateRef<HTMLTextAreaElement>('input')
-  const dialog = useTemplateRef<HTMLDialogElement>('dialog'),
-    cancelButton = useTemplateRef<HTMLButtonElement>('cancelButton')
   let request: AbortController | null = null,
-    generation = 0,
-    resolveLeave: ((value: boolean) => void) | null = null
+    generation = 0
   const fingerprint = computed(() => options.fingerprint(fields))
   const checked = computed(() => preview.value && fingerprint.value === options.fingerprint(preview.value.fields as F))
   const baseline = computed(() => options.fingerprint((preview.value?.fields ?? options.empty()) as F))
@@ -177,6 +176,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
       const result = await api<AssistantTaskView>(`${root()}/${task.id}/${kind.toLowerCase()}`, {
         method: 'POST',
         signal: controller.signal,
+        timeout: withModel ? AI_REQUEST_TIMEOUT : undefined,
         body: JSON.stringify({
           version: task.version,
           input: {
@@ -282,11 +282,11 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
       options.emitSaving(false)
     }
   }
-  function finishLeave(value: boolean) {
-    dialog.value?.close()
-    const resolve = resolveLeave
-    resolveLeave = null
-    resolve?.(value)
+  const leaveTitles: Record<'LEAVE' | 'CERTIFICATE' | 'REPAIR' | 'HOUSING', string> = {
+    LEAVE: '请假预览有未暂存修改',
+    CERTIFICATE: '证明预览有未暂存修改',
+    REPAIR: '报修预览有未暂存修改',
+    HOUSING: '调宿预览有未暂存修改',
   }
   async function allowLeave() {
     if (!currentUser.value) return true
@@ -295,12 +295,11 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
       return false
     }
     if (!dirty.value) return true
-    return new Promise<boolean>(resolve => {
-      resolveLeave = resolve
-      void nextTick(() => {
-        dialog.value?.showModal()
-        cancelButton.value?.focus()
-      })
+    return confirmDialog('未暂存的修改会丢失；已核对的内容可从历史对话恢复。', {
+      title: leaveTitles[kind],
+      confirmText: '放弃修改并离开',
+      cancelText: '继续填写',
+      danger: true,
     })
   }
   function beforeUnload(event: BeforeUnloadEvent) {
@@ -321,8 +320,15 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
   watch(
     () => props.mode,
     () => {
-      consent.value = false
+      consent.value = props.mode === 'DEEPSEEK' && sessionConsent.value
     },
+  )
+  watch(
+    sessionConsent,
+    agreed => {
+      if (agreed && props.mode === 'DEEPSEEK') consent.value = true
+    },
+    { immediate: true },
   )
   watch([() => route.fullPath, () => currentUser.value?.id, () => props.sessionId], () => {
     clear()
@@ -332,7 +338,7 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
     () => props.active,
     active => {
       confirmed.value = false
-      consent.value = false
+      consent.value = props.mode === 'DEEPSEEK' && sessionConsent.value
       if (active && !dirty.value) void restore()
     },
   )
@@ -353,7 +359,6 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
     generation++
     request?.abort()
     window.removeEventListener('beforeunload', beforeUnload)
-    finishLeave(false)
   })
   return {
     fields,
@@ -376,7 +381,6 @@ export function useAssistantDraft<F extends object, P extends Preview>(options: 
     prepare,
     restore,
     save,
-    finishLeave,
     allowLeave,
     keydown,
   }

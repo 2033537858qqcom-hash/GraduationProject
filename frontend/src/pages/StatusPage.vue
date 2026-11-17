@@ -10,6 +10,9 @@ const route = useRoute(),
   router = useRouter();
 const reconnecting = ref(false),
   reconnectError = ref('');
+const statusCode = computed(() =>
+  route.path === '/forbidden' ? '403' : route.path === '/unavailable' ? '503' : '404',
+);
 const message = computed(() =>
   route.path === '/forbidden'
     ? '当前账号没有访问此页面的权限。'
@@ -38,7 +41,7 @@ async function reconnect() {
     <CulturalFrame />
     <CulturalOrnament motif="landscape" class="status-landscape" />
     <main class="status-page">
-      <span class="eyebrow">CAMPUS SERVICES</span>
+      <span class="eyebrow">校园综合服务平台 · STATUS {{ statusCode }}</span>
       <h1>{{ route.meta.title }}</h1>
       <p>{{ message }}</p>
       <p v-if="reconnectError" role="alert">{{ reconnectError }}</p>
@@ -51,6 +54,7 @@ async function reconnect() {
           {{ currentUser ? '个人门户' : '校园服务登录' }}
         </RouterLink>
         <RouterLink class="quiet-link" to="/">学校官网</RouterLink>
+        <RouterLink class="quiet-link" to="/campus/explore">校园探索</RouterLink>
       </div>
     </main>
   </div>

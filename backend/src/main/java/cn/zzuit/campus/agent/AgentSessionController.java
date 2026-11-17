@@ -3,8 +3,10 @@ package cn.zzuit.campus.agent;
 import static cn.zzuit.campus.agent.AgentSessionModels.*;
 import cn.zzuit.campus.identity.CampusPrincipal;
 import jakarta.validation.Valid;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController @RequestMapping("/api/assistant/sessions")
 public class AgentSessionController {
@@ -15,6 +17,7 @@ public class AgentSessionController {
     @GetMapping("/{id}") SessionDetail detail(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@RequestParam(required=false) Long before) { return sessions.detail(user,id,before); }
     @DeleteMapping("/{id}") @org.springframework.web.bind.annotation.ResponseStatus(org.springframework.http.HttpStatus.NO_CONTENT) void delete(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id) { sessions.delete(user,id); }
     @PostMapping("/{id}/query") QueryResult query(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@Valid @RequestBody SessionQuery input) { return sessions.query(user,id,input); }
+    @PostMapping(value="/{id}/query/stream",produces=MediaType.TEXT_EVENT_STREAM_VALUE) SseEmitter streamQuery(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@Valid @RequestBody SessionQuery input) { return sessions.streamQuery(user,id,input); }
     @PostMapping("/{id}/tasks") TaskView createTask(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@Valid @RequestBody CreateTask input) { return sessions.createTask(user,id,input); }
     @GetMapping("/{id}/tasks/{task}") TaskView task(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task) { return sessions.task(user,id,task); }
     @PostMapping("/{id}/tasks/{task}/leave") TaskView leave(@AuthenticationPrincipal CampusPrincipal user,@PathVariable long id,@PathVariable long task,@Valid @RequestBody TaskLeave input) { return sessions.prepareLeave(user,id,task,input); }

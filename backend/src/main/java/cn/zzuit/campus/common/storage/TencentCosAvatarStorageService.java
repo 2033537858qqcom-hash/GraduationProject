@@ -1,8 +1,12 @@
 package cn.zzuit.campus.common.storage;
 
 import java.io.ByteArrayInputStream;
-import java.util.Base64;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
@@ -15,6 +19,8 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class TencentCosAvatarStorageService implements AvatarStorageService {
+    public static final String LOCAL_AVATAR_URL_PREFIX = "/api/public/avatars/";
+    private static final Pattern SAFE_FILENAME = Pattern.compile("^user_\\d+_[0-9a-f]{32}\\.(?:jpg|png|webp)$");
     private static final Logger log = LoggerFactory.getLogger(TencentCosAvatarStorageService.class);
     private final CosProperties properties;
 
@@ -28,25 +34,48 @@ public class TencentCosAvatarStorageService implements AvatarStorageService {
         return new COSClient(cred, clientConfig);
     }
 
+    private Path localDirectory() {
+        String configured = properties.getLocalAvatarDir();
+        return Path.of(configured == null || configured.isBlank() ? "data/avatars" : configured).toAbsolutePath().normalize();
+    }
+
+    private static String extensionFor(String contentType) {
+        if ("image/png".equalsIgnoreCase(contentType)) return ".png";
+        if ("image/webp".equalsIgnoreCase(contentType)) return ".webp";
+        return ".jpg";
+    }
+
+    public Path resolveLocalAvatar(String filename) {
+        if (filename == null || !SAFE_FILENAME.matcher(filename).matches()) return null;
+        Path root = localDirectory();
+        Path resolved = root.resolve(filename).normalize();
+        return resolved.startsWith(root) ? resolved : null;
+    }
+
     @Override
     public String storeAvatar(long userId, String filename, String contentType, byte[] bytes) {
+        String ext = extensionFor(contentType);
+        String unique = UUID.randomUUID().toString().replace("-", "").toLowerCase(Locale.ROOT);
+        String safeFile = "user_" + userId + "_" + unique + ext;
+
         if (!properties.isEnabled() || properties.getSecretId() == null || properties.getSecretId().isBlank()
             || properties.getSecretKey() == null || properties.getSecretKey().isBlank()
             || properties.getBucket() == null || properties.getBucket().isBlank()) {
-            log.info("[COS | 腾讯云] 未启用或缺少存储桶配置，降级使用 Data URI 存储 (用户ID: {})", userId);
-            return "data:" + contentType + ";base64," + Base64.getEncoder().encodeToString(bytes);
+            Path root = localDirectory();
+            try {
+                Files.createDirectories(root);
+                Path target = root.resolve(safeFile).normalize();
+                if (!target.startsWith(root)) throw new IllegalStateException("非法头像路径");
+                Files.write(target, bytes);
+                String url = LOCAL_AVATAR_URL_PREFIX + safeFile;
+                log.info("[AVATAR | 本地存储] 未配置 COS 密钥，已保存至本地头像目录 | 用户ID: {} | URL: {}", userId, url);
+                return url;
+            } catch (IOException e) {
+                throw new RuntimeException("保存本地头像文件失败: " + e.getMessage(), e);
+            }
         }
 
-        String ext = ".jpg";
-        if (filename != null && filename.contains(".")) {
-            ext = filename.substring(filename.lastIndexOf(".")).toLowerCase();
-        } else if ("image/png".equalsIgnoreCase(contentType)) {
-            ext = ".png";
-        } else if ("image/webp".equalsIgnoreCase(contentType)) {
-            ext = ".webp";
-        }
-
-        String key = properties.getAvatarPrefix() + "user_" + userId + "_" + UUID.randomUUID().toString().replace("-", "") + ext;
+        String key = properties.getAvatarPrefix() + safeFile;
         log.info("[COS | 腾讯云] 开始直传头像文件 | 存储桶: '{}' | 地域: '{}' | 对象路径: '{}' | 大小: {} 字节",
             properties.getBucket(), properties.getRegion(), key, bytes.length);
 
@@ -72,17 +101,20 @@ public class TencentCosAvatarStorageService implements AvatarStorageService {
 
     @Override
     public void deleteAvatar(String avatarUrl) {
-        if (avatarUrl == null || !avatarUrl.startsWith("https://") || !properties.isEnabled()) {
+        if (avatarUrl == null) return;
+        if (avatarUrl.startsWith(LOCAL_AVATAR_URL_PREFIX)) {
+            Path path = resolveLocalAvatar(avatarUrl.substring(LOCAL_AVATAR_URL_PREFIX.length()));
+            if (path != null) {
+                try { Files.deleteIfExists(path); }
+                catch (IOException e) { log.warn("[AVATAR | 本地存储] 清理旧头像失败: '{}' | 原因: {}", path, e.getMessage()); }
+            }
             return;
         }
-        if (properties.getBucket() == null || properties.getRegion() == null) {
-            return;
-        }
+        if (!avatarUrl.startsWith("https://") || !properties.isEnabled()) return;
+        if (properties.getBucket() == null || properties.getRegion() == null) return;
 
         String domain = String.format("%s.cos.%s.myqcloud.com/", properties.getBucket(), properties.getRegion());
-        if (!avatarUrl.contains(domain)) {
-            return;
-        }
+        if (!avatarUrl.contains(domain)) return;
 
         String key = avatarUrl.substring(avatarUrl.indexOf(domain) + domain.length());
         log.info("[COS | 腾讯云] 准备清理历史头像对象 | 存储桶: '{}' | 对象路径: '{}'", properties.getBucket(), key);

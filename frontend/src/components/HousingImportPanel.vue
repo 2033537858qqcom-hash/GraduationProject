@@ -3,6 +3,7 @@ import { confirmDialog } from '../composables/useConfirm';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { onBeforeRouteLeave } from 'vue-router';
 import { Check, ChevronDown, Download, FileSpreadsheet, Upload } from '@lucide/vue';
+import FileDropZone from './FileDropZone.vue';
 import { api, ApiError, errorMessage } from '../lib/api';
 import { downloadFile } from '../lib/download';
 import { housingWhen } from '../housing';
@@ -21,7 +22,7 @@ const open = ref(false),
   source = ref('粘贴的入住名单.csv'),
   error = ref(''),
   notice = ref('');
-const fileInput = ref<HTMLInputElement | null>(null),
+const fileInput = ref<InstanceType<typeof FileDropZone> | null>(null),
   batch = ref<HousingImportBatch | null>(null),
   recent = ref<HousingImportSummary[]>([]);
 const stamp = ref(''),
@@ -53,7 +54,7 @@ function clear() {
   error.value = '';
   notice.value = '';
   uncertain.value = false;
-  if (fileInput.value) fileInput.value.value = '';
+  fileInput.value?.clear();
 }
 async function choose(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
@@ -140,7 +141,7 @@ async function confirm() {
     });
     uncertain.value = false;
     csv.value = '';
-    if (fileInput.value) fileInput.value.value = '';
+    fileInput.value?.clear();
     notice.value = '整批入住已完成，学生已收到入住通知。';
     emit('changed');
     await history();
@@ -245,21 +246,49 @@ onBeforeUnmount(() => {
           仅支持 CSV UTF-8，最多 100 KB、200 名学生。学号列请设为文本，保留开头的
           0。此操作用于初始入住；已有住宿请使用调宿流程。
         </p>
-        <label class="housing-csv-file">
-          选择入住名单
-          <input ref="fileInput" type="file" accept=".csv,text/csv" :disabled="working || busy" @change="choose" />
-        </label>
-        <label class="housing-csv-input">
-          或粘贴 CSV 内容
+        <FileDropZone
+          ref="fileInput"
+          accept=".csv,text/csv"
+          kind="spreadsheet"
+          :disabled="working || busy"
+          :file-name="source === '粘贴的入住名单.csv' ? '' : source"
+          title="选择或拖入入住名单 CSV"
+          hint="仅支持 UTF-8 CSV，最多 100 KB、200 名学生"
+          @change="choose"
+          @clear="clear"
+        />
+        <div class="csv-workbench">
+          <div class="csv-workbench-head">
+            <label for="housing-import-csv">入住名单内容（CSV 原文）</label>
+            <div class="csv-workbench-meta">
+              <span>
+                {{
+                  csv.trim()
+                    ? `共 ${
+                        csv
+                          .trim()
+                          .split(/\r?\n/)
+                          .filter(l => l.trim()).length
+                      } 行`
+                    : '支持文件载入或直接粘贴'
+                }}
+              </span>
+              <button v-if="csv || batch" type="button" class="text-button" :disabled="working || busy" @click="clear">
+                清空内容
+              </button>
+            </div>
+          </div>
           <textarea
+            id="housing-import-csv"
             v-model="csv"
-            rows="4"
+            class="csv-workbench-input"
+            rows="5"
             maxlength="102400"
             spellcheck="false"
             :disabled="working || busy"
             placeholder="学号,房间编号,床位编号,入住说明"
           />
-        </label>
+        </div>
         <div class="form-actions">
           <button type="button" class="button compact" :disabled="working || busy || !csv.trim()" @click="preview">
             <Upload :size="14" />
@@ -466,7 +495,7 @@ onBeforeUnmount(() => {
   text-align: left;
 }
 .housing-import-table th {
-  background: var(--surface, #f6f8fa);
+  background: var(--color-surface);
   position: sticky;
   top: 0;
   z-index: 1;

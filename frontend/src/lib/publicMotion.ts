@@ -1,4 +1,5 @@
 import { computed, readonly, ref } from 'vue'
+import { readStoredItem, writeStoredItem } from './safeStorage.ts'
 
 export const PUBLIC_MOTION_KEY = 'campus-public-motion'
 type MotionPreference = 'auto' | 'reduce'
@@ -21,11 +22,7 @@ function storageChanged(event: StorageEvent) {
 
 export function setPublicMotionPreference(value: MotionPreference) {
   preference.value = value
-  try {
-    window.localStorage.setItem(PUBLIC_MOTION_KEY, value)
-  } catch {
-    /* This visit still respects the selection when storage is unavailable. */
-  }
+  writeStoredItem(PUBLIC_MOTION_KEY, value)
 }
 
 /** One system/storage subscription for the public layout, including direct detail-page visits. */
@@ -33,11 +30,7 @@ export function initializePublicMotion() {
   if (typeof window === 'undefined') return () => {}
   consumers++
   if (consumers === 1) {
-    try {
-      preference.value = readPreference(window.localStorage.getItem(PUBLIC_MOTION_KEY))
-    } catch {
-      preference.value = 'auto'
-    }
+    preference.value = readPreference(readStoredItem(PUBLIC_MOTION_KEY))
     query = window.matchMedia('(prefers-reduced-motion: reduce)')
     systemChanged()
     query.addEventListener('change', systemChanged)

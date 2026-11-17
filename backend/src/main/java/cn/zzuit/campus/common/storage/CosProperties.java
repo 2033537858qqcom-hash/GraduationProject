@@ -13,6 +13,7 @@ public class CosProperties {
     private String bucket;
     private String appid;
     private String avatarPrefix = "avatars/";
+    private String localAvatarDir = "data/avatars";
 
     public boolean isEnabled() { return enabled; }
     public void setEnabled(boolean enabled) { this.enabled = enabled; }
@@ -34,4 +35,7 @@ public class CosProperties {
 
     public String getAvatarPrefix() { return avatarPrefix; }
     public void setAvatarPrefix(String avatarPrefix) { this.avatarPrefix = avatarPrefix; }
+
+    public String getLocalAvatarDir() { return localAvatarDir; }
+    public void setLocalAvatarDir(String localAvatarDir) { this.localAvatarDir = localAvatarDir; }
 }

@@ -85,14 +85,14 @@ export async function checkPageSetup(
     history: createMemoryHistory(),
     routes: [{ path: basePath, component: probe }],
   })
+  await router.push(path)
+  await router.isReady()
   const app = renderer.createApp(RouterView).use(router)
   // Vite's SFC module adds SSR metadata; setup itself still runs as a client.
   app.provide(ssrContextKey, { modules: new Set() })
   app.config.errorHandler = error => {
     errors.push(error)
   }
-  await router.push(path)
-  await router.isReady()
   app.mount({})
   await nextTick()
   if (destination) {

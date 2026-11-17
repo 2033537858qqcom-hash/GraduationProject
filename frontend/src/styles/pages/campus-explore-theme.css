@@ -25,6 +25,14 @@
   margin-bottom: 26px;
   gap: 24px;
 }
+#app .campus-explore .heading-meta::before {
+  content: '';
+  display: block;
+  width: 35px;
+  height: 1px;
+  background: var(--color-gold);
+  margin-bottom: 12px;
+}
 #app .campus-explore .exploration-heading h1 {
   font-family: var(--campus-display-serif);
   font-size: 35px;
